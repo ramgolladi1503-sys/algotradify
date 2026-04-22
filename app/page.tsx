@@ -8,19 +8,22 @@ export default function Dashboard() {
   const [health, setHealth] = useState<any>(null);
   const [opps, setOpps] = useState<any[]>([]);
   const [paperPositions, setPaperPositions] = useState<any[]>([]);
+  const [paperTrades, setPaperTrades] = useState<any[]>([]);
   const [paperPnl, setPaperPnl] = useState<any>({});
 
   const refresh = async () => {
-    const [healthRes, oppsRes, positionsRes, pnlRes] = await Promise.all([
+    const [healthRes, oppsRes, positionsRes, tradesRes, pnlRes] = await Promise.all([
       fetch(`${API}/runtime/health`).then((r) => r.json()).catch(() => null),
       fetch(`${API}/opportunities`).then((r) => r.json()).catch(() => null),
       fetch(`${API}/paper/positions`).then((r) => r.json()).catch(() => null),
+      fetch(`${API}/paper/trades`).then((r) => r.json()).catch(() => null),
       fetch(`${API}/paper/pnl`).then((r) => r.json()).catch(() => null),
     ]);
 
     if (healthRes?.payload) setHealth(healthRes.payload);
     if (oppsRes?.payload?.items) setOpps(oppsRes.payload.items);
     if (positionsRes?.payload?.items) setPaperPositions(positionsRes.payload.items);
+    if (tradesRes?.payload?.items) setPaperTrades(tradesRes.payload.items);
     if (pnlRes?.payload) setPaperPnl(pnlRes.payload);
   };
 
@@ -84,6 +87,18 @@ export default function Dashboard() {
             <div>Target: {p.target_price ?? "—"} | Stop: {p.stop_price ?? "—"}</div>
             <div>Unrealized: {p.unrealized_pnl ?? 0} | Realized: {p.realized_pnl ?? 0}</div>
             <div>Exit Reason: {p.exit_reason || "OPEN"}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="card" style={{ marginBottom: 20 }}>
+        <h3>Closed Paper Trades ({paperTrades.length})</h3>
+        {paperTrades.length === 0 ? <div>No closed paper trades yet.</div> : null}
+        {paperTrades.slice(0, 20).map((t, i) => (
+          <div key={t.paper_position_id || i} style={{ borderBottom: "1px solid #222", padding: 10 }}>
+            <div><b>{t.symbol || "N/A"}</b> | {t.exit_reason || "CLOSED"}</div>
+            <div>Entry: {t.entry_price ?? "—"} | Exit: {t.exit_price ?? "—"}</div>
+            <div>Realized PnL: {t.realized_pnl ?? 0}</div>
           </div>
         ))}
       </div>
