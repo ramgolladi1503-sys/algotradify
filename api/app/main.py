@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from .service import BanditService
+from .models import TradeOutcome
 
 app = FastAPI()
 service = BanditService()
@@ -22,5 +23,5 @@ def regime():
     return service.get_regime()
 
 @app.post("/paper/trade")
-def trade(data: dict):
+def trade(data: TradeOutcome):
     return {"reward": service.record_trade(data)}
