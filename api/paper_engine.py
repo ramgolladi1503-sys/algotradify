@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import random
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -14,6 +15,8 @@ PAPER_POSITIONS_PATH = TRADEBOT_ROOT / "runtime" / "paper_positions.json"
 PAPER_TRADES_PATH = TRADEBOT_ROOT / "runtime" / "paper_trades.json"
 PAPER_PNL_PATH = TRADEBOT_ROOT / "runtime" / "paper_pnl.json"
 PAPER_LEARNING_PATH = TRADEBOT_ROOT / "runtime" / "paper_learning.json"
+ADAPTIVE_PARAMS_PATH = TRADEBOT_ROOT / "runtime" / "adaptive_params.json"
+PAPER_REJECTIONS_PATH = TRADEBOT_ROOT / "runtime" / "paper_rejections.json"
 
 DEFAULT_QTY = int(os.getenv("PAPER_DEFAULT_QTY", "1") or "1")
 DEFAULT_STOP_PCT = float(os.getenv("PAPER_DEFAULT_STOP_PCT", "0.15") or "0.15")
@@ -73,6 +76,46 @@ def _unwrap_payload(blob: Any) -> Any:
     if isinstance(blob, dict) and isinstance(blob.get("payload"), (dict, list)):
         return blob["payload"]
     return blob
+
+
+def _default_params() -> dict[str, float]:
+    return {
+        "score_threshold": 0.5,
+        "confidence_threshold": 0.4,
+        "momentum_threshold": 0.4,
+        "risk_reward_ratio": 1.5,
+        "trade_frequency": 1.0,
+    }
+
+
+def _smooth(old: float, new: float, alpha: float = 0.2) -> float:
+    return (old * (1.0 - alpha)) + (new * alpha)
+
+
+def load_adaptive_params() -> dict[str, float]:
+    data = _read_json(ADAPTIVE_PARAMS_PATH, default={})
+    params = _default_params()
+    if isinstance(data, dict):
+        for key, value in data.items():
+            if key in params and _safe_float(value) is not None:
+                params[key] = float(value)
+    return params
+
+
+def save_adaptive_params(params: dict[str, float]) -> None:
+    _write_json(ADAPTIVE_PARAMS_PATH, params)
+
+
+def _record_rejection(item: dict[str, Any]) -> None:
+    rows = _read_json(PAPER_REJECTIONS_PATH, default=[])
+    history = rows if isinstance(rows, list) else []
+    history.insert(0, item)
+    _write_json(PAPER_REJECTIONS_PATH, history[:200])
+
+
+def get_rejections() -> list[dict[str, Any]]:
+    rows = _read_json(PAPER_REJECTIONS_PATH, default=[])
+    return rows if isinstance(rows, list) else []
 
 
 def _load_action_cursor() -> dict[str, Any]:
@@ -181,15 +224,17 @@ def _exit_quote_price(position: dict[str, Any]) -> tuple[float | None, str]:
     return (round(base, 4), "bid" if bid else "mid" if mid else "ltp") if base is not None else (None, "missing_quote")
 
 
-def _derive_stop_target(row: dict[str, Any], entry_price: float) -> tuple[float, float, str]:
+def _derive_stop_target(row: dict[str, Any], entry_price: float, params: dict[str, float]) -> tuple[float, float, str]:
     stop = _safe_float(row.get("stop") or row.get("stop_loss") or row.get("current_stop"))
     target = _safe_float(row.get("target") or row.get("current_target"))
     source = "row_levels"
+    rr = max(float(params.get("risk_reward_ratio") or 1.5), 1.0)
     if stop is None:
         stop = entry_price * (1.0 - DEFAULT_STOP_PCT)
         source = "fallback_pct"
     if target is None:
-        target = entry_price * (1.0 + DEFAULT_TARGET_PCT)
+        target_pct = max(DEFAULT_TARGET_PCT, DEFAULT_STOP_PCT * rr)
+        target = entry_price * (1.0 + target_pct)
         source = "fallback_pct"
     return round(stop, 4), round(target, 4), source
 
@@ -199,6 +244,7 @@ def _position_id(action: dict[str, Any], row: dict[str, Any]) -> str:
 
 
 def _process_new_actions() -> list[dict[str, Any]]:
+    params = load_adaptive_params()
     cursor = _load_action_cursor()
     processed_count = int(cursor.get("processed_count") or 0)
     actions = _read_jsonl(ACTION_QUEUE_PATH)
@@ -213,13 +259,32 @@ def _process_new_actions() -> list[dict[str, Any]]:
         if action_name not in {"ENTER", "FORCE"}:
             continue
         row = _lookup_opportunity(action)
+        score = float(_safe_float(row.get("score") or row.get("ranking_score") or row.get("confidence")) or 0.0)
+        confidence = float(_safe_float(row.get("confidence") or row.get("global_confidence")) or 0.0)
+        momentum = float(_safe_float(row.get("momentum_score") or row.get("trend_strength") or score) or 0.0)
+
+        if action_name == "ENTER":
+            if score < float(params.get("score_threshold") or 0.5):
+                _record_rejection({"timestamp": _utc_now(), "reason": "adaptive_score_filter", "symbol": action.get("symbol"), "score": score, "threshold": params.get("score_threshold")})
+                continue
+            if confidence < float(params.get("confidence_threshold") or 0.4):
+                _record_rejection({"timestamp": _utc_now(), "reason": "adaptive_confidence_filter", "symbol": action.get("symbol"), "confidence": confidence, "threshold": params.get("confidence_threshold")})
+                continue
+            if momentum < float(params.get("momentum_threshold") or 0.4):
+                _record_rejection({"timestamp": _utc_now(), "reason": "adaptive_momentum_filter", "symbol": action.get("symbol"), "momentum": momentum, "threshold": params.get("momentum_threshold")})
+                continue
+            trade_frequency = float(params.get("trade_frequency") or 1.0)
+            if trade_frequency < 1.0 and random.random() > trade_frequency:
+                _record_rejection({"timestamp": _utc_now(), "reason": "adaptive_trade_throttle", "symbol": action.get("symbol"), "trade_frequency": trade_frequency})
+                continue
+
         fill_price, fill_source = _entry_fill_price(row, action_name)
         if fill_price is None:
             continue
         existing = next((p for p in positions if p.get("status") == "OPEN" and (p.get("trade_id") == action.get("trade_id") or p.get("trade_key") == action.get("trade_key"))), None)
         if existing:
             continue
-        stop, target, level_source = _derive_stop_target(row, fill_price)
+        stop, target, level_source = _derive_stop_target(row, fill_price, params)
         qty = int((action.get("payload") or {}).get("qty") or row.get("quantity") or DEFAULT_QTY)
         position = {
             "paper_position_id": _position_id(action, row),
@@ -245,6 +310,7 @@ def _process_new_actions() -> list[dict[str, Any]]:
             "unrealized_pnl": 0.0,
             "exit_reason": None,
             "decision": row.get("decision") or row.get("final_action") or row.get("readiness"),
+            "adaptive_params": params,
         }
         positions.append(position)
         created.append(position)
@@ -395,15 +461,12 @@ def derive_strategy_adjustments(diag: dict[str, Any]) -> dict[str, Any]:
     if stop_ratio > 0.5:
         adjustments["bias"] = "overstopped"
         adjustments["entry_quality"] = "bad"
-        adjustments["actions"].append("delay_entry")
-        adjustments["actions"].append("raise_entry_threshold")
-        adjustments["hints"].append("avoid breakout chasing")
-        adjustments["hints"].append("require confirmation before entry")
+        adjustments["actions"].extend(["delay_entry", "raise_entry_threshold"])
+        adjustments["hints"].extend(["avoid breakout chasing", "require confirmation before entry"])
     elif time_ratio > 0.5:
         adjustments["bias"] = "low_momentum"
         adjustments["entry_quality"] = "weak"
-        adjustments["actions"].append("require_momentum")
-        adjustments["actions"].append("reject_sideways_setups")
+        adjustments["actions"].extend(["require_momentum", "reject_sideways_setups"])
         adjustments["hints"].append("signals are not moving fast enough")
     elif target_ratio > max(stop_ratio, time_ratio):
         adjustments["bias"] = "healthy"
@@ -411,7 +474,7 @@ def derive_strategy_adjustments(diag: dict[str, Any]) -> dict[str, Any]:
         adjustments["actions"].append("keep_current_entry_model")
         adjustments["hints"].append("current paper entries are relatively healthy")
 
-    if avg_loss < 0 and abs(avg_loss) > max(avg_win * 2.0, 1.0):
+    if avg_loss < 0 and abs(avg_loss) > max(abs(avg_win) * 2.0, 1.0):
         adjustments["risk_reward"] = "bad"
         adjustments["actions"].append("tighten_stop_or_raise_target")
         adjustments["hints"].append("average loss is overwhelming average win")
@@ -419,6 +482,52 @@ def derive_strategy_adjustments(diag: dict[str, Any]) -> dict[str, Any]:
         adjustments["risk_reward"] = "healthy"
 
     return adjustments
+
+
+def update_adaptive_params(diag: dict[str, Any], params: dict[str, float]) -> dict[str, float]:
+    reasons = diag.get("exit_reason_counts") or {}
+    total = max(int(diag.get("trade_count") or 0), 1)
+    stop_ratio = float(reasons.get("STOP_HIT", 0)) / total
+    time_ratio = float(reasons.get("TIME_EXIT", 0)) / total
+    avg_win = float(diag.get("avg_win") or 0.0)
+    avg_loss = abs(float(diag.get("avg_loss") or 0.0))
+
+    score_target = params["score_threshold"]
+    if stop_ratio > 0.5:
+        score_target = min(params["score_threshold"] + 0.05, 0.9)
+    elif stop_ratio < 0.3:
+        score_target = max(params["score_threshold"] - 0.03, 0.3)
+
+    momentum_target = params["momentum_threshold"]
+    if time_ratio > 0.5:
+        momentum_target = min(params["momentum_threshold"] + 0.05, 0.9)
+    else:
+        momentum_target = max(params["momentum_threshold"] - 0.02, 0.2)
+
+    rr_target = params["risk_reward_ratio"]
+    if avg_loss > max(avg_win * 2.0, 1.0):
+        rr_target = min(params["risk_reward_ratio"] + 0.2, 3.0)
+    else:
+        rr_target = max(params["risk_reward_ratio"] - 0.1, 1.0)
+
+    freq_target = params["trade_frequency"]
+    if stop_ratio > 0.6:
+        freq_target = max(params["trade_frequency"] * 0.8, 0.3)
+    else:
+        freq_target = min(params["trade_frequency"] * 1.05, 1.5)
+
+    confidence_target = params["confidence_threshold"]
+    if stop_ratio > 0.5:
+        confidence_target = min(params["confidence_threshold"] + 0.04, 0.9)
+    elif stop_ratio < 0.25:
+        confidence_target = max(params["confidence_threshold"] - 0.02, 0.2)
+
+    params["score_threshold"] = round(_smooth(params["score_threshold"], score_target), 4)
+    params["momentum_threshold"] = round(_smooth(params["momentum_threshold"], momentum_target), 4)
+    params["risk_reward_ratio"] = round(_smooth(params["risk_reward_ratio"], rr_target), 4)
+    params["trade_frequency"] = round(_smooth(params["trade_frequency"], freq_target), 4)
+    params["confidence_threshold"] = round(_smooth(params["confidence_threshold"], confidence_target), 4)
+    return params
 
 
 def _save_learning(adjustments: dict[str, Any]) -> None:
@@ -438,12 +547,16 @@ def run_paper_cycle() -> dict[str, Any]:
     diagnostics = get_trade_diagnostics()
     learning = derive_strategy_adjustments(diagnostics)
     _save_learning(learning)
+    params = load_adaptive_params()
+    params = update_adaptive_params(diagnostics, params)
+    save_adaptive_params(params)
     return {
         "generated_at": _utc_now(),
         "created_positions": len(created),
         "closed_positions": len(closed),
         "summary": pnl,
         "learning": learning,
+        "adaptive_params": params,
     }
 
 
