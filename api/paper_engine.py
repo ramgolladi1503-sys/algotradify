@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import random
 from datetime import datetime, timezone
@@ -17,12 +18,14 @@ PAPER_PNL_PATH = TRADEBOT_ROOT / "runtime" / "paper_pnl.json"
 PAPER_LEARNING_PATH = TRADEBOT_ROOT / "runtime" / "paper_learning.json"
 ADAPTIVE_PARAMS_PATH = TRADEBOT_ROOT / "runtime" / "adaptive_params.json"
 PAPER_REJECTIONS_PATH = TRADEBOT_ROOT / "runtime" / "paper_rejections.json"
+BANDIT_STATE_PATH = TRADEBOT_ROOT / "runtime" / "bandit_state.json"
 
 DEFAULT_QTY = int(os.getenv("PAPER_DEFAULT_QTY", "1") or "1")
 DEFAULT_STOP_PCT = float(os.getenv("PAPER_DEFAULT_STOP_PCT", "0.15") or "0.15")
 DEFAULT_TARGET_PCT = float(os.getenv("PAPER_DEFAULT_TARGET_PCT", "0.25") or "0.25")
 DEFAULT_SLIPPAGE_PCT = float(os.getenv("PAPER_SLIPPAGE_PCT", "0.002") or "0.002")
 DEFAULT_TIME_EXIT_SEC = int(os.getenv("PAPER_TIME_EXIT_SEC", "900") or "900")
+BANDIT_EPSILON = float(os.getenv("PAPER_BANDIT_EPSILON", "0.18") or "0.18")
 
 
 def _utc_now() -> str:
@@ -88,6 +91,16 @@ def _default_params() -> dict[str, float]:
     }
 
 
+def _default_bandit_arms() -> list[dict[str, Any]]:
+    return [
+        {"arm_id": "balanced", "label": "Balanced", "params": {"score_threshold": 0.50, "confidence_threshold": 0.40, "momentum_threshold": 0.40, "risk_reward_ratio": 1.50, "trade_frequency": 1.00}},
+        {"arm_id": "conservative", "label": "Conservative", "params": {"score_threshold": 0.65, "confidence_threshold": 0.55, "momentum_threshold": 0.55, "risk_reward_ratio": 1.80, "trade_frequency": 0.70}},
+        {"arm_id": "aggressive", "label": "Aggressive", "params": {"score_threshold": 0.38, "confidence_threshold": 0.30, "momentum_threshold": 0.30, "risk_reward_ratio": 1.20, "trade_frequency": 1.25}},
+        {"arm_id": "momentum_focus", "label": "Momentum Focus", "params": {"score_threshold": 0.58, "confidence_threshold": 0.45, "momentum_threshold": 0.65, "risk_reward_ratio": 1.70, "trade_frequency": 0.85}},
+        {"arm_id": "high_rr", "label": "High RR", "params": {"score_threshold": 0.55, "confidence_threshold": 0.45, "momentum_threshold": 0.45, "risk_reward_ratio": 2.20, "trade_frequency": 0.75}},
+    ]
+
+
 def _smooth(old: float, new: float, alpha: float = 0.2) -> float:
     return (old * (1.0 - alpha)) + (new * alpha)
 
@@ -104,6 +117,144 @@ def load_adaptive_params() -> dict[str, float]:
 
 def save_adaptive_params(params: dict[str, float]) -> None:
     _write_json(ADAPTIVE_PARAMS_PATH, params)
+
+
+def _default_bandit_state() -> dict[str, Any]:
+    arms = []
+    for arm in _default_bandit_arms():
+        arms.append({
+            "arm_id": arm["arm_id"],
+            "label": arm["label"],
+            "params": arm["params"],
+            "pulls": 0,
+            "wins": 0,
+            "losses": 0,
+            "total_reward": 0.0,
+            "avg_reward": 0.0,
+            "last_reward": None,
+        })
+    return {
+        "generated_at": _utc_now(),
+        "epsilon": BANDIT_EPSILON,
+        "total_pulls": 0,
+        "last_selected_arm": None,
+        "last_selection_reason": None,
+        "last_updated_trade_id": None,
+        "arms": arms,
+    }
+
+
+def load_bandit_state() -> dict[str, Any]:
+    data = _read_json(BANDIT_STATE_PATH, default={})
+    state = _default_bandit_state()
+    if isinstance(data, dict):
+        arm_map = {arm["arm_id"]: arm for arm in state["arms"]}
+        incoming_arms = data.get("arms") if isinstance(data.get("arms"), list) else []
+        for incoming in incoming_arms:
+            if not isinstance(incoming, dict):
+                continue
+            arm_id = str(incoming.get("arm_id") or "")
+            if arm_id in arm_map:
+                target = arm_map[arm_id]
+                for field in ("pulls", "wins", "losses"):
+                    target[field] = int(incoming.get(field) or target[field])
+                for field in ("total_reward", "avg_reward"):
+                    target[field] = float(incoming.get(field) or target[field])
+                target["last_reward"] = incoming.get("last_reward")
+                if isinstance(incoming.get("params"), dict):
+                    for p_key, p_val in incoming["params"].items():
+                        if p_key in target["params"] and _safe_float(p_val) is not None:
+                            target["params"][p_key] = float(p_val)
+        state["epsilon"] = float(data.get("epsilon") or state["epsilon"])
+        state["total_pulls"] = int(data.get("total_pulls") or state["total_pulls"])
+        state["last_selected_arm"] = data.get("last_selected_arm")
+        state["last_selection_reason"] = data.get("last_selection_reason")
+        state["last_updated_trade_id"] = data.get("last_updated_trade_id")
+    return state
+
+
+def save_bandit_state(state: dict[str, Any]) -> None:
+    state["generated_at"] = _utc_now()
+    _write_json(BANDIT_STATE_PATH, state)
+
+
+def select_bandit_arm() -> dict[str, Any]:
+    state = load_bandit_state()
+    arms = state["arms"]
+    untried = [arm for arm in arms if int(arm.get("pulls") or 0) == 0]
+    if untried:
+        chosen = random.choice(untried)
+        state["last_selected_arm"] = chosen["arm_id"]
+        state["last_selection_reason"] = "cold_start"
+        save_bandit_state(state)
+        return chosen
+    if random.random() < float(state.get("epsilon") or BANDIT_EPSILON):
+        chosen = random.choice(arms)
+        state["last_selected_arm"] = chosen["arm_id"]
+        state["last_selection_reason"] = "exploration"
+        save_bandit_state(state)
+        return chosen
+    total_pulls = max(sum(int(arm.get("pulls") or 0) for arm in arms), 1)
+    best_score = None
+    chosen = arms[0]
+    for arm in arms:
+        pulls = max(int(arm.get("pulls") or 0), 1)
+        avg_reward = float(arm.get("avg_reward") or 0.0)
+        ucb = avg_reward + math.sqrt((2.0 * math.log(total_pulls + 1)) / pulls)
+        if best_score is None or ucb > best_score:
+            best_score = ucb
+            chosen = arm
+    state["last_selected_arm"] = chosen["arm_id"]
+    state["last_selection_reason"] = "ucb"
+    save_bandit_state(state)
+    return chosen
+
+
+def get_bandit_summary() -> dict[str, Any]:
+    state = load_bandit_state()
+    ordered = sorted(state["arms"], key=lambda arm: (float(arm.get("avg_reward") or 0.0), float(arm.get("total_reward") or 0.0)), reverse=True)
+    return {
+        "generated_at": _utc_now(),
+        "epsilon": state.get("epsilon"),
+        "total_pulls": state.get("total_pulls"),
+        "last_selected_arm": state.get("last_selected_arm"),
+        "last_selection_reason": state.get("last_selection_reason"),
+        "leader": ordered[0] if ordered else None,
+        "arms": ordered,
+    }
+
+
+def update_bandit_rewards() -> dict[str, Any]:
+    state = load_bandit_state()
+    trades = [t for t in _load_trades() if isinstance(t, dict) and t.get("status") == "CLOSED"]
+    updated = 0
+    arm_map = {arm["arm_id"]: arm for arm in state["arms"]}
+    last_updated_trade_id = state.get("last_updated_trade_id")
+    seen_last = last_updated_trade_id is None
+    for trade in reversed(trades):
+        pid = trade.get("paper_position_id")
+        if not seen_last:
+            if pid == last_updated_trade_id:
+                seen_last = True
+            continue
+        arm_id = trade.get("bandit_arm_id")
+        if not arm_id or arm_id not in arm_map:
+            continue
+        reward = float(trade.get("realized_pnl") or 0.0)
+        arm = arm_map[arm_id]
+        arm["pulls"] = int(arm.get("pulls") or 0) + 1
+        state["total_pulls"] = int(state.get("total_pulls") or 0) + 1
+        arm["total_reward"] = round(float(arm.get("total_reward") or 0.0) + reward, 4)
+        arm["avg_reward"] = round(float(arm["total_reward"]) / max(int(arm["pulls"]), 1), 4)
+        arm["last_reward"] = reward
+        if reward > 0:
+            arm["wins"] = int(arm.get("wins") or 0) + 1
+        elif reward < 0:
+            arm["losses"] = int(arm.get("losses") or 0) + 1
+        state["last_updated_trade_id"] = pid
+        updated += 1
+    save_bandit_state(state)
+    return {"updated_trades": updated, "bandit": get_bandit_summary()}
 
 
 def _record_rejection(item: dict[str, Any]) -> None:
@@ -244,7 +395,6 @@ def _position_id(action: dict[str, Any], row: dict[str, Any]) -> str:
 
 
 def _process_new_actions() -> list[dict[str, Any]]:
-    params = load_adaptive_params()
     cursor = _load_action_cursor()
     processed_count = int(cursor.get("processed_count") or 0)
     actions = _read_jsonl(ACTION_QUEUE_PATH)
@@ -259,23 +409,25 @@ def _process_new_actions() -> list[dict[str, Any]]:
         if action_name not in {"ENTER", "FORCE"}:
             continue
         row = _lookup_opportunity(action)
+        arm = select_bandit_arm()
+        params = arm["params"]
         score = float(_safe_float(row.get("score") or row.get("ranking_score") or row.get("confidence")) or 0.0)
         confidence = float(_safe_float(row.get("confidence") or row.get("global_confidence")) or 0.0)
         momentum = float(_safe_float(row.get("momentum_score") or row.get("trend_strength") or score) or 0.0)
 
         if action_name == "ENTER":
             if score < float(params.get("score_threshold") or 0.5):
-                _record_rejection({"timestamp": _utc_now(), "reason": "adaptive_score_filter", "symbol": action.get("symbol"), "score": score, "threshold": params.get("score_threshold")})
+                _record_rejection({"timestamp": _utc_now(), "reason": "bandit_score_filter", "symbol": action.get("symbol"), "score": score, "threshold": params.get("score_threshold"), "arm_id": arm["arm_id"]})
                 continue
             if confidence < float(params.get("confidence_threshold") or 0.4):
-                _record_rejection({"timestamp": _utc_now(), "reason": "adaptive_confidence_filter", "symbol": action.get("symbol"), "confidence": confidence, "threshold": params.get("confidence_threshold")})
+                _record_rejection({"timestamp": _utc_now(), "reason": "bandit_confidence_filter", "symbol": action.get("symbol"), "confidence": confidence, "threshold": params.get("confidence_threshold"), "arm_id": arm["arm_id"]})
                 continue
             if momentum < float(params.get("momentum_threshold") or 0.4):
-                _record_rejection({"timestamp": _utc_now(), "reason": "adaptive_momentum_filter", "symbol": action.get("symbol"), "momentum": momentum, "threshold": params.get("momentum_threshold")})
+                _record_rejection({"timestamp": _utc_now(), "reason": "bandit_momentum_filter", "symbol": action.get("symbol"), "momentum": momentum, "threshold": params.get("momentum_threshold"), "arm_id": arm["arm_id"]})
                 continue
             trade_frequency = float(params.get("trade_frequency") or 1.0)
             if trade_frequency < 1.0 and random.random() > trade_frequency:
-                _record_rejection({"timestamp": _utc_now(), "reason": "adaptive_trade_throttle", "symbol": action.get("symbol"), "trade_frequency": trade_frequency})
+                _record_rejection({"timestamp": _utc_now(), "reason": "bandit_trade_throttle", "symbol": action.get("symbol"), "trade_frequency": trade_frequency, "arm_id": arm["arm_id"]})
                 continue
 
         fill_price, fill_source = _entry_fill_price(row, action_name)
@@ -310,6 +462,8 @@ def _process_new_actions() -> list[dict[str, Any]]:
             "unrealized_pnl": 0.0,
             "exit_reason": None,
             "decision": row.get("decision") or row.get("final_action") or row.get("readiness"),
+            "bandit_arm_id": arm["arm_id"],
+            "bandit_arm_label": arm["label"],
             "adaptive_params": params,
         }
         positions.append(position)
@@ -406,15 +560,18 @@ def get_trade_diagnostics() -> dict[str, Any]:
     trades = [t for t in _load_trades() if isinstance(t, dict) and t.get("status") == "CLOSED"]
     reason_counts: dict[str, int] = {}
     symbol_counts: dict[str, int] = {}
+    arm_counts: dict[str, int] = {}
     total_realized = 0.0
     win_pnls: list[float] = []
     loss_pnls: list[float] = []
     for trade in trades:
         reason = str(trade.get("exit_reason") or "UNKNOWN")
         symbol = str(trade.get("symbol") or "UNKNOWN")
+        arm_id = str(trade.get("bandit_arm_id") or "UNKNOWN")
         pnl = float(trade.get("realized_pnl") or 0.0)
         reason_counts[reason] = reason_counts.get(reason, 0) + 1
         symbol_counts[symbol] = symbol_counts.get(symbol, 0) + 1
+        arm_counts[arm_id] = arm_counts.get(arm_id, 0) + 1
         total_realized += pnl
         if pnl > 0:
             win_pnls.append(pnl)
@@ -425,6 +582,7 @@ def get_trade_diagnostics() -> dict[str, Any]:
         "trade_count": len(trades),
         "exit_reason_counts": reason_counts,
         "top_symbols": sorted(symbol_counts.items(), key=lambda item: item[1], reverse=True)[:5],
+        "arm_trade_counts": arm_counts,
         "avg_realized_pnl": round(total_realized / len(trades), 4) if trades else None,
         "avg_win": round(sum(win_pnls) / len(win_pnls), 4) if win_pnls else None,
         "avg_loss": round(sum(loss_pnls) / len(loss_pnls), 4) if loss_pnls else None,
@@ -439,6 +597,8 @@ def derive_strategy_adjustments(diag: dict[str, Any]) -> dict[str, Any]:
     target_ratio = float(reasons.get("TARGET_HIT", 0)) / total
     avg_win = float(diag.get("avg_win") or 0.0)
     avg_loss = float(diag.get("avg_loss") or 0.0)
+    bandit = get_bandit_summary()
+    leader = bandit.get("leader") if isinstance(bandit, dict) else None
 
     adjustments: dict[str, Any] = {
         "generated_at": _utc_now(),
@@ -449,6 +609,8 @@ def derive_strategy_adjustments(diag: dict[str, Any]) -> dict[str, Any]:
         "risk_reward": "unknown",
         "actions": [],
         "hints": [],
+        "bandit_leader": leader.get("arm_id") if isinstance(leader, dict) else None,
+        "bandit_leader_reward": leader.get("avg_reward") if isinstance(leader, dict) else None,
         "metrics": {
             "stop_ratio": round(stop_ratio, 4),
             "time_ratio": round(time_ratio, 4),
@@ -461,22 +623,22 @@ def derive_strategy_adjustments(diag: dict[str, Any]) -> dict[str, Any]:
     if stop_ratio > 0.5:
         adjustments["bias"] = "overstopped"
         adjustments["entry_quality"] = "bad"
-        adjustments["actions"].extend(["delay_entry", "raise_entry_threshold"])
-        adjustments["hints"].extend(["avoid breakout chasing", "require confirmation before entry"])
+        adjustments["actions"].extend(["favor_conservative_or_momentum_arm", "reduce_aggressive_exploration"])
+        adjustments["hints"].extend(["avoid breakout chasing", "reward defensive arms more heavily"])
     elif time_ratio > 0.5:
         adjustments["bias"] = "low_momentum"
         adjustments["entry_quality"] = "weak"
-        adjustments["actions"].extend(["require_momentum", "reject_sideways_setups"])
+        adjustments["actions"].extend(["favor_momentum_focus_arm", "penalize_low_momentum_arms"])
         adjustments["hints"].append("signals are not moving fast enough")
     elif target_ratio > max(stop_ratio, time_ratio):
         adjustments["bias"] = "healthy"
         adjustments["entry_quality"] = "good"
-        adjustments["actions"].append("keep_current_entry_model")
-        adjustments["hints"].append("current paper entries are relatively healthy")
+        adjustments["actions"].append("increase_exploitation_of_best_arm")
+        adjustments["hints"].append("current leading arm is relatively healthy")
 
     if avg_loss < 0 and abs(avg_loss) > max(abs(avg_win) * 2.0, 1.0):
         adjustments["risk_reward"] = "bad"
-        adjustments["actions"].append("tighten_stop_or_raise_target")
+        adjustments["actions"].append("increase_high_rr_arm_weight")
         adjustments["hints"].append("average loss is overwhelming average win")
     elif avg_win > 0 and abs(avg_loss) <= avg_win:
         adjustments["risk_reward"] = "healthy"
@@ -543,6 +705,7 @@ def run_paper_cycle() -> dict[str, Any]:
     created = _process_new_actions()
     _, closed = _mark_positions()
     _persist_trade_history(closed)
+    bandit_update = update_bandit_rewards()
     pnl = _recompute_pnl()
     diagnostics = get_trade_diagnostics()
     learning = derive_strategy_adjustments(diagnostics)
@@ -557,6 +720,7 @@ def run_paper_cycle() -> dict[str, Any]:
         "summary": pnl,
         "learning": learning,
         "adaptive_params": params,
+        "bandit": bandit_update.get("bandit"),
     }
 
 
