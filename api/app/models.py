@@ -1,14 +1,13 @@
-from dataclasses import dataclass
+from pydantic import BaseModel, Field
 
-@dataclass
-class TradeOutcome:
+
+class TradeOutcome(BaseModel):
     pnl: float
-    planned_risk: float
-    holding_minutes: float
-    entry_slippage: float = 0.0
-    exit_slippage: float = 0.0
-    stop_loss_hit: bool = False
+    risk: float = Field(default=1.0, gt=0)
+    hold: float = Field(default=1.0, ge=0)
+    adx: float = Field(default=30.0, ge=0)
+    compression: float = Field(default=0.2, ge=0, le=1)
 
-@dataclass
-class MarketRegime:
-    regime_id: str
+
+class MarketRegime(BaseModel):
+    regime: str
