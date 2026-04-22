@@ -5,15 +5,18 @@ import json
 import os
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 
 APP_TITLE = "AlgoTradify Backend Adapter"
 TRADEBOT_ROOT = Path(os.getenv("TRADEBOT_ROOT", "core_bot")).resolve()
 LOGS_DIR = TRADEBOT_ROOT / "logs"
 RUNTIME_DIR = TRADEBOT_ROOT / "runtime"
+ACTION_QUEUE_PATH = RUNTIME_DIR / "ui_action_queue.jsonl"
+ACTION_HISTORY_PATH = RUNTIME_DIR / "ui_action_history.json"
 
 app = FastAPI(title=APP_TITLE, version="0.1.0")
 app.add_middleware(
@@ -25,6 +28,15 @@ app.add_middleware(
 )
 
 
+class ActionRequest(BaseModel):
+    action: Literal["ENTER", "SKIP", "FORCE"]
+    trade_id: str | None = None
+    trade_key: str | None = None
+    symbol: str | None = None
+    reason: str | None = None
+    payload: dict[str, Any] | None = None
+
+
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
@@ -34,6 +46,17 @@ def _read_json(path: Path, *, default: Any) -> Any:
         return json.loads(path.read_text(encoding="utf-8"))
     except Exception:
         return default
+
+
+def _write_json(path: Path, payload: Any) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _append_jsonl(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(payload, ensure_ascii=False) + "\n")
 
 
 def _candidate_files(*names: str) -> list[Path]:
@@ -115,6 +138,32 @@ def _load_checks() -> dict[str, Any]:
     return {"generated_at": _utc_now(), "items": items, "count": len(items)}
 
 
+def _load_action_history() -> list[dict[str, Any]]:
+    data = _read_json(ACTION_HISTORY_PATH, default=[])
+    return data if isinstance(data, list) else []
+
+
+def _record_action(request: ActionRequest) -> dict[str, Any]:
+    if not any([request.trade_id, request.trade_key, request.symbol]):
+        raise HTTPException(status_code=400, detail="trade_id, trade_key, or symbol is required")
+    item = {
+        "timestamp": _utc_now(),
+        "action": request.action,
+        "trade_id": request.trade_id,
+        "trade_key": request.trade_key,
+        "symbol": request.symbol,
+        "reason": request.reason,
+        "payload": request.payload or {},
+        "status": "queued",
+        "source": "algotradify_ui",
+    }
+    _append_jsonl(ACTION_QUEUE_PATH, item)
+    history = _load_action_history()
+    history.insert(0, item)
+    _write_json(ACTION_HISTORY_PATH, history[:200])
+    return item
+
+
 def _wrap(name: str, payload: Any) -> dict[str, Any]:
     return {"type": name, "generated_at": _utc_now(), "payload": payload}
 
@@ -177,6 +226,32 @@ def trade_detail(item_id: str) -> dict[str, Any]:
     return _wrap("trade_detail", {"id": item_id})
 
 
+@app.get("/actions/history")
+def action_history() -> dict[str, Any]:
+    return _wrap("action_history", {"items": _load_action_history()})
+
+
+@app.post("/actions/execute")
+def action_execute(request: ActionRequest) -> dict[str, Any]:
+    if request.action != "ENTER":
+        raise HTTPException(status_code=400, detail="execute endpoint only accepts ENTER")
+    return _wrap("action_execute", _record_action(request))
+
+
+@app.post("/actions/skip")
+def action_skip(request: ActionRequest) -> dict[str, Any]:
+    if request.action != "SKIP":
+        raise HTTPException(status_code=400, detail="skip endpoint only accepts SKIP")
+    return _wrap("action_skip", _record_action(request))
+
+
+@app.post("/actions/force")
+def action_force(request: ActionRequest) -> dict[str, Any]:
+    if request.action != "FORCE":
+        raise HTTPException(status_code=400, detail="force endpoint only accepts FORCE")
+    return _wrap("action_force", _record_action(request))
+
+
 @app.get("/incidents")
 def incidents() -> dict[str, Any]:
     return _wrap("incidents", _load_incidents())
@@ -216,6 +291,7 @@ async def _stream(ws: WebSocket) -> None:
                 "runtime_health": runtime_health()["payload"],
                 "opportunities": opportunities()["payload"],
                 "incidents": incidents()["payload"],
+                "action_history": action_history()["payload"],
             }
             await ws.send_text(json.dumps(_wrap("dashboard", payload), default=str))
             await asyncio.sleep(float(os.getenv("ALGO_WS_REFRESH_SEC", "2.0") or "2.0"))
