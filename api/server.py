@@ -11,7 +11,16 @@ from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from .paper_engine import run_paper_cycle, get_positions, get_trade_history, get_pnl_summary
+from .paper_engine import (
+    run_paper_cycle,
+    get_positions,
+    get_trade_history,
+    get_pnl_summary,
+    get_trade_diagnostics,
+    get_learning,
+    load_adaptive_params,
+    get_rejections,
+)
 
 APP_TITLE = "AlgoTradify Backend Adapter"
 TRADEBOT_ROOT = Path(os.getenv("TRADEBOT_ROOT", "core_bot")).resolve()
@@ -204,6 +213,30 @@ def paper_pnl() -> dict[str, Any]:
     return _wrap("paper_pnl", get_pnl_summary())
 
 
+@app.get("/paper/diagnostics")
+def paper_diagnostics() -> dict[str, Any]:
+    run_paper_cycle()
+    return _wrap("paper_diagnostics", get_trade_diagnostics())
+
+
+@app.get("/paper/learning")
+def paper_learning() -> dict[str, Any]:
+    run_paper_cycle()
+    return _wrap("paper_learning", get_learning())
+
+
+@app.get("/paper/params")
+def paper_params() -> dict[str, Any]:
+    run_paper_cycle()
+    return _wrap("paper_params", load_adaptive_params())
+
+
+@app.get("/paper/rejections")
+def paper_rejections() -> dict[str, Any]:
+    run_paper_cycle()
+    return _wrap("paper_rejections", {"items": get_rejections()})
+
+
 @app.get("/runtime/risk")
 def runtime_risk() -> dict[str, Any]:
     health_payload = _load_runtime_health()
@@ -308,13 +341,18 @@ async def _stream(ws: WebSocket) -> None:
     await ws.accept()
     try:
         while True:
-            run_paper_cycle()
+            cycle = run_paper_cycle()
             payload = {
                 "runtime_health": runtime_health()["payload"],
                 "opportunities": opportunities()["payload"],
                 "incidents": incidents()["payload"],
                 "paper_positions": {"items": get_positions()},
                 "paper_pnl": get_pnl_summary(),
+                "paper_learning": get_learning(),
+                "paper_params": load_adaptive_params(),
+                "paper_diagnostics": get_trade_diagnostics(),
+                "paper_rejections": {"items": get_rejections()},
+                "paper_cycle": cycle,
             }
             await ws.send_text(json.dumps(_wrap("dashboard", payload), default=str))
             await asyncio.sleep(float(os.getenv("ALGO_WS_REFRESH_SEC", "2.0") or "2.0"))
