@@ -11,6 +11,8 @@ from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from .paper_engine import run_paper_cycle, get_positions, get_trade_history, get_pnl_summary
+
 APP_TITLE = "AlgoTradify Backend Adapter"
 TRADEBOT_ROOT = Path(os.getenv("TRADEBOT_ROOT", "core_bot")).resolve()
 LOGS_DIR = TRADEBOT_ROOT / "logs"
@@ -180,7 +182,26 @@ def health() -> dict[str, Any]:
 
 @app.get("/runtime/health")
 def runtime_health() -> dict[str, Any]:
+    run_paper_cycle()
     return _wrap("runtime_health", _load_runtime_health())
+
+
+@app.get("/paper/positions")
+def paper_positions() -> dict[str, Any]:
+    run_paper_cycle()
+    return _wrap("paper_positions", {"items": get_positions()})
+
+
+@app.get("/paper/trades")
+def paper_trades() -> dict[str, Any]:
+    run_paper_cycle()
+    return _wrap("paper_trades", {"items": get_trade_history()})
+
+
+@app.get("/paper/pnl")
+def paper_pnl() -> dict[str, Any]:
+    run_paper_cycle()
+    return _wrap("paper_pnl", get_pnl_summary())
 
 
 @app.get("/runtime/risk")
@@ -287,11 +308,13 @@ async def _stream(ws: WebSocket) -> None:
     await ws.accept()
     try:
         while True:
+            run_paper_cycle()
             payload = {
                 "runtime_health": runtime_health()["payload"],
                 "opportunities": opportunities()["payload"],
                 "incidents": incidents()["payload"],
-                "action_history": action_history()["payload"],
+                "paper_positions": {"items": get_positions()},
+                "paper_pnl": get_pnl_summary(),
             }
             await ws.send_text(json.dumps(_wrap("dashboard", payload), default=str))
             await asyncio.sleep(float(os.getenv("ALGO_WS_REFRESH_SEC", "2.0") or "2.0"))
