@@ -13,6 +13,7 @@ ACTION_CURSOR_PATH = TRADEBOT_ROOT / "runtime" / "paper_action_cursor.json"
 PAPER_POSITIONS_PATH = TRADEBOT_ROOT / "runtime" / "paper_positions.json"
 PAPER_TRADES_PATH = TRADEBOT_ROOT / "runtime" / "paper_trades.json"
 PAPER_PNL_PATH = TRADEBOT_ROOT / "runtime" / "paper_pnl.json"
+PAPER_LEARNING_PATH = TRADEBOT_ROOT / "runtime" / "paper_learning.json"
 
 DEFAULT_QTY = int(os.getenv("PAPER_DEFAULT_QTY", "1") or "1")
 DEFAULT_STOP_PCT = float(os.getenv("PAPER_DEFAULT_STOP_PCT", "0.15") or "0.15")
@@ -364,16 +365,85 @@ def get_trade_diagnostics() -> dict[str, Any]:
     }
 
 
+def derive_strategy_adjustments(diag: dict[str, Any]) -> dict[str, Any]:
+    reasons = diag.get("exit_reason_counts") or {}
+    total = max(int(diag.get("trade_count") or 0), 1)
+    stop_ratio = float(reasons.get("STOP_HIT", 0)) / total
+    time_ratio = float(reasons.get("TIME_EXIT", 0)) / total
+    target_ratio = float(reasons.get("TARGET_HIT", 0)) / total
+    avg_win = float(diag.get("avg_win") or 0.0)
+    avg_loss = float(diag.get("avg_loss") or 0.0)
+
+    adjustments: dict[str, Any] = {
+        "generated_at": _utc_now(),
+        "trade_count": total,
+        "status": "warming_up" if total < 5 else "active",
+        "bias": "neutral",
+        "entry_quality": "unknown",
+        "risk_reward": "unknown",
+        "actions": [],
+        "hints": [],
+        "metrics": {
+            "stop_ratio": round(stop_ratio, 4),
+            "time_ratio": round(time_ratio, 4),
+            "target_ratio": round(target_ratio, 4),
+            "avg_win": round(avg_win, 4),
+            "avg_loss": round(avg_loss, 4),
+        },
+    }
+
+    if stop_ratio > 0.5:
+        adjustments["bias"] = "overstopped"
+        adjustments["entry_quality"] = "bad"
+        adjustments["actions"].append("delay_entry")
+        adjustments["actions"].append("raise_entry_threshold")
+        adjustments["hints"].append("avoid breakout chasing")
+        adjustments["hints"].append("require confirmation before entry")
+    elif time_ratio > 0.5:
+        adjustments["bias"] = "low_momentum"
+        adjustments["entry_quality"] = "weak"
+        adjustments["actions"].append("require_momentum")
+        adjustments["actions"].append("reject_sideways_setups")
+        adjustments["hints"].append("signals are not moving fast enough")
+    elif target_ratio > max(stop_ratio, time_ratio):
+        adjustments["bias"] = "healthy"
+        adjustments["entry_quality"] = "good"
+        adjustments["actions"].append("keep_current_entry_model")
+        adjustments["hints"].append("current paper entries are relatively healthy")
+
+    if avg_loss < 0 and abs(avg_loss) > max(avg_win * 2.0, 1.0):
+        adjustments["risk_reward"] = "bad"
+        adjustments["actions"].append("tighten_stop_or_raise_target")
+        adjustments["hints"].append("average loss is overwhelming average win")
+    elif avg_win > 0 and abs(avg_loss) <= avg_win:
+        adjustments["risk_reward"] = "healthy"
+
+    return adjustments
+
+
+def _save_learning(adjustments: dict[str, Any]) -> None:
+    _write_json(PAPER_LEARNING_PATH, adjustments)
+
+
+def get_learning() -> dict[str, Any]:
+    data = _read_json(PAPER_LEARNING_PATH, default={})
+    return data if isinstance(data, dict) else {}
+
+
 def run_paper_cycle() -> dict[str, Any]:
     created = _process_new_actions()
     _, closed = _mark_positions()
     _persist_trade_history(closed)
     pnl = _recompute_pnl()
+    diagnostics = get_trade_diagnostics()
+    learning = derive_strategy_adjustments(diagnostics)
+    _save_learning(learning)
     return {
         "generated_at": _utc_now(),
         "created_positions": len(created),
         "closed_positions": len(closed),
         "summary": pnl,
+        "learning": learning,
     }
 
 
