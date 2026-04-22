@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import math
 import os
 from datetime import datetime, timezone
 from pathlib import Path
@@ -334,6 +333,35 @@ def _recompute_pnl() -> dict[str, Any]:
     }
     _write_json(PAPER_PNL_PATH, summary)
     return summary
+
+
+def get_trade_diagnostics() -> dict[str, Any]:
+    trades = [t for t in _load_trades() if isinstance(t, dict) and t.get("status") == "CLOSED"]
+    reason_counts: dict[str, int] = {}
+    symbol_counts: dict[str, int] = {}
+    total_realized = 0.0
+    win_pnls: list[float] = []
+    loss_pnls: list[float] = []
+    for trade in trades:
+        reason = str(trade.get("exit_reason") or "UNKNOWN")
+        symbol = str(trade.get("symbol") or "UNKNOWN")
+        pnl = float(trade.get("realized_pnl") or 0.0)
+        reason_counts[reason] = reason_counts.get(reason, 0) + 1
+        symbol_counts[symbol] = symbol_counts.get(symbol, 0) + 1
+        total_realized += pnl
+        if pnl > 0:
+            win_pnls.append(pnl)
+        elif pnl < 0:
+            loss_pnls.append(pnl)
+    return {
+        "generated_at": _utc_now(),
+        "trade_count": len(trades),
+        "exit_reason_counts": reason_counts,
+        "top_symbols": sorted(symbol_counts.items(), key=lambda item: item[1], reverse=True)[:5],
+        "avg_realized_pnl": round(total_realized / len(trades), 4) if trades else None,
+        "avg_win": round(sum(win_pnls) / len(win_pnls), 4) if win_pnls else None,
+        "avg_loss": round(sum(loss_pnls) / len(loss_pnls), 4) if loss_pnls else None,
+    }
 
 
 def run_paper_cycle() -> dict[str, Any]:
