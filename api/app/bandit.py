@@ -5,6 +5,7 @@ class Arm:
         self.pulls = 0
         self.total = 0.0
         self.active = True
+        self.disabled_reason = None
 
     @property
     def avg(self):
@@ -13,3 +14,9 @@ class Arm:
     def update(self, reward):
         self.pulls += 1
         self.total += reward
+        self._maybe_disable()
+
+    def _maybe_disable(self):
+        if self.pulls >= 15 and self.avg < -0.3:
+            self.active = False
+            self.disabled_reason = "poor_performance"
