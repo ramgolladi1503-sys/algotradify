@@ -10,9 +10,9 @@ def health():
     return {"status": "ok"}
 
 @app.get("/opportunities")
-def opportunities():
-    arm = service.select_arm()
-    return [{"arm": arm.arm_id, "score": arm.avg}]
+def opportunities(adx: float = 30, compression: float = 0.2):
+    service.update_regime(adx, compression)
+    return service.build_opportunities()
 
 @app.get("/paper/bandit/arms")
 def arms():
