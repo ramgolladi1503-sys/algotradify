@@ -43,6 +43,16 @@ class FillRecord(BaseModel):
     product: str
     filled_at: str
     client_order_id: Optional[str] = None
+    partial: bool = False
+    original_quantity: Optional[int] = None
+
+
+class CancelResult(BaseModel):
+    order_id: str
+    accepted: bool
+    status: str
+    reason: Optional[str] = None
+    cancelled_at: str
 
 
 class KiteExecutionEngine:
@@ -51,9 +61,11 @@ class KiteExecutionEngine:
         self.access_token = os.getenv("KITE_ACCESS_TOKEN")
         self.live_enabled = os.getenv("LIVE_ORDER_ENABLED", "false").lower() == "true"
         self.max_order_qty = int(os.getenv("MAX_ORDER_QTY", "1800"))
+        self.order_timeout_sec = int(os.getenv("ORDER_TIMEOUT_SEC", "45"))
         self.audit: list[dict] = []
         self.pending: dict[str, ExecutionResult] = {}
         self.fills: dict[str, FillRecord] = {}
+        self.cancelled: dict[str, CancelResult] = {}
         self.kite = None
         if self.api_key and self.access_token:
             self.kite = KiteConnect(api_key=self.api_key)
@@ -102,6 +114,8 @@ class KiteExecutionEngine:
                 product=req.product,
                 filled_at=submitted_at,
                 client_order_id=client_order_id,
+                partial=False,
+                original_quantity=req.quantity,
             )
             return result
 
@@ -162,7 +176,10 @@ class KiteExecutionEngine:
             return []
 
         if not self.kite:
-            return list(self.fills.values())
+            fills = list(self.fills.values())
+            for f in fills:
+                self.pending.pop(f.order_id, None)
+            return fills
 
         try:
             orders = self.kite.orders()
@@ -181,39 +198,79 @@ class KiteExecutionEngine:
 
             order = by_order_id.get(str(order_id))
             if not order:
+                if self._is_timed_out(submitted):
+                    self.cancel_order(order_id, reason="missing_order_timeout")
                 continue
 
             status = str(order.get("status") or "UNKNOWN").upper()
-            filled_qty = int(order.get("filled_quantity") or order.get("quantity") or 0)
+            filled_qty = int(order.get("filled_quantity") or 0)
+            total_qty = int(order.get("quantity") or submitted.request.quantity or 0)
             avg_price = float(order.get("average_price") or order.get("price") or 0.0)
 
-            if status == "COMPLETE" and filled_qty > 0 and avg_price > 0:
+            if filled_qty > 0 and avg_price > 0:
+                partial = filled_qty < total_qty or status not in {"COMPLETE"}
                 fill = FillRecord(
                     order_id=str(order_id),
                     tradingsymbol=str(order.get("tradingsymbol") or submitted.request.tradingsymbol),
                     transaction_type=str(order.get("transaction_type") or submitted.request.transaction_type),
                     filled_quantity=filled_qty,
                     average_price=avg_price,
-                    status=status,
+                    status="PARTIAL" if partial else "COMPLETE",
                     exchange=str(order.get("exchange") or submitted.request.exchange),
                     product=str(order.get("product") or submitted.request.product),
                     filled_at=self._now(),
                     client_order_id=submitted.client_order_id,
+                    partial=partial,
+                    original_quantity=total_qty,
                 )
                 self.fills[order_id] = fill
                 new_fills.append(fill)
-                self.pending.pop(order_id, None)
+
+                if partial and self._is_timed_out(submitted):
+                    self.cancel_order(order_id, reason="partial_fill_timeout")
+                    self.pending.pop(order_id, None)
+                elif not partial:
+                    self.pending.pop(order_id, None)
+
             elif status in {"REJECTED", "CANCELLED"}:
                 self.audit.append({"status": status, "order_id": order_id, "order": order, "at": self._now()})
                 self.pending.pop(order_id, None)
+            elif self._is_timed_out(submitted):
+                self.cancel_order(order_id, reason="order_timeout")
 
         return new_fills
+
+    def cancel_order(self, order_id: str, reason: str = "manual_cancel") -> CancelResult:
+        cancelled_at = self._now()
+        submitted = self.pending.get(order_id)
+
+        if order_id.startswith("DRYRUN-") or not self.kite:
+            result = CancelResult(order_id=order_id, accepted=True, status="LOCAL_CANCELLED", reason=reason, cancelled_at=cancelled_at)
+            self.cancelled[order_id] = result
+            self.pending.pop(order_id, None)
+            self.audit.append(result.model_dump())
+            return result
+
+        try:
+            variety = submitted.request.variety if submitted else "regular"
+            self.kite.cancel_order(variety=variety, order_id=order_id)
+            result = CancelResult(order_id=order_id, accepted=True, status="CANCEL_REQUESTED", reason=reason, cancelled_at=cancelled_at)
+            self.pending.pop(order_id, None)
+        except Exception as exc:
+            result = CancelResult(order_id=order_id, accepted=False, status="CANCEL_FAILED", reason=str(exc), cancelled_at=cancelled_at)
+
+        self.cancelled[order_id] = result
+        self.audit.append(result.model_dump())
+        return result
 
     def pending_orders(self):
         return {k: v.model_dump() for k, v in self.pending.items()}
 
     def filled_orders(self):
         return {k: v.model_dump() for k, v in self.fills.items()}
+
+    def cancelled_orders(self):
+        return {k: v.model_dump() for k, v in self.cancelled.items()}
 
     def orders(self):
         if not self.kite:
@@ -230,8 +287,10 @@ class KiteExecutionEngine:
             "live_enabled": self.live_enabled,
             "has_kite_session": self.kite is not None,
             "max_order_qty": self.max_order_qty,
+            "order_timeout_sec": self.order_timeout_sec,
             "pending_count": len(self.pending),
             "fill_count": len(self.fills),
+            "cancelled_count": len(self.cancelled),
             "audit_count": len(self.audit),
             "last_audit": self.audit[-10:],
         }
@@ -252,6 +311,11 @@ class KiteExecutionEngine:
         if req.order_type in {"SL", "SL-M"} and req.trigger_price is None:
             return "stop_order_requires_trigger_price"
         return None
+
+    def _is_timed_out(self, submitted: ExecutionResult) -> bool:
+        submitted_at = datetime.fromisoformat(submitted.submitted_at.replace("Z", "+00:00"))
+        age = (datetime.now(timezone.utc) - submitted_at).total_seconds()
+        return age >= self.order_timeout_sec
 
     def _audit(self, result: ExecutionResult):
         self.audit.append(result.model_dump())
