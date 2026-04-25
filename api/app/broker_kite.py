@@ -1,4 +1,6 @@
 import os
+import threading
+import time
 from kiteconnect import KiteTicker
 from .market_data import MarketTick
 from .instruments import InstrumentRegistry
@@ -11,8 +13,10 @@ class KiteAdapter:
         self.access_token = os.getenv("KITE_ACCESS_TOKEN")
         self.instrument_file = os.getenv("KITE_INSTRUMENTS_FILE", "instruments.json")
         self.underlying = os.getenv("KITE_UNDERLYING", "NIFTY")
+        self.refresh_interval = int(os.getenv("KITE_REFRESH_SEC", "60"))
         self.ticker = None
         self.registry = InstrumentRegistry()
+        self._current_tokens = []
 
     def start(self):
         if not self.api_key or not self.access_token:
@@ -21,11 +25,6 @@ class KiteAdapter:
 
         load_info = self.registry.load_from_file(self.instrument_file)
         print(f"[KITE] Instrument load: {load_info}")
-
-        tokens = self._build_subscription_tokens()
-        if not tokens:
-            print("[KITE] No tokens to subscribe — check instruments file")
-            return
 
         self.ticker = KiteTicker(self.api_key, self.access_token)
 
@@ -50,9 +49,8 @@ class KiteAdapter:
                 self.service.ingest_market(tick)
 
         def on_connect(ws, response):
-            print(f"[KITE] Connected, subscribing {len(tokens)} tokens")
-            ws.subscribe(tokens)
-            ws.set_mode(ws.MODE_FULL, tokens)
+            print("[KITE] Connected")
+            self._refresh_subscription(ws)
 
         def on_close(ws, code, reason):
             print(f"[KITE] Closed: {code} {reason}")
@@ -63,16 +61,32 @@ class KiteAdapter:
 
         self.ticker.connect(threaded=True)
 
-    def _build_subscription_tokens(self):
-        tokens = []
+        # background refresh loop
+        threading.Thread(target=self._refresh_loop, daemon=True).start()
 
-        # underlying spot token (if available)
-        for inst in self.registry.by_token.values():
-            if inst.tradingsymbol == self.underlying and inst.instrument_type == "EQ":
-                tokens.append(inst.instrument_token)
+    def _refresh_loop(self):
+        while True:
+            try:
+                time.sleep(self.refresh_interval)
+                if self.ticker and self.ticker.is_connected():
+                    self._refresh_subscription(self.ticker)
+            except Exception as e:
+                print(f"[KITE] refresh error: {e}")
 
-        # option chain tokens (limited window)
-        option_tokens = self.registry.option_tokens(self.underlying, limit=20)
-        tokens.extend(option_tokens)
+    def _refresh_subscription(self, ws):
+        spot = self._get_spot()
+        tokens = self.registry.option_tokens(self.underlying, spot=spot, strikes_each_side=10)
 
-        return list(set(tokens))
+        if set(tokens) != set(self._current_tokens):
+            print(f"[KITE] updating subscription → {len(tokens)} tokens (spot={spot})")
+            ws.subscribe(tokens)
+            ws.set_mode(ws.MODE_FULL, tokens)
+            self._current_tokens = tokens
+
+    def _get_spot(self):
+        # try to get spot from service snapshots
+        snaps = self.service.get_market()
+        for s in snaps:
+            if s.symbol == self.underlying and s.ltp:
+                return s.ltp
+        return None
