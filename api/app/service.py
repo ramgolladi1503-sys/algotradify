@@ -89,7 +89,8 @@ class BanditService:
         arm = self.select_arm()
         reward = compute_reward(data.pnl, data.risk, data.hold)
         arm.update(reward)
-        return reward
+        gate_update = self.gate.update_from_reward(self.regime, reward)
+        return {"reward": reward, "gate_update": gate_update}
 
     def get_arms(self):
         return {
@@ -104,3 +105,6 @@ class BanditService:
 
     def get_regime(self):
         return {"regime": self.regime}
+
+    def get_gate_state(self):
+        return self.gate.state()
