@@ -4,6 +4,7 @@ from .regime import detect_regime
 from .models import OpportunityCandidate
 from .market_data import MarketDataStore
 from .execution_gate import ExecutionGate
+from .position_sizing import PositionSizingEngine
 import uuid
 
 class BanditService:
@@ -15,6 +16,7 @@ class BanditService:
         self.regime = "trending"
         self.market = MarketDataStore()
         self.gate = ExecutionGate()
+        self.sizer = PositionSizingEngine()
 
     def update_regime(self, adx, compression):
         self.regime = detect_regime(adx, compression)
@@ -63,6 +65,13 @@ class BanditService:
             c.rationale.extend(decision.warnings or [])
             c.rationale.append(f"status={decision.status}")
 
+            sizing = self.sizer.size(c, snap)
+            if sizing.allowed:
+                c.rationale.append(f"qty={sizing.quantity}")
+                c.rationale.append(f"risk={sizing.risk_amount}")
+            else:
+                c.rationale.append(f"size_blocked={sizing.reason}")
+
             candidates.append(c)
 
         candidates.sort(key=lambda x: x.score, reverse=True)
@@ -108,3 +117,6 @@ class BanditService:
 
     def get_gate_state(self):
         return self.gate.state()
+
+    def get_sizing_state(self):
+        return self.sizer.state()
