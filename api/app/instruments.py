@@ -40,6 +40,9 @@ class OptionChainRow(BaseModel):
 class OptionChain(BaseModel):
     underlying: str
     expiry: str
+    atm: Optional[float] = None
+    spot: Optional[float] = None
+    strike_step: Optional[float] = None
     rows: List[OptionChainRow]
     token_count: int
 
@@ -49,10 +52,12 @@ class InstrumentRegistry:
         self.by_token: Dict[int, Instrument] = {}
         self.by_symbol: Dict[str, Instrument] = {}
         self.options_by_underlying: Dict[str, List[OptionContract]] = defaultdict(list)
+        self.last_load_info: dict = {}
 
     def load_from_file(self, path: str) -> dict:
         if not os.path.exists(path):
-            return {"loaded": 0, "error": f"file_not_found:{path}"}
+            self.last_load_info = {"loaded": 0, "error": f"file_not_found:{path}"}
+            return self.last_load_info
 
         if path.endswith(".json"):
             with open(path, "r", encoding="utf-8") as f:
@@ -61,7 +66,8 @@ class InstrumentRegistry:
             with open(path, "r", encoding="utf-8") as f:
                 rows = list(csv.DictReader(f))
 
-        return self.load_rows(rows)
+        self.last_load_info = self.load_rows(rows)
+        return self.last_load_info
 
     def load_rows(self, rows: List[dict]) -> dict:
         self.by_token.clear()
@@ -73,6 +79,10 @@ class InstrumentRegistry:
         for row in rows:
             try:
                 inst = self._parse_row(row)
+                if not inst.instrument_token or not inst.tradingsymbol:
+                    skipped += 1
+                    continue
+
                 self.by_token[inst.instrument_token] = inst
                 self.by_symbol[inst.tradingsymbol.upper()] = inst
                 loaded += 1
@@ -104,7 +114,13 @@ class InstrumentRegistry:
     def get_by_symbol(self, symbol: str) -> Optional[Instrument]:
         return self.by_symbol.get(symbol.upper())
 
-    def option_chain(self, underlying: str, expiry: Optional[str] = None, limit: Optional[int] = None) -> OptionChain:
+    def option_chain(
+        self,
+        underlying: str,
+        expiry: Optional[str] = None,
+        spot: Optional[float] = None,
+        strikes_each_side: int = 10,
+    ) -> OptionChain:
         key = underlying.upper().strip()
         contracts = list(self.options_by_underlying.get(key, []))
         if not contracts:
@@ -112,21 +128,39 @@ class InstrumentRegistry:
 
         selected_expiry = expiry or self.nearest_expiry(key)
         contracts = [c for c in contracts if c.expiry == selected_expiry]
+        strikes = sorted({c.strike for c in contracts})
+        step = self._infer_strike_step(strikes)
+        atm = self._nearest_strike(spot, strikes) if spot else None
+
+        allowed_strikes = set(strikes)
+        if atm is not None and strikes_each_side >= 0:
+            idx = strikes.index(atm)
+            allowed_strikes = set(strikes[max(0, idx - strikes_each_side): idx + strikes_each_side + 1])
 
         by_strike = defaultdict(dict)
         for c in contracts:
-            by_strike[c.strike][c.option_type.lower()] = c
+            if c.strike in allowed_strikes:
+                by_strike[c.strike][c.option_type.lower()] = c
 
         rows = [OptionChainRow(strike=s, ce=v.get("ce"), pe=v.get("pe")) for s, v in sorted(by_strike.items())]
-        if limit and limit > 0:
-            mid = len(rows) // 2
-            half = limit // 2
-            rows = rows[max(0, mid - half): mid + half + 1]
+        return OptionChain(
+            underlying=key,
+            expiry=selected_expiry,
+            atm=atm,
+            spot=spot,
+            strike_step=step,
+            rows=rows,
+            token_count=sum(1 for r in rows for x in [r.ce, r.pe] if x),
+        )
 
-        return OptionChain(underlying=key, expiry=selected_expiry, rows=rows, token_count=sum(1 for r in rows for x in [r.ce, r.pe] if x))
-
-    def option_tokens(self, underlying: str, expiry: Optional[str] = None, limit: Optional[int] = None) -> List[int]:
-        chain = self.option_chain(underlying, expiry, limit)
+    def option_tokens(
+        self,
+        underlying: str,
+        expiry: Optional[str] = None,
+        spot: Optional[float] = None,
+        strikes_each_side: int = 10,
+    ) -> List[int]:
+        chain = self.option_chain(underlying, expiry, spot, strikes_each_side)
         tokens = []
         for row in chain.rows:
             if row.ce:
@@ -147,6 +181,7 @@ class InstrumentRegistry:
             "symbol_count": len(self.by_symbol),
             "underlyings": sorted(self.options_by_underlying.keys()),
             "option_count": sum(len(v) for v in self.options_by_underlying.values()),
+            "last_load_info": self.last_load_info,
         }
 
     def _parse_row(self, row: dict) -> Instrument:
@@ -182,3 +217,14 @@ class InstrumentRegistry:
             if symbol.startswith(known):
                 return known
         return symbol.rstrip("CEPE")
+
+    def _nearest_strike(self, spot: Optional[float], strikes: List[float]) -> Optional[float]:
+        if spot is None or not strikes:
+            return None
+        return min(strikes, key=lambda strike: abs(strike - spot))
+
+    def _infer_strike_step(self, strikes: List[float]) -> Optional[float]:
+        if len(strikes) < 2:
+            return None
+        diffs = sorted({round(strikes[i + 1] - strikes[i], 4) for i in range(len(strikes) - 1) if strikes[i + 1] > strikes[i]})
+        return diffs[0] if diffs else None
