@@ -37,6 +37,10 @@ def quality():
 def stale():
     return service.get_stale()
 
+@app.get("/market/chains")
+def chains():
+    return kite.chain_state()
+
 @app.get("/paper/bandit/arms")
 def arms():
     return service.get_arms()
