@@ -12,11 +12,14 @@ class KiteAdapter:
         self.api_key = os.getenv("KITE_API_KEY")
         self.access_token = os.getenv("KITE_ACCESS_TOKEN")
         self.instrument_file = os.getenv("KITE_INSTRUMENTS_FILE", "instruments.json")
-        self.underlying = os.getenv("KITE_UNDERLYING", "NIFTY")
+        raw_underlyings = os.getenv("KITE_UNDERLYINGS") or os.getenv("KITE_UNDERLYING", "NIFTY")
+        self.underlyings = [u.strip().upper() for u in raw_underlyings.split(",") if u.strip()]
+        self.strikes_each_side = int(os.getenv("KITE_STRIKES_EACH_SIDE", "10"))
         self.refresh_interval = int(os.getenv("KITE_REFRESH_SEC", "60"))
         self.ticker = None
         self.registry = InstrumentRegistry()
         self._current_tokens = []
+        self._last_chain_state = {}
 
     def start(self):
         if not self.api_key or not self.access_token:
@@ -25,6 +28,7 @@ class KiteAdapter:
 
         load_info = self.registry.load_from_file(self.instrument_file)
         print(f"[KITE] Instrument load: {load_info}")
+        print(f"[KITE] Underlyings: {self.underlyings}")
 
         self.ticker = KiteTicker(self.api_key, self.access_token)
 
@@ -60,8 +64,6 @@ class KiteAdapter:
         self.ticker.on_close = on_close
 
         self.ticker.connect(threaded=True)
-
-        # background refresh loop
         threading.Thread(target=self._refresh_loop, daemon=True).start()
 
     def _refresh_loop(self):
@@ -74,19 +76,57 @@ class KiteAdapter:
                 print(f"[KITE] refresh error: {e}")
 
     def _refresh_subscription(self, ws):
-        spot = self._get_spot()
-        tokens = self.registry.option_tokens(self.underlying, spot=spot, strikes_each_side=10)
+        tokens = []
+        chain_state = {}
 
-        if set(tokens) != set(self._current_tokens):
-            print(f"[KITE] updating subscription → {len(tokens)} tokens (spot={spot})")
-            ws.subscribe(tokens)
-            ws.set_mode(ws.MODE_FULL, tokens)
-            self._current_tokens = tokens
+        for underlying in self.underlyings:
+            spot = self._get_spot(underlying)
+            chain = self.registry.option_chain(
+                underlying,
+                spot=spot,
+                strikes_each_side=self.strikes_each_side,
+            )
+            chain_tokens = self.registry.option_tokens(
+                underlying,
+                spot=spot,
+                strikes_each_side=self.strikes_each_side,
+            )
+            tokens.extend(chain_tokens)
+            chain_state[underlying] = {
+                "spot": spot,
+                "atm": chain.atm,
+                "expiry": chain.expiry,
+                "token_count": chain.token_count,
+                "strike_count": len(chain.rows),
+            }
 
-    def _get_spot(self):
-        # try to get spot from service snapshots
+        unique_tokens = sorted(set(tokens))
+        self._last_chain_state = chain_state
+
+        if set(unique_tokens) != set(self._current_tokens):
+            print(f"[KITE] updating subscription → {len(unique_tokens)} tokens | chains={chain_state}")
+            if self._current_tokens:
+                try:
+                    ws.unsubscribe(self._current_tokens)
+                except Exception as e:
+                    print(f"[KITE] unsubscribe warning: {e}")
+            if unique_tokens:
+                ws.subscribe(unique_tokens)
+                ws.set_mode(ws.MODE_FULL, unique_tokens)
+            self._current_tokens = unique_tokens
+
+    def _get_spot(self, underlying):
         snaps = self.service.get_market()
         for s in snaps:
-            if s.symbol == self.underlying and s.ltp:
+            if s.symbol == underlying and s.ltp:
                 return s.ltp
         return None
+
+    def chain_state(self):
+        return {
+            "underlyings": self.underlyings,
+            "strikes_each_side": self.strikes_each_side,
+            "current_token_count": len(self._current_tokens),
+            "chains": self._last_chain_state,
+            "instrument_stats": self.registry.stats(),
+        }
