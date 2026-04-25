@@ -5,6 +5,7 @@ from .models import OpportunityCandidate
 from .market_data import MarketDataStore
 from .execution_gate import ExecutionGate
 from .position_sizing import PositionSizingEngine
+from .trade_lifecycle import LifecycleEngine
 import uuid
 
 class BanditService:
@@ -17,6 +18,7 @@ class BanditService:
         self.market = MarketDataStore()
         self.gate = ExecutionGate()
         self.sizer = PositionSizingEngine()
+        self.lifecycle = LifecycleEngine()
 
     def update_regime(self, adx, compression):
         self.regime = detect_regime(adx, compression)
@@ -59,20 +61,23 @@ class BanditService:
             c.score = max(min(score,1),0)
 
             decision = self.gate.evaluate(c, snap)
-
             c.executable = decision.execution_allowed
             c.rationale.extend(decision.blockers or [])
             c.rationale.extend(decision.warnings or [])
             c.rationale.append(f"status={decision.status}")
 
             sizing = self.sizer.size(c, snap)
-            if sizing.allowed:
-                c.rationale.append(f"qty={sizing.quantity}")
-                c.rationale.append(f"risk={sizing.risk_amount}")
+
+            if c.executable and sizing.allowed:
+                pos = self.lifecycle.open_position(c, snap, sizing.quantity)
+                c.rationale.append(f"entered={pos.trade_id}")
             else:
                 c.rationale.append(f"size_blocked={sizing.reason}")
 
             candidates.append(c)
+
+        # update lifecycle (mark-to-market + exits)
+        self.lifecycle.mark_to_market(snapshots)
 
         candidates.sort(key=lambda x: x.score, reverse=True)
 
@@ -100,6 +105,15 @@ class BanditService:
         arm.update(reward)
         gate_update = self.gate.update_from_reward(self.regime, reward)
         return {"reward": reward, "gate_update": gate_update}
+
+    def get_positions(self):
+        return self.lifecycle.open_positions()
+
+    def get_trades(self):
+        return self.lifecycle.closed_trades()
+
+    def get_pnl(self):
+        return self.lifecycle.summary()
 
     def get_arms(self):
         return {
