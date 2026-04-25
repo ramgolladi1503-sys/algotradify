@@ -41,6 +41,10 @@ def stale():
 def chains():
     return kite.chain_state()
 
+@app.get("/gate/state")
+def gate_state():
+    return service.get_gate_state()
+
 @app.get("/paper/bandit/arms")
 def arms():
     return service.get_arms()
@@ -51,4 +55,4 @@ def regime():
 
 @app.post("/paper/trade")
 def trade(data: TradeOutcome):
-    return {"reward": service.record_trade(data)}
+    return service.record_trade(data)
