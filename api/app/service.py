@@ -3,6 +3,7 @@ from .reward import compute_reward
 from .regime import detect_regime
 from .models import OpportunityCandidate
 from .market_data import MarketDataStore
+from .execution_gate import ExecutionGate
 import uuid
 
 class BanditService:
@@ -13,6 +14,7 @@ class BanditService:
         }
         self.regime = "trending"
         self.market = MarketDataStore()
+        self.gate = ExecutionGate()
 
     def update_regime(self, adx, compression):
         self.regime = detect_regime(adx, compression)
@@ -41,7 +43,7 @@ class BanditService:
                 liquidity=snap.liquidity_score,
                 volatility=0.6,
                 fallback_used=snap.data_quality == "fallback",
-                executable=snap.execution_allowed,
+                executable=False,
                 rationale=[f"data_quality={snap.data_quality}"]
             )
 
@@ -52,10 +54,15 @@ class BanditService:
                 0.2 * c.volatility
             )
 
-            if not snap.execution_allowed:
-                score -= 0.3
-
             c.score = max(min(score,1),0)
+
+            decision = self.gate.evaluate(c, snap)
+
+            c.executable = decision.execution_allowed
+            c.rationale.extend(decision.blockers or [])
+            c.rationale.extend(decision.warnings or [])
+            c.rationale.append(f"status={decision.status}")
+
             candidates.append(c)
 
         candidates.sort(key=lambda x: x.score, reverse=True)
