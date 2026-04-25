@@ -2,9 +2,15 @@ from fastapi import FastAPI
 from .service import BanditService
 from .models import TradeOutcome
 from .market_data import MarketTick
+from .broker_kite import KiteAdapter
 
 app = FastAPI()
 service = BanditService()
+kite = KiteAdapter(service)
+
+@app.on_event("startup")
+def start_broker():
+    kite.start()
 
 @app.get("/runtime/health")
 def health():
