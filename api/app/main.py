@@ -3,10 +3,12 @@ from .service import BanditService
 from .models import TradeOutcome
 from .market_data import MarketTick
 from .broker_kite import KiteAdapter
+from .execution import KiteExecutionEngine, ExecutionRequest
 
 app = FastAPI()
 service = BanditService()
 kite = KiteAdapter(service)
+exec_engine = KiteExecutionEngine()
 
 @app.on_event("startup")
 def start_broker():
@@ -40,6 +42,22 @@ def stale():
 @app.get("/market/chains")
 def chains():
     return kite.chain_state()
+
+@app.post("/execution/order")
+def place_order(req: ExecutionRequest):
+    return exec_engine.place_order(req)
+
+@app.get("/execution/orders")
+def orders():
+    return exec_engine.orders()
+
+@app.get("/execution/trades")
+def trades():
+    return exec_engine.trades()
+
+@app.get("/execution/state")
+def exec_state():
+    return exec_engine.state()
 
 @app.get("/gate/state")
 def gate_state():
