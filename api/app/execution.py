@@ -32,6 +32,19 @@ class ExecutionResult(BaseModel):
     submitted_at: str
 
 
+class FillRecord(BaseModel):
+    order_id: str
+    tradingsymbol: str
+    transaction_type: str
+    filled_quantity: int
+    average_price: float
+    status: str
+    exchange: str
+    product: str
+    filled_at: str
+    client_order_id: Optional[str] = None
+
+
 class KiteExecutionEngine:
     def __init__(self):
         self.api_key = os.getenv("KITE_API_KEY")
@@ -39,6 +52,8 @@ class KiteExecutionEngine:
         self.live_enabled = os.getenv("LIVE_ORDER_ENABLED", "false").lower() == "true"
         self.max_order_qty = int(os.getenv("MAX_ORDER_QTY", "1800"))
         self.audit: list[dict] = []
+        self.pending: dict[str, ExecutionResult] = {}
+        self.fills: dict[str, FillRecord] = {}
         self.kite = None
         if self.api_key and self.access_token:
             self.kite = KiteConnect(api_key=self.api_key)
@@ -75,6 +90,19 @@ class KiteExecutionEngine:
                 submitted_at=submitted_at,
             )
             self._audit(result)
+            self.pending[result.order_id] = result
+            self.fills[result.order_id] = FillRecord(
+                order_id=result.order_id,
+                tradingsymbol=req.tradingsymbol,
+                transaction_type=req.transaction_type,
+                filled_quantity=req.quantity,
+                average_price=req.price or 0.0,
+                status="COMPLETE",
+                exchange=req.exchange,
+                product=req.product,
+                filled_at=submitted_at,
+                client_order_id=client_order_id,
+            )
             return result
 
         if not self.kite:
@@ -114,6 +142,7 @@ class KiteExecutionEngine:
                 request=req,
                 submitted_at=submitted_at,
             )
+            self.pending[result.order_id] = result
         except Exception as exc:
             result = ExecutionResult(
                 accepted=False,
@@ -127,6 +156,64 @@ class KiteExecutionEngine:
 
         self._audit(result)
         return result
+
+    def sync_fills(self) -> list[FillRecord]:
+        if not self.pending:
+            return []
+
+        if not self.kite:
+            return list(self.fills.values())
+
+        try:
+            orders = self.kite.orders()
+        except Exception as exc:
+            self.audit.append({"status": "ORDER_SYNC_FAILED", "reason": str(exc), "at": self._now()})
+            return []
+
+        new_fills = []
+        by_order_id = {str(o.get("order_id")): o for o in orders}
+
+        for order_id, submitted in list(self.pending.items()):
+            if order_id in self.fills:
+                new_fills.append(self.fills[order_id])
+                self.pending.pop(order_id, None)
+                continue
+
+            order = by_order_id.get(str(order_id))
+            if not order:
+                continue
+
+            status = str(order.get("status") or "UNKNOWN").upper()
+            filled_qty = int(order.get("filled_quantity") or order.get("quantity") or 0)
+            avg_price = float(order.get("average_price") or order.get("price") or 0.0)
+
+            if status == "COMPLETE" and filled_qty > 0 and avg_price > 0:
+                fill = FillRecord(
+                    order_id=str(order_id),
+                    tradingsymbol=str(order.get("tradingsymbol") or submitted.request.tradingsymbol),
+                    transaction_type=str(order.get("transaction_type") or submitted.request.transaction_type),
+                    filled_quantity=filled_qty,
+                    average_price=avg_price,
+                    status=status,
+                    exchange=str(order.get("exchange") or submitted.request.exchange),
+                    product=str(order.get("product") or submitted.request.product),
+                    filled_at=self._now(),
+                    client_order_id=submitted.client_order_id,
+                )
+                self.fills[order_id] = fill
+                new_fills.append(fill)
+                self.pending.pop(order_id, None)
+            elif status in {"REJECTED", "CANCELLED"}:
+                self.audit.append({"status": status, "order_id": order_id, "order": order, "at": self._now()})
+                self.pending.pop(order_id, None)
+
+        return new_fills
+
+    def pending_orders(self):
+        return {k: v.model_dump() for k, v in self.pending.items()}
+
+    def filled_orders(self):
+        return {k: v.model_dump() for k, v in self.fills.items()}
 
     def orders(self):
         if not self.kite:
@@ -143,6 +230,8 @@ class KiteExecutionEngine:
             "live_enabled": self.live_enabled,
             "has_kite_session": self.kite is not None,
             "max_order_qty": self.max_order_qty,
+            "pending_count": len(self.pending),
+            "fill_count": len(self.fills),
             "audit_count": len(self.audit),
             "last_audit": self.audit[-10:],
         }
@@ -167,3 +256,6 @@ class KiteExecutionEngine:
     def _audit(self, result: ExecutionResult):
         self.audit.append(result.model_dump())
         self.audit = self.audit[-500:]
+
+    def _now(self) -> str:
+        return datetime.now(timezone.utc).isoformat()
