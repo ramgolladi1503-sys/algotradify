@@ -1,0 +1,169 @@
+import os
+import uuid
+from datetime import datetime, timezone
+from typing import Optional
+from pydantic import BaseModel, Field
+from kiteconnect import KiteConnect
+
+
+class ExecutionRequest(BaseModel):
+    tradingsymbol: str
+    exchange: str = "NFO"
+    transaction_type: str = "BUY"
+    quantity: int = Field(gt=0)
+    product: str = "MIS"
+    order_type: str = "MARKET"
+    variety: str = "regular"
+    validity: str = "DAY"
+    price: Optional[float] = None
+    trigger_price: Optional[float] = None
+    tag: Optional[str] = None
+    dry_run: Optional[bool] = None
+
+
+class ExecutionResult(BaseModel):
+    accepted: bool
+    dry_run: bool
+    order_id: Optional[str] = None
+    client_order_id: str
+    status: str
+    reason: Optional[str] = None
+    request: ExecutionRequest
+    submitted_at: str
+
+
+class KiteExecutionEngine:
+    def __init__(self):
+        self.api_key = os.getenv("KITE_API_KEY")
+        self.access_token = os.getenv("KITE_ACCESS_TOKEN")
+        self.live_enabled = os.getenv("LIVE_ORDER_ENABLED", "false").lower() == "true"
+        self.max_order_qty = int(os.getenv("MAX_ORDER_QTY", "1800"))
+        self.audit: list[dict] = []
+        self.kite = None
+        if self.api_key and self.access_token:
+            self.kite = KiteConnect(api_key=self.api_key)
+            self.kite.set_access_token(self.access_token)
+
+    def place_order(self, req: ExecutionRequest) -> ExecutionResult:
+        client_order_id = req.tag or f"alg-{uuid.uuid4().hex[:12]}"
+        dry_run = req.dry_run if req.dry_run is not None else not self.live_enabled
+        submitted_at = datetime.now(timezone.utc).isoformat()
+
+        safety_reason = self._safety_check(req)
+        if safety_reason:
+            result = ExecutionResult(
+                accepted=False,
+                dry_run=True,
+                client_order_id=client_order_id,
+                status="REJECTED_BY_LOCAL_SAFETY",
+                reason=safety_reason,
+                request=req,
+                submitted_at=submitted_at,
+            )
+            self._audit(result)
+            return result
+
+        if dry_run:
+            result = ExecutionResult(
+                accepted=True,
+                dry_run=True,
+                order_id=f"DRYRUN-{client_order_id}",
+                client_order_id=client_order_id,
+                status="DRY_RUN_ACCEPTED",
+                reason="LIVE_ORDER_ENABLED is false or request dry_run=true",
+                request=req,
+                submitted_at=submitted_at,
+            )
+            self._audit(result)
+            return result
+
+        if not self.kite:
+            result = ExecutionResult(
+                accepted=False,
+                dry_run=False,
+                client_order_id=client_order_id,
+                status="REJECTED_NO_KITE_SESSION",
+                reason="Missing Kite credentials/session",
+                request=req,
+                submitted_at=submitted_at,
+            )
+            self._audit(result)
+            return result
+
+        try:
+            order_id = self.kite.place_order(
+                variety=req.variety,
+                exchange=req.exchange,
+                tradingsymbol=req.tradingsymbol,
+                transaction_type=req.transaction_type,
+                quantity=req.quantity,
+                product=req.product,
+                order_type=req.order_type,
+                price=req.price,
+                trigger_price=req.trigger_price,
+                validity=req.validity,
+                tag=client_order_id[:20],
+            )
+            result = ExecutionResult(
+                accepted=True,
+                dry_run=False,
+                order_id=str(order_id),
+                client_order_id=client_order_id,
+                status="SUBMITTED_TO_KITE",
+                reason="Order submitted; verify order history for final status",
+                request=req,
+                submitted_at=submitted_at,
+            )
+        except Exception as exc:
+            result = ExecutionResult(
+                accepted=False,
+                dry_run=False,
+                client_order_id=client_order_id,
+                status="KITE_ORDER_FAILED",
+                reason=str(exc),
+                request=req,
+                submitted_at=submitted_at,
+            )
+
+        self._audit(result)
+        return result
+
+    def orders(self):
+        if not self.kite:
+            return {"error": "missing_kite_session"}
+        return self.kite.orders()
+
+    def trades(self):
+        if not self.kite:
+            return {"error": "missing_kite_session"}
+        return self.kite.trades()
+
+    def state(self) -> dict:
+        return {
+            "live_enabled": self.live_enabled,
+            "has_kite_session": self.kite is not None,
+            "max_order_qty": self.max_order_qty,
+            "audit_count": len(self.audit),
+            "last_audit": self.audit[-10:],
+        }
+
+    def _safety_check(self, req: ExecutionRequest) -> Optional[str]:
+        if req.quantity <= 0:
+            return "quantity_must_be_positive"
+        if req.quantity > self.max_order_qty:
+            return "quantity_exceeds_max_order_qty"
+        if req.transaction_type not in {"BUY", "SELL"}:
+            return "invalid_transaction_type"
+        if req.exchange not in {"NFO", "NSE", "BSE", "BFO"}:
+            return "invalid_exchange"
+        if req.order_type not in {"MARKET", "LIMIT", "SL", "SL-M"}:
+            return "invalid_order_type"
+        if req.order_type == "LIMIT" and req.price is None:
+            return "limit_order_requires_price"
+        if req.order_type in {"SL", "SL-M"} and req.trigger_price is None:
+            return "stop_order_requires_trigger_price"
+        return None
+
+    def _audit(self, result: ExecutionResult):
+        self.audit.append(result.model_dump())
+        self.audit = self.audit[-500:]
