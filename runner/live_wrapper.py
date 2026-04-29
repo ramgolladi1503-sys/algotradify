@@ -5,6 +5,13 @@ import time
 import traceback
 from pathlib import Path
 
+# Support both `python -m runner.live_wrapper` and direct script execution
+# (`python runner/live_wrapper.py`) by ensuring repo root is importable.
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+_REPO_ROOT_PATH = str(_REPO_ROOT)
+if _REPO_ROOT_PATH not in sys.path:
+    sys.path.insert(0, _REPO_ROOT_PATH)
+
 from extensions.safe_emit import safe_emit
 
 
