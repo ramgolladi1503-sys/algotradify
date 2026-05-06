@@ -9,7 +9,7 @@ on:
 
 jobs:
   portfolio-quality-gate:
-    name: Documentation, architecture, API, WebSocket, and portfolio quality gate
+    name: Documentation, architecture, API, WebSocket, schema, and portfolio quality gate
     runs-on: ubuntu-latest
 
     steps:
@@ -23,8 +23,10 @@ jobs:
           test -f docs/architecture/algotradify-architecture.svg
           test -f docs/one-pagers/sdet-platform-portfolio.md
           test -f docs/test-reports/README.md
+          test -f api/schemas.py
           test -f tests/test_api_contracts.py
           test -f tests/test_websocket_contracts.py
+          test -f tests/test_api_schema_contracts.py
 
       - name: Check README sections
         run: |
@@ -45,8 +47,8 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r api/requirements.txt pytest httpx
 
-      - name: Run real API and WebSocket contract tests
-        run: pytest -q tests/test_api_contracts.py tests/test_websocket_contracts.py
+      - name: Run real API, WebSocket, and schema contract tests
+        run: pytest -q tests/test_api_contracts.py tests/test_websocket_contracts.py tests/test_api_schema_contracts.py
 
       - name: Generate portfolio test report
         run: |
@@ -56,7 +58,7 @@ jobs:
 
           ## Scope
 
-          This CI gate validates the repository as a recruiter-facing SDET/API/WebSocket testing portfolio and runs real FastAPI + WebSocket contract tests.
+          This CI gate validates the repository as a recruiter-facing SDET/API/WebSocket testing portfolio and runs real FastAPI + WebSocket + schema contract tests.
 
           ## Checks
 
@@ -64,13 +66,15 @@ jobs:
           - Architecture SVG exists.
           - SDET one-pager exists.
           - Test reports guide exists.
+          - Typed API schemas exist.
           - README includes problem statement, architecture, test strategy, failure modes, and roadmap.
           - FastAPI contract tests run for health, runtime health degradation, runtime snapshot parsing, opportunity normalization, and JSONL fallback behavior.
           - WebSocket contract tests run for degraded Redis notice, runtime snapshot event emission, and snapshot event shape stability.
+          - OpenAPI schema contract tests validate typed response models and required fields.
 
           ## Current honest limitation
 
-          These tests validate API and WebSocket contracts without starting the full trading runtime. That is intentional: fast contract tests should fail before expensive integration tests.
+          These tests validate API, schema, and WebSocket contracts without starting the full trading runtime. That is intentional: fast contract tests should fail before expensive integration tests.
           REPORT
 
       - name: Upload portfolio report
