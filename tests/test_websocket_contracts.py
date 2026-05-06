@@ -17,6 +17,7 @@ def test_websocket_sends_degraded_redis_notice_when_redis_is_unavailable(monkeyp
 
     with client.websocket_connect("/ws") as websocket:
         raw = websocket.receive_text()
+        websocket.close()
 
     payload = json.loads(raw)
     assert payload["type"] == "runtime_notice"
@@ -45,6 +46,7 @@ def test_websocket_sends_runtime_snapshot_event(monkeypatch):
 
     with client.websocket_connect("/ws") as websocket:
         raw = websocket.receive_text()
+        websocket.close()
 
     payload = json.loads(raw)
     assert payload["type"] == "runtime_snapshot"
