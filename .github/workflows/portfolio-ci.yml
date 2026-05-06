@@ -1,0 +1,61 @@
+name: Portfolio CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  portfolio-quality-gate:
+    name: Documentation, architecture, and portfolio quality gate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate required portfolio files
+        run: |
+          set -euo pipefail
+          test -f README.md
+          test -f docs/architecture/algotradify-architecture.svg
+          test -f docs/one-pagers/sdet-platform-portfolio.md
+
+      - name: Check README sections
+        run: |
+          set -euo pipefail
+          grep -qi "Problem statement" README.md
+          grep -qi "Architecture" README.md
+          grep -qi "Test strategy" README.md
+          grep -qi "Failure modes" README.md
+          grep -qi "Roadmap" README.md
+
+      - name: Generate portfolio test report
+        run: |
+          mkdir -p reports
+          cat > reports/portfolio-ci-report.md <<'REPORT'
+          # Portfolio CI Report — Algotradify
+
+          ## Scope
+
+          This CI gate validates the repository as a recruiter-facing SDET/API/WebSocket testing portfolio.
+
+          ## Checks
+
+          - README exists.
+          - Architecture SVG exists.
+          - SDET one-pager exists.
+          - README includes problem statement, architecture, test strategy, failure modes, and roadmap.
+
+          ## Next testing upgrade
+
+          Add runtime tests for FastAPI endpoints, WebSocket event payloads, frontend empty states, and Redis degradation.
+          REPORT
+
+      - name: Upload portfolio report
+        uses: actions/upload-artifact@v4
+        with:
+          name: algotradify-portfolio-ci-report
+          path: reports/portfolio-ci-report.md
