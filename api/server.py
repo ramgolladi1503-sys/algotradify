@@ -8,6 +8,13 @@ from fastapi.middleware.cors import CORSMiddleware
 import redis
 from redis.exceptions import RedisError
 
+from api.schemas import (
+    HealthResponse,
+    OpportunityResponse,
+    RuntimeHealthResponse,
+    RuntimeSnapshotResponse,
+)
+
 
 def _runtime_root() -> Path:
     configured = str(os.getenv("CORE_BOT_RUNTIME_ROOT", "")).strip()
@@ -179,22 +186,22 @@ def _runtime_snapshot_event() -> dict:
     return {"type": "runtime_snapshot", "payload": _runtime_snapshot_payload()}
 
 
-@app.get("/health")
+@app.get("/health", response_model=HealthResponse)
 def health():
     return {"status": "ok"}
 
 
-@app.get("/runtime/health")
+@app.get("/runtime/health", response_model=RuntimeHealthResponse)
 def runtime_health():
     return _runtime_health_payload()
 
 
-@app.get("/runtime/snapshot")
+@app.get("/runtime/snapshot", response_model=RuntimeSnapshotResponse)
 def runtime_snapshot():
     return _runtime_snapshot_payload()
 
 
-@app.get("/opportunities")
+@app.get("/opportunities", response_model=list[OpportunityResponse])
 def opportunities(limit: int = Query(default=25, ge=1, le=200)):
     return _opportunities_payload(limit=limit)
 
