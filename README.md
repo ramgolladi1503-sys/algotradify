@@ -1,10 +1,27 @@
 # Algotradify
 
+[![Portfolio CI](https://github.com/ramgolladi1503-sys/algotradify/actions/workflows/portfolio-ci.yml/badge.svg)](https://github.com/ramgolladi1503-sys/algotradify/actions/workflows/portfolio-ci.yml)
+
 **Runtime bridge and live monitoring UI for real-time trading systems.**
 
 Algotradify connects a trading engine runtime to a FastAPI backend and React frontend so operators can monitor health, opportunities, snapshots, and live events in one place.
 
 This repository is positioned as a portfolio-grade example of backend QA, API automation, WebSocket validation, runtime observability, and fintech platform testing.
+
+---
+
+## Portfolio assets
+
+- [Architecture image](docs/architecture/algotradify-architecture.svg)
+- [SDET platform one-pager](docs/one-pagers/sdet-platform-portfolio.md)
+- [Test reports guide](docs/test-reports/README.md)
+- LinkedIn: https://www.linkedin.com/in/ram-golladi
+
+---
+
+## Architecture image
+
+![Algotradify architecture](docs/architecture/algotradify-architecture.svg)
 
 ---
 
@@ -118,6 +135,8 @@ This project should be tested like a production runtime bridge, not a static fro
 - Start wrapper.
 - Verify health, snapshot, opportunity, and WebSocket event flow.
 
+See: [Test reports guide](docs/test-reports/README.md)
+
 ---
 
 ## Failure modes handled
@@ -226,7 +245,7 @@ Some alternate UI builds in this repo history also attempt these endpoints if pr
 
 ## Screenshots / demo
 
-- Screenshots: not added yet.
+- Screenshots: architecture image added.
 - Demo video: not recorded yet.
 
 Planned demo flow:
