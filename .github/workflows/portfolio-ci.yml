@@ -9,7 +9,7 @@ on:
 
 jobs:
   portfolio-quality-gate:
-    name: Documentation, architecture, API contract, and portfolio quality gate
+    name: Documentation, architecture, API, WebSocket, and portfolio quality gate
     runs-on: ubuntu-latest
 
     steps:
@@ -24,6 +24,7 @@ jobs:
           test -f docs/one-pagers/sdet-platform-portfolio.md
           test -f docs/test-reports/README.md
           test -f tests/test_api_contracts.py
+          test -f tests/test_websocket_contracts.py
 
       - name: Check README sections
         run: |
@@ -44,8 +45,8 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r api/requirements.txt pytest httpx
 
-      - name: Run real API contract tests
-        run: pytest -q tests/test_api_contracts.py
+      - name: Run real API and WebSocket contract tests
+        run: pytest -q tests/test_api_contracts.py tests/test_websocket_contracts.py
 
       - name: Generate portfolio test report
         run: |
@@ -55,7 +56,7 @@ jobs:
 
           ## Scope
 
-          This CI gate validates the repository as a recruiter-facing SDET/API/WebSocket testing portfolio and runs real FastAPI contract tests.
+          This CI gate validates the repository as a recruiter-facing SDET/API/WebSocket testing portfolio and runs real FastAPI + WebSocket contract tests.
 
           ## Checks
 
@@ -65,10 +66,11 @@ jobs:
           - Test reports guide exists.
           - README includes problem statement, architecture, test strategy, failure modes, and roadmap.
           - FastAPI contract tests run for health, runtime health degradation, runtime snapshot parsing, opportunity normalization, and JSONL fallback behavior.
+          - WebSocket contract tests run for degraded Redis notice, runtime snapshot event emission, and snapshot event shape stability.
 
           ## Current honest limitation
 
-          WebSocket runtime tests are not yet included. The first real tested slice is API contract and runtime-artifact parsing behavior.
+          These tests validate API and WebSocket contracts without starting the full trading runtime. That is intentional: fast contract tests should fail before expensive integration tests.
           REPORT
 
       - name: Upload portfolio report
