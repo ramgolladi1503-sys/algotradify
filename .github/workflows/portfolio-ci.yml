@@ -9,7 +9,7 @@ on:
 
 jobs:
   portfolio-quality-gate:
-    name: Documentation, architecture, and portfolio quality gate
+    name: Documentation, architecture, API contract, and portfolio quality gate
     runs-on: ubuntu-latest
 
     steps:
@@ -22,6 +22,8 @@ jobs:
           test -f README.md
           test -f docs/architecture/algotradify-architecture.svg
           test -f docs/one-pagers/sdet-platform-portfolio.md
+          test -f docs/test-reports/README.md
+          test -f tests/test_api_contracts.py
 
       - name: Check README sections
         run: |
@@ -32,6 +34,19 @@ jobs:
           grep -qi "Failure modes" README.md
           grep -qi "Roadmap" README.md
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install backend test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r api/requirements.txt pytest httpx
+
+      - name: Run real API contract tests
+        run: pytest -q tests/test_api_contracts.py
+
       - name: Generate portfolio test report
         run: |
           mkdir -p reports
@@ -40,18 +55,20 @@ jobs:
 
           ## Scope
 
-          This CI gate validates the repository as a recruiter-facing SDET/API/WebSocket testing portfolio.
+          This CI gate validates the repository as a recruiter-facing SDET/API/WebSocket testing portfolio and runs real FastAPI contract tests.
 
           ## Checks
 
           - README exists.
           - Architecture SVG exists.
           - SDET one-pager exists.
+          - Test reports guide exists.
           - README includes problem statement, architecture, test strategy, failure modes, and roadmap.
+          - FastAPI contract tests run for health, runtime health degradation, runtime snapshot parsing, opportunity normalization, and JSONL fallback behavior.
 
-          ## Next testing upgrade
+          ## Current honest limitation
 
-          Add runtime tests for FastAPI endpoints, WebSocket event payloads, frontend empty states, and Redis degradation.
+          WebSocket runtime tests are not yet included. The first real tested slice is API contract and runtime-artifact parsing behavior.
           REPORT
 
       - name: Upload portfolio report
