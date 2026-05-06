@@ -90,6 +90,56 @@ def _runtime_health_payload() -> dict:
     }
 
 
+def _runtime_risk_payload() -> dict:
+    root = _runtime_root()
+    health_path = root / "logs" / "runtime_health_latest.json"
+    payload = _load_json(health_path, {})
+    if not isinstance(payload, dict) or not payload:
+        return {"status": "unknown", "reason": "runtime_health_unavailable", "runtime_root": str(root)}
+    risk = payload.get("risk") if isinstance(payload, dict) else None
+    return {"status": "ok", "risk": risk, "snapshot_ts_epoch": payload.get("snapshot_ts_epoch") or payload.get("ts_epoch")}
+
+
+def _runtime_execution_payload() -> dict:
+    root = _runtime_root()
+    health_path = root / "logs" / "runtime_health_latest.json"
+    payload = _load_json(health_path, {})
+    if not isinstance(payload, dict) or not payload:
+        return {"status": "unknown", "reason": "runtime_health_unavailable", "runtime_root": str(root)}
+    execution = payload.get("execution") if isinstance(payload, dict) else None
+    return {
+        "status": "ok",
+        "execution": execution,
+        "snapshot_ts_epoch": payload.get("snapshot_ts_epoch") or payload.get("ts_epoch"),
+    }
+
+
+def _incidents_payload(limit: int = 100) -> dict:
+    root = _runtime_root()
+    path = root / "logs" / "incidents.jsonl"
+    rows = _tail_jsonl(path, limit=limit)
+    return {"status": "ok", "path": str(path), "count": len(rows), "rows": list(reversed(rows))}
+
+
+def _verification_checks_payload() -> dict:
+    # Keep this conservative: expose what we have from runtime artifacts only.
+    root = _runtime_root()
+    cycle = _load_json(root / "logs" / "engine_cycle_status.json", {})
+    return {
+        "status": "ok",
+        "checks": [
+            {"name": "runtime_cycle_status_present", "ok": bool(cycle), "detail": {"path": str(root / "logs" / "engine_cycle_status.json")}},
+            {"name": "runtime_health_present", "ok": bool(_load_json(root / "logs" / "runtime_health_latest.json", {})), "detail": {"path": str(root / "logs" / "runtime_health_latest.json")}},
+        ],
+    }
+
+
+def _analytics_empty(series_name: str) -> dict:
+    # UI expects these endpoints; for market-closed/offline validation return empty series with metadata.
+    root = _runtime_root()
+    return {"status": "ok", "series": [], "name": series_name, "runtime_root": str(root)}
+
+
 def _opportunities_payload(limit: int) -> list[dict]:
     root = _runtime_root()
     snap = _load_json(root / "top_opportunities_latest.json", {})
@@ -188,6 +238,15 @@ def health():
 def runtime_health():
     return _runtime_health_payload()
 
+@app.get("/runtime/risk")
+def runtime_risk():
+    return _runtime_risk_payload()
+
+
+@app.get("/runtime/execution")
+def runtime_execution():
+    return _runtime_execution_payload()
+
 
 @app.get("/runtime/snapshot")
 def runtime_snapshot():
@@ -197,6 +256,36 @@ def runtime_snapshot():
 @app.get("/opportunities")
 def opportunities(limit: int = Query(default=25, ge=1, le=200)):
     return _opportunities_payload(limit=limit)
+
+
+@app.get("/incidents")
+def incidents(limit: int = Query(default=100, ge=1, le=500)):
+    return _incidents_payload(limit=limit)
+
+
+@app.get("/verification-checks")
+def verification_checks():
+    return _verification_checks_payload()
+
+
+@app.get("/analytics/pnl-curve")
+def analytics_pnl_curve():
+    return _analytics_empty("pnl_curve")
+
+
+@app.get("/analytics/candidate-volume")
+def analytics_candidate_volume():
+    return _analytics_empty("candidate_volume")
+
+
+@app.get("/analytics/blocker-frequency")
+def analytics_blocker_frequency():
+    return _analytics_empty("blocker_frequency")
+
+
+@app.get("/analytics/strategy-hit-rate")
+def analytics_strategy_hit_rate():
+    return _analytics_empty("strategy_hit_rate")
 
 
 @app.websocket("/ws")

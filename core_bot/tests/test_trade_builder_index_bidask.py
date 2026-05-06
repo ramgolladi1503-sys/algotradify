@@ -1,0 +1,185 @@
+from config import config as cfg
+import strategies.trade_builder as trade_builder_module
+from strategies.trade_builder import TradeBuilder
+
+
+class _PredictorStub:
+    model_version = "stub"
+    shadow_version = None
+
+    def predict_confidence(self, _feats):
+        return 0.95
+
+
+def _base_market_data():
+    return {
+        "symbol": "NIFTY",
+        "market_open": True,
+        "valid": True,
+        "ltp": 25000.0,
+        "vwap": 24990.0,
+        "bias": "Bullish",
+        "instrument": "OPT",
+        "chain_source": "live",
+        "quote_ok": False,
+        "bid": None,
+        "ask": None,
+        "index_quote_cache": {"symbol": "NIFTY", "last_price": 25000.0, "ts_epoch": 1771400000.0},
+        "regime": "TREND",
+        "regime_day": "TREND",
+        "day_type": "TREND_DAY",
+        "option_chain": [
+            {
+                "type": "CE",
+                "strike": 25000,
+                "expiry": "2026-02-26",
+                "tradingsymbol": "NIFTY26FEB25000CE",
+                "instrument_token": 123456,
+                "ltp": 100.0,
+                "bid": 99.0,
+                "ask": 101.0,
+                "quote_ok": True,
+                "quote_live": True,
+                "quote_age_sec": 1.0,
+                "quote_ts_epoch": 1771400000.0,
+                "depth_ok": True,
+                "volume": 5000,
+                "oi": 20000,
+                "oi_change": 1000,
+                "iv": 0.2,
+                "iv_z": 0.0,
+                "iv_skew": 0.0,
+                "delta": 0.3,
+                "moneyness": 0.0,
+            }
+        ],
+    }
+
+
+def _patch_builder_for_deterministic_pass(monkeypatch, builder):
+    monkeypatch.setattr(builder, "_signal_for_symbol", lambda md, force_family=None: {"direction": "BUY_CALL", "reason": "unit", "score": 0.95, "regime_day": "TREND"})
+    monkeypatch.setattr(builder, "_apply_lifecycle_gate", lambda strategy_name, mode="MAIN": (True, "ok"))
+    monkeypatch.setattr(builder, "_apply_decay_gate", lambda strategy_name, base_score=None, size_mult=1.0: (True, base_score, size_mult, None))
+    monkeypatch.setattr(builder, "_validate_ml_features", lambda feats: (True, "ok"))
+    monkeypatch.setattr(trade_builder_module, "compute_trade_score", lambda *args, **kwargs: {"score": 100.0, "alignment": 1.0})
+    monkeypatch.setattr(cfg, "ALPHA_ENSEMBLE_ENABLE", False, raising=False)
+    monkeypatch.setattr(cfg, "ML_AB_ENABLE", False, raising=False)
+    monkeypatch.setattr(cfg, "ML_USE_ONLY_WITH_HISTORY", False, raising=False)
+    monkeypatch.setattr(cfg, "ML_MIN_PROBA", 0.1, raising=False)
+    monkeypatch.setattr(cfg, "TRADE_SCORE_MIN", 1.0, raising=False)
+    monkeypatch.setattr(cfg, "STRICT_STRATEGY_SCORE", 0.1, raising=False)
+    monkeypatch.setattr(cfg, "MIN_RR", 0.1, raising=False)
+    monkeypatch.setattr(cfg, "ORB_BIAS_LOCK", False, raising=False)
+    monkeypatch.setattr(cfg, "HTF_ALIGN_REQUIRED", False, raising=False)
+
+
+def test_paper_missing_index_bid_ask_uses_synthetic(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "PAPER", raising=False)
+    events = []
+    monkeypatch.setattr(trade_builder_module, "_log_signal_event", lambda kind, symbol, payload=None: events.append({"kind": kind, "symbol": symbol, "payload": payload or {}}))
+
+    builder = TradeBuilder(predictor=_PredictorStub())
+    _patch_builder_for_deterministic_pass(monkeypatch, builder)
+    trade = builder.build(_base_market_data(), quick_mode=False, allow_fallbacks=False, allow_baseline=False)
+
+    assert trade is not None
+    assert trade.source_flags.get("index_quote_source") == "synthetic_index"
+    assert trade.source_flags.get("index_bidask_synthetic") is True
+    assert trade.source_flags.get("index_quote_kind") == "synthetic"
+    rows = [e for e in events if e["kind"] == "index_bidask_source" and e["payload"].get("source") == "synthetic_index"]
+    assert rows
+    payload = rows[-1]["payload"]
+    assert payload.get("quote_kind") == "synthetic"
+    assert payload.get("last_price") == 25000.0
+    spread = min(
+        max(
+            25000.0 * (float(getattr(cfg, "OFFHOURS_SYNTH_INDEX_SPREAD_BPS", 20.0)) / 10000.0),
+            float(getattr(cfg, "INDEX_SYNTH_MIN_TICK", 0.05)),
+        ),
+        float(getattr(cfg, "SYNTH_INDEX_SPREAD_CAP", 5.0)),
+    )
+    assert payload.get("bid") == round(25000.0 - (spread / 2.0), 4)
+    assert payload.get("ask") == round(25000.0 + (spread / 2.0), 4)
+
+
+def test_live_missing_index_bid_ask_soft_vetoes_and_marks_non_executable(monkeypatch, tmp_path, capsys):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
+    events = []
+    monkeypatch.setattr(trade_builder_module, "_log_signal_event", lambda kind, symbol, payload=None: events.append({"kind": kind, "symbol": symbol, "payload": payload or {}}))
+
+    builder = TradeBuilder(predictor=_PredictorStub())
+    _patch_builder_for_deterministic_pass(monkeypatch, builder)
+    trade = builder.build(
+        _base_market_data(),
+        quick_mode=False,
+        debug_reasons=True,
+        allow_fallbacks=False,
+        allow_baseline=False,
+    )
+
+    assert trade is not None
+    assert trade.execution_allowed is False
+    soft_codes = set(trade.source_flags.get("soft_veto_codes") or [])
+    gate_codes = set(trade.source_flags.get("gates_failed") or [])
+    assert "missing_live_bidask" in soft_codes or "missing_live_bidask" in gate_codes
+    assert any(e["kind"] == "index_bidask_source" and e["payload"].get("source") == "missing_depth" for e in events)
+    soft_rows = [e for e in events if e["kind"] == "trade_offhours_missing_bidask"]
+    assert soft_rows
+    soft_payload = soft_rows[-1]["payload"]
+    assert set(["ltp", "ltp_source", "has_depth", "has_quote", "ws_subscribed"]).issubset(soft_payload.keys())
+    assert soft_payload.get("gate_reasons") == ["missing_live_bidask", "quote_api_issue"]
+    out = capsys.readouterr().out
+    assert "SOFT_VETO" in out
+
+
+def test_live_market_open_non_live_chain_rejects(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
+
+    builder = TradeBuilder(predictor=_PredictorStub())
+    _patch_builder_for_deterministic_pass(monkeypatch, builder)
+    blocked_reasons = []
+    monkeypatch.setattr(
+        builder,
+        "_log_blocked_candidate",
+        lambda symbol, reason_code, reason_text, market_data=None, extra=None: blocked_reasons.append(str(reason_code)),
+    )
+    md = _base_market_data()
+    md.update(
+        {
+            "market_open": True,
+            "chain_source": "synthetic_offhours",
+            "quote_ok": True,
+            "bid": 24999.0,
+            "ask": 25001.0,
+        }
+    )
+    trade = builder.build(md, quick_mode=False, allow_fallbacks=False, allow_baseline=False)
+    assert trade is None
+    assert "non_live_option_chain" in blocked_reasons
+
+
+def test_live_market_closed_allows_synthetic_offhours_chain(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
+    monkeypatch.setattr(cfg, "OFFHOURS_MAX_LTP_AGE_SEC", 3600.0, raising=False)
+
+    builder = TradeBuilder(predictor=_PredictorStub())
+    _patch_builder_for_deterministic_pass(monkeypatch, builder)
+    md = _base_market_data()
+    md.update(
+        {
+            "market_open": False,
+            "chain_source": "synthetic_offhours",
+            "quote_ok": False,
+            "bid": None,
+            "ask": None,
+        }
+    )
+    trade = builder.build(md, quick_mode=False, allow_fallbacks=False, allow_baseline=False)
+    assert trade is not None
+    assert trade.planning_only is True
+    assert trade.execution_allowed is False
+    assert trade.reason == "OFFHOURS_PLANNING"

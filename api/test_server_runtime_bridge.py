@@ -109,3 +109,21 @@ def test_ws_emits_snapshot_even_when_redis_unavailable(monkeypatch):
     kinds = {first.get("type"), second.get("type")}
     assert "runtime_notice" in kinds
     assert "runtime_snapshot" in kinds
+
+
+def test_runtime_risk_and_execution_endpoints(tmp_path, monkeypatch):
+    runtime_root = tmp_path / ".runtime"
+    _write_json(
+        runtime_root / "logs" / "runtime_health_latest.json",
+        {"risk": {"halted": False}, "execution": {"enabled": True}, "ts_epoch": 1.0},
+    )
+    monkeypatch.setattr(server, "_runtime_root", lambda: runtime_root)
+    client = TestClient(server.app)
+
+    r1 = client.get("/runtime/risk")
+    assert r1.status_code == 200
+    assert r1.json()["status"] == "ok"
+
+    r2 = client.get("/runtime/execution")
+    assert r2.status_code == 200
+    assert r2.json()["status"] == "ok"

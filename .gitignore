@@ -16,3 +16,4 @@ runtime/
 .mypy_cache/
 dist/
 build/
+.next/

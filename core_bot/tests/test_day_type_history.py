@@ -1,0 +1,91 @@
+import json
+from pathlib import Path
+
+from config import config as cfg
+from core.day_type_history import append_day_type_event, load_day_type_events, day_type_events_dataframe
+
+
+def test_append_day_type_event_writes_epoch_and_ist(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(cfg, "LOGS_ROOT", str(tmp_path / "logs"), raising=False)
+    append_day_type_event(
+        symbol="NIFTY",
+        event="CHANGE",
+        day_type="TREND_DAY",
+        confidence=0.71,
+        minutes_since_open=35,
+    )
+    path = Path(cfg.LOGS_ROOT) / "day_type_events.jsonl"
+    assert path.exists()
+    rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    assert len(rows) == 1
+    row = rows[0]
+    assert isinstance(row.get("ts_epoch"), float)
+    assert isinstance(row.get("ts_ist"), str) and row["ts_ist"]
+    assert row.get("ts") == row.get("ts_ist")
+
+
+def test_load_day_type_events_backfills_existing_file_safely(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(cfg, "LOGS_ROOT", str(tmp_path / "logs"), raising=False)
+    path = Path(cfg.LOGS_ROOT) / "day_type_events.jsonl"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    legacy = {
+        "symbol": "SENSEX",
+        "event": "TICK",
+        "day_type": "RANGE_DAY",
+        "confidence": 0.55,
+        "minutes_since_open": 42,
+        "ts": "2026-02-18T10:00:00+05:30",
+    }
+    path.write_text(json.dumps(legacy) + "\n", encoding="utf-8")
+
+    rows = load_day_type_events(backfill=True)
+    assert len(rows) == 1
+    row = rows[0]
+    assert isinstance(row.get("ts_epoch"), float)
+    assert isinstance(row.get("ts_ist"), str) and row["ts_ist"]
+    assert row.get("ts") == row.get("ts_ist")
+
+    refreshed = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    assert isinstance(refreshed[0].get("ts_epoch"), float)
+    backups = list(path.parent.glob("day_type_events.bak.*.jsonl"))
+    assert backups, "expected safety backup file during backfill"
+
+
+def test_load_day_type_events_backfills_timestamp_key(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(cfg, "LOGS_ROOT", str(tmp_path / "logs"), raising=False)
+    path = Path(cfg.LOGS_ROOT) / "day_type_events.jsonl"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    legacy = {
+        "symbol": "NIFTY",
+        "event": "CHANGE",
+        "day_type": "TREND_DAY",
+        "confidence": 0.73,
+        "minutes_since_open": 19,
+        "timestamp": "2026-02-18T10:05:00+05:30",
+    }
+    path.write_text(json.dumps(legacy) + "\n", encoding="utf-8")
+
+    rows = load_day_type_events(backfill=True)
+    assert len(rows) == 1
+    row = rows[0]
+    assert isinstance(row.get("ts"), str) and row["ts"]
+    assert isinstance(row.get("ts_epoch"), float)
+    assert isinstance(row.get("ts_ist"), str) and row["ts_ist"]
+
+
+def test_day_type_events_dataframe_prefers_ts_and_falls_back_to_timestamp():
+    rows = [
+        {
+            "symbol": "BANKNIFTY",
+            "day_type": "RANGE_DAY",
+            "confidence": 0.61,
+            "timestamp": "2026-02-18T10:10:00+05:30",
+        }
+    ]
+    df = day_type_events_dataframe(rows)
+    assert "ts" in df.columns
+    assert len(df) == 1
+    assert str(df.loc[0, "ts"]) != "NaT"

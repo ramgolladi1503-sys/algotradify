@@ -1,0 +1,486 @@
+# Migration note:
+# Governance gate now derives market mode via core.market_context and uses compute_age_sec for snapshot ages.
+
+from __future__ import annotations
+
+import json
+import logging
+from dataclasses import asdict, dataclass, field
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+from config import config as cfg
+from core import risk_halt
+from core.feed_circuit_breaker import is_tripped as feed_breaker_tripped
+from core.freshness_sla import get_freshness_status
+from core.gate_status_log import gate_status_path
+from core.market_context import derive_market_context
+from core.paths import logs_dir
+from core.time_utils import (
+    compute_age_sec,
+    is_market_open_ist,
+    normalize_epoch_seconds,
+    now_utc_epoch,
+)
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class TradingAllowedSnapshot:
+    allowed: bool
+    reasons: List[str]
+    ts_epoch: float
+    market_open: bool
+    auth_ok: bool
+    auth_age_sec: Optional[float]
+    freshness_state: str
+    ltp_age_sec: Optional[float]
+    depth_age_sec: Optional[float]
+    risk_halted: bool
+    feed_breaker_tripped: bool
+    regime_confidence: Optional[float] = None
+    day_confidence: Optional[float] = None
+    orb_bias: Optional[str] = None
+    quote_health: str = "UNKNOWN"
+    details: Dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
+def _unique_reasons(values: List[str]) -> List[str]:
+    seen = set()
+    out: List[str] = []
+    for value in values:
+        if not value:
+            continue
+        if value in seen:
+            continue
+        seen.add(value)
+        out.append(value)
+    return out
+
+
+def _read_last_jsonl(path: Path) -> Dict[str, Any]:
+    if not path.exists():
+        return {}
+    try:
+        lines = path.read_text().splitlines()
+    except Exception:
+        return {}
+    for line in reversed(lines):
+        row = line.strip()
+        if not row:
+            continue
+        try:
+            parsed = json.loads(row)
+            if isinstance(parsed, dict):
+                return parsed
+        except Exception:
+            continue
+    return {}
+
+
+def _load_recent_auth_health(now_epoch: float) -> Dict[str, Any]:
+    payload = _read_last_jsonl(logs_dir() / "auth_health.jsonl")
+    if not payload:
+        return {
+            "ok": False,
+            "age_sec": None,
+            "reason": "auth_health_missing",
+            "auth_state": "MISSING",
+        }
+    ts_epoch_f = normalize_epoch_seconds(payload.get("ts_epoch"))
+    if ts_epoch_f is None:
+        ts_epoch_f = normalize_epoch_seconds(payload.get("timestamp_epoch"))
+    if ts_epoch_f is None:
+        ts_epoch_f = normalize_epoch_seconds(payload.get("timestamp"))
+    age_sec = compute_age_sec(ts_epoch_f, now_epoch)
+    max_age = float(
+        getattr(
+            cfg,
+            "GOV_AUTH_MAX_AGE_SEC",
+            max(float(getattr(cfg, "AUTH_HEALTH_TTL_SEC", 60.0)) * 2.0, 180.0),
+        )
+    )
+    auth_state = str(payload.get("auth_state") or "FAILED").upper()
+    ok = bool(payload.get("ok")) and auth_state == "OK" and age_sec is not None and age_sec <= max_age
+    reason = ""
+    if not ok:
+        if age_sec is None:
+            reason = "auth_health_missing_ts"
+        elif age_sec > max_age:
+            reason = f"auth_health_stale:{age_sec:.1f}s>{max_age:.1f}s"
+        else:
+            reason = str(payload.get("error") or payload.get("reason") or f"auth_state:{auth_state}")
+    return {
+        "ok": ok,
+        "age_sec": age_sec,
+        "reason": reason,
+        "auth_state": auth_state,
+    }
+
+
+def _regime_confidence(market_data: Optional[Dict[str, Any]]) -> Optional[float]:
+    if not isinstance(market_data, dict):
+        return None
+    direct = market_data.get("regime_confidence")
+    if direct is not None:
+        try:
+            return float(direct)
+        except Exception:
+            return None
+    probs = market_data.get("regime_probs") or {}
+    if not isinstance(probs, dict) or not probs:
+        return None
+    try:
+        return max(float(v) for v in probs.values())
+    except Exception:
+        return None
+
+
+def _quote_health(market_data: Optional[Dict[str, Any]]) -> str:
+    if not isinstance(market_data, dict):
+        return "UNKNOWN"
+    quote_ok = bool(market_data.get("quote_ok"))
+    chain_source = str(market_data.get("chain_source") or "").lower()
+    health = market_data.get("option_chain_health") or {}
+    missing_quote_pct = health.get("missing_quote_pct") if isinstance(health, dict) else None
+    max_missing_quote_pct = float(getattr(cfg, "CHAIN_MAX_MISSING_QUOTE_PCT", 0.2))
+    missing_ok = True if missing_quote_pct is None else float(missing_quote_pct) <= max_missing_quote_pct
+    if quote_ok and chain_source == "live" and missing_ok:
+        return "OK"
+    if quote_ok or chain_source in {"live", "synthetic"}:
+        return "DEGRADED"
+    return "ERROR"
+
+
+def _coerce_age_from_age_or_epoch(value: Any, now_epoch: float) -> Optional[float]:
+    """
+    Accept either precomputed age seconds or epoch-like timestamps.
+    """
+    if value is None:
+        return None
+    try:
+        raw = float(value)
+    except Exception:
+        return None
+    if raw < 0:
+        return 0.0
+    normalized = normalize_epoch_seconds(raw)
+    if normalized is not None and normalized >= 100_000_000:
+        age_from_epoch = compute_age_sec(normalized, now_epoch)
+        if age_from_epoch is not None:
+            return age_from_epoch
+    return raw
+
+
+def _load_latest_decision_for_symbol(symbol: str, now_epoch: float) -> Dict[str, Any]:
+    sym = str(symbol or "").upper()
+    if not sym:
+        return {}
+    path = gate_status_path(getattr(cfg, "DESK_ID", "DEFAULT"))
+    if not path.exists():
+        return {}
+    max_age = float(getattr(cfg, "GOV_DECISION_MAX_AGE_SEC", 45.0))
+    max_future_skew = float(getattr(cfg, "MAX_CLOCK_SKEW_SEC", 5.0))
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except Exception:
+        return {}
+    for raw in reversed(lines[-500:]):
+        row = raw.strip()
+        if not row:
+            continue
+        try:
+            payload = json.loads(row)
+        except Exception:
+            continue
+        if str(payload.get("symbol") or "").upper() != sym:
+            continue
+        decision_stage = str(payload.get("decision_stage") or "").strip()
+        if not decision_stage:
+            continue
+        ts_epoch = normalize_epoch_seconds(payload.get("ts_epoch"))
+        if ts_epoch is None:
+            continue
+        if ts_epoch > (now_epoch + max_future_skew):
+            continue
+        age_sec = compute_age_sec(ts_epoch, now_epoch)
+        if age_sec is None:
+            continue
+        if age_sec > max_age:
+            continue
+        return payload
+    return {}
+
+
+def _snapshot_feed_health(
+    market_data: Optional[Dict[str, Any]],
+    now_epoch: float,
+    market_open: bool,
+    mode: str,
+) -> Optional[Dict[str, Any]]:
+    """
+    Canonical per-snapshot feed health.
+    Uses one market snapshot and avoids recomputing from unrelated stores.
+    """
+    if not isinstance(market_data, dict):
+        return None
+
+    instrument = str(market_data.get("instrument") or "OPT").upper()
+    market_ctx = derive_market_context({"execution_mode": mode, "market_open": market_open})
+    offhours_mode = bool(market_ctx.mode == "OFFHOURS")
+    allow_stale_quotes = bool(market_ctx.allow_stale_quotes)
+    max_ltp_age = float(
+        getattr(
+            cfg,
+            "OFFHOURS_SLA_MAX_LTP_AGE_SEC" if allow_stale_quotes else "SLA_MAX_LTP_AGE_SEC",
+            900.0 if allow_stale_quotes else 2.5,
+        )
+    )
+    max_depth_age = float(
+        getattr(
+            cfg,
+            "OFFHOURS_SLA_MAX_DEPTH_AGE_SEC" if allow_stale_quotes else "SLA_MAX_DEPTH_AGE_SEC",
+            900.0 if allow_stale_quotes else 6.0,
+        )
+    )
+
+    ltp_ts = market_data.get("ltp_ts_epoch")
+    try:
+        ltp_age_sec = compute_age_sec(ltp_ts, now_epoch)
+    except Exception:
+        ltp_age_sec = None
+
+    depth_ts = market_data.get("depth_ts_epoch")
+    if depth_ts is None:
+        depth_ts = market_data.get("depth_last_epoch")
+    depth_age_raw = market_data.get("depth_age_sec")
+    if depth_age_raw is None:
+        try:
+            depth_age_raw = ((market_data.get("feed_health") or {}).get("depth_age_sec"))
+        except Exception:
+            depth_age_raw = None
+    depth_age_sec = compute_age_sec(depth_ts, now_epoch)
+    if depth_age_sec is None:
+        depth_age_sec = _coerce_age_from_age_or_epoch(depth_age_raw, now_epoch)
+
+    ltp_ok = ltp_age_sec is not None and ltp_age_sec <= max_ltp_age
+    reasons: List[str] = []
+    if market_open and (not allow_stale_quotes):
+        if ltp_age_sec is None:
+            reasons.append("ltp_missing")
+        elif ltp_age_sec > max_ltp_age:
+            reasons.append(f"ltp_stale age={ltp_age_sec:.2f} max={max_ltp_age:.2f}")
+
+    # FEED_STALE is strictly time-based on LTP freshness.
+    # Depth quality is tracked as diagnostics/quote-quality, not feed freshness.
+    if allow_stale_quotes:
+        ok = True
+        state = "OFFHOURS" if offhours_mode else "PLANNING"
+    else:
+        ok = (not market_open) or ltp_ok
+        state = "MARKET_CLOSED" if not market_open else ("OK" if ok else "STALE")
+    return {
+        "ok": ok,
+        "state": state,
+        "market_open": market_open,
+        "offhours_mode": bool(offhours_mode),
+        "allow_stale_quotes": bool(allow_stale_quotes),
+        "reasons": reasons,
+        "ltp": {"age_sec": ltp_age_sec, "max_age_sec": max_ltp_age},
+        "depth": {
+            "age_sec": depth_age_sec,
+            "max_age_sec": max_depth_age,
+            "required": False,
+            "instrument": instrument,
+            "mode": mode,
+        },
+        "source": "market_snapshot",
+    }
+
+
+def trading_allowed_snapshot(market_data: Optional[Dict[str, Any]] = None) -> TradingAllowedSnapshot:
+    """
+    Single fail-closed permission gate used before trade emission.
+    Deterministic by design: no direct network calls.
+    """
+    now_epoch = now_utc_epoch()
+    reasons: List[str] = []
+    symbol = str((market_data or {}).get("symbol") or "").upper() if isinstance(market_data, dict) else ""
+
+    ctx_payload = {}
+    if isinstance(market_data, dict):
+        if isinstance(market_data.get("market_context"), dict):
+            ctx_payload.update(dict(market_data.get("market_context") or {}))
+        if "market_open" in market_data and "market_open" not in ctx_payload:
+            ctx_payload["market_open"] = market_data.get("market_open")
+        if "segment" in market_data and "segment" not in ctx_payload:
+            ctx_payload["segment"] = market_data.get("segment")
+    if "execution_mode" not in ctx_payload:
+        ctx_payload["execution_mode"] = str(getattr(cfg, "EXECUTION_MODE", "SIM")).upper()
+    if "market_open" not in ctx_payload:
+        ctx_payload["market_open"] = bool(is_market_open_ist())
+    market_ctx = derive_market_context(ctx_payload)
+    mode = str(market_ctx.mode)
+    snapshot_market_open = bool(market_ctx.is_market_open)
+    allow_stale_quotes = bool(market_ctx.allow_stale_quotes)
+    decision_row = _load_latest_decision_for_symbol(symbol=symbol, now_epoch=now_epoch)
+    snapshot_freshness = _snapshot_feed_health(
+        market_data=market_data,
+        now_epoch=now_epoch,
+        market_open=snapshot_market_open,
+        mode=mode,
+    )
+    if decision_row:
+        decision_feed = decision_row.get("feed_health_snapshot") or {}
+        decision_is_fresh = bool(decision_feed.get("is_fresh", False))
+        freshness = {
+            "ok": decision_is_fresh,
+            "state": "OK" if decision_is_fresh else "STALE",
+            "market_open": snapshot_market_open,
+            "reasons": list(decision_row.get("decision_blockers") or []),
+            "ltp": {"age_sec": decision_feed.get("ltp_age_sec")},
+            "depth": {"age_sec": decision_feed.get("depth_age_sec")},
+            "source": "decision_dag",
+        }
+    else:
+        freshness = snapshot_freshness or get_freshness_status(force=False)
+    market_open = bool(freshness.get("market_open"))
+    freshness_state = str(freshness.get("state") or "UNKNOWN")
+    ltp_age_sec = (freshness.get("ltp") or {}).get("age_sec")
+    depth_age_sec = (freshness.get("depth") or {}).get("age_sec")
+
+    risk_halted = bool(risk_halt.is_halted())
+    if risk_halted:
+        reasons.append("RISK_HALT_ACTIVE")
+
+    feed_breaker = bool(feed_breaker_tripped())
+    if feed_breaker:
+        reasons.append("FEED_BREAKER_TRIPPED")
+
+    if not market_open:
+        reasons.append("MARKET_CLOSED")
+
+    if market_open and (not allow_stale_quotes) and not bool(freshness.get("ok")):
+        reasons.append("FEED_STALE")
+        if bool(getattr(cfg, "FEED_STALE_EVIDENCE_LOG_ENABLE", True)):
+            feed_health = (market_data or {}).get("feed_health") if isinstance(market_data, dict) else {}
+            if not isinstance(feed_health, dict):
+                feed_health = {}
+            ltp_payload = freshness.get("ltp") if isinstance(freshness.get("ltp"), dict) else {}
+            depth_payload = freshness.get("depth") if isinstance(freshness.get("depth"), dict) else {}
+            ltp_max_age = ltp_payload.get("max_age_sec")
+            if ltp_max_age is None:
+                ltp_max_age = feed_health.get("ltp_max_age_sec")
+            depth_max_age = depth_payload.get("max_age_sec")
+            if depth_max_age is None:
+                depth_max_age = feed_health.get("depth_max_age_sec")
+            logger.warning(
+                "FEED_STALE_EVIDENCE symbol=%s freshness_source=%s freshness_state=%s freshness_ok=%s market_open=%s allow_stale_quotes=%s ltp_age_sec=%s ltp_max_age_sec=%s depth_age_sec=%s depth_max_age_sec=%s timestamp_epoch=%s latest_option_tick_ts=%s latest_option_tick_age_sec=%s ws_connected=%s subscribed_option_tokens_count=%s reasons=%s",
+                str((market_data or {}).get("symbol") if isinstance(market_data, dict) else "") or "",
+                str(freshness.get("source") or ""),
+                str(freshness_state or ""),
+                bool(freshness.get("ok")),
+                bool(market_open),
+                bool(allow_stale_quotes),
+                ltp_payload.get("age_sec"),
+                ltp_max_age,
+                depth_payload.get("age_sec"),
+                depth_max_age,
+                (market_data or {}).get("timestamp_epoch") if isinstance(market_data, dict) else None,
+                (market_data or {}).get("latest_option_tick_ts") if isinstance(market_data, dict) else None,
+                (market_data or {}).get("latest_option_tick_age_sec") if isinstance(market_data, dict) else None,
+                (market_data or {}).get("ws_connected", feed_health.get("ws_connected")) if isinstance(market_data, dict) else feed_health.get("ws_connected"),
+                (market_data or {}).get("subscribed_option_tokens_count", feed_health.get("subscribed_option_tokens_count")) if isinstance(market_data, dict) else feed_health.get("subscribed_option_tokens_count"),
+                list(freshness.get("reasons") or []),
+            )
+
+    auth_check = _load_recent_auth_health(now_epoch)
+    auth_required = bool(getattr(cfg, "GOV_GATE_REQUIRE_AUTH", True))
+    auth_enforced = auth_required and (mode == "LIVE" or bool(getattr(cfg, "GOV_GATE_ENFORCE_PAPER", False)))
+    if market_open and auth_enforced and not auth_check.get("ok"):
+        reasons.append("AUTH_NOT_VERIFIED_RECENTLY")
+
+    regime_conf = _regime_confidence(market_data)
+    day_conf = None
+    orb_bias = None
+    if isinstance(market_data, dict):
+        day_raw = market_data.get("day_confidence")
+        try:
+            day_conf = float(day_raw) if day_raw is not None else None
+        except Exception:
+            day_conf = None
+        orb_bias = str(market_data.get("orb_bias") or "").upper() or None
+
+    if market_open and bool(getattr(cfg, "GOV_GATE_REQUIRE_ORB_RESOLVED", False)):
+        if orb_bias in {None, "", "PENDING"}:
+            reasons.append("ORB_PENDING")
+
+    if market_open and bool(getattr(cfg, "GOV_GATE_REQUIRE_DAYTYPE_CONF", False)):
+        min_day_conf = float(getattr(cfg, "GOV_GATE_MIN_DAY_CONFIDENCE", getattr(cfg, "DAYTYPE_CONF_SWITCH_MIN", 0.6)))
+        if day_conf is None or day_conf < min_day_conf:
+            reasons.append("DAYTYPE_CONFIDENCE_LOW")
+
+    if market_open and bool(getattr(cfg, "GOV_GATE_REQUIRE_REGIME_CONF", False)):
+        min_regime_conf = float(getattr(cfg, "GOV_GATE_MIN_REGIME_CONFIDENCE", getattr(cfg, "REGIME_PROB_MIN", 0.45)))
+        if regime_conf is None or regime_conf < min_regime_conf:
+            reasons.append("REGIME_CONFIDENCE_LOW")
+
+    quote_health = _quote_health(market_data)
+    require_live_quotes = bool(
+        market_ctx.require_live_quotes and getattr(cfg, "REQUIRE_LIVE_QUOTES", True)
+    )
+    quote_enforced = require_live_quotes and (
+        mode == "LIVE" or bool(getattr(cfg, "GOV_GATE_ENFORCE_PAPER", False))
+    )
+    if market_open and quote_enforced and quote_health == "ERROR":
+        reasons.append("LIVE_QUOTES_UNHEALTHY")
+
+    reasons = _unique_reasons(reasons)
+    allowed = len(reasons) == 0
+    details = {
+        "mode": mode,
+        "auth_state": auth_check.get("auth_state"),
+        "auth_reason": auth_check.get("reason"),
+        "freshness_reasons": list(freshness.get("reasons") or []),
+        "freshness_source": str(
+            freshness.get("source") or ("snapshot" if snapshot_freshness else "global")
+        ),
+        "decision_stage": decision_row.get("decision_stage"),
+        "decision_blockers": list(decision_row.get("decision_blockers") or []),
+        "symbol": (market_data or {}).get("symbol") if isinstance(market_data, dict) else None,
+        "chain_source": (market_data or {}).get("chain_source") if isinstance(market_data, dict) else None,
+    }
+
+    return TradingAllowedSnapshot(
+        allowed=allowed,
+        reasons=reasons,
+        ts_epoch=now_epoch,
+        market_open=market_open,
+        auth_ok=bool(auth_check.get("ok")),
+        auth_age_sec=auth_check.get("age_sec"),
+        freshness_state=freshness_state,
+        ltp_age_sec=ltp_age_sec,
+        depth_age_sec=depth_age_sec,
+        risk_halted=risk_halted,
+        feed_breaker_tripped=feed_breaker,
+        regime_confidence=regime_conf,
+        day_confidence=day_conf,
+        orb_bias=orb_bias,
+        quote_health=quote_health,
+        details=details,
+    )
+
+
+def write_trading_allowed_snapshot(snapshot: TradingAllowedSnapshot) -> None:
+    payload = snapshot.to_dict()
+    base = logs_dir()
+    base.mkdir(parents=True, exist_ok=True)
+    latest_path = base / "trading_allowed_snapshot.json"
+    history_path = base / "trading_allowed_snapshot.jsonl"
+    latest_path.write_text(json.dumps(payload, indent=2))
+    with history_path.open("a") as f:
+        f.write(json.dumps(payload) + "\n")
