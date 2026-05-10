@@ -16,3 +16,16 @@ runtime/
 .mypy_cache/
 dist/
 build/
+
+# Embedded/synced tradebot runtime artifacts
+core_bot/.runtime/
+core_bot/runtime/
+core_bot/logs/
+core_bot/.env
+core_bot/.env.*
+core_bot/**/*.token
+core_bot/**/*.secret
+core_bot/data/*.csv
+core_bot/data/*.parquet
+core_bot/data/*.db
+core_bot/data/*.sqlite*
