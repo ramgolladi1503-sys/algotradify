@@ -15,6 +15,7 @@ class RuntimeHealthResponse(BaseModel):
     status: str
     reason: str | None = None
     runtime_root: str | None = None
+    tradebot_root: str | None = None
     mode: str | None = None
     market_open: bool | None = None
     feed: dict[str, Any] | None = None
@@ -26,6 +27,7 @@ class RuntimeHealthResponse(BaseModel):
 
 class RuntimeSnapshotResponse(BaseModel):
     runtime_root: str
+    tradebot_root: str | None = None
     cycle_stage: str | None = None
     market_mode: str | None = None
     cycle_ok: bool | None = None
