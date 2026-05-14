@@ -100,6 +100,21 @@ class StrategyCandidateDraftResponse(BaseModel):
     is_execution_decision: bool
 
 
+class CandidateTruthRecordResponse(BaseModel):
+    candidate_id: str
+    symbol: str | None = None
+    strategy_id: str | None = None
+    setup_family: str | None = None
+    truth_status: str
+    blockers: list[str]
+    warnings: list[str]
+    provenance: dict[str, Any]
+    normalized: dict[str, Any]
+    raw: dict[str, Any]
+    is_candidate_truth_record: bool
+    is_execution_decision: bool
+
+
 class RuntimeNoticePayload(BaseModel):
     source: str
     status: str

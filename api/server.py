@@ -9,6 +9,7 @@ import redis
 from redis.exceptions import RedisError
 
 from api.schemas import (
+    CandidateTruthRecordResponse,
     HealthResponse,
     OpportunityResponse,
     RuntimeHealthResponse,
@@ -17,6 +18,7 @@ from api.schemas import (
     StrategyCandidateDraftResponse,
     StrategyInfoResponse,
 )
+from candidate_truth import normalize_candidates
 from runtime_contract import (
     candidate_runtime_roots,
     is_tradebot_compatible_root,
@@ -88,6 +90,12 @@ def _query_feature_map(request: Request) -> dict[str, float | str]:
         except (TypeError, ValueError):
             features[key] = value
     return features
+
+
+def _strategy_draft_payload(request: Request, symbol: str) -> list[dict]:
+    features = _query_feature_map(request)
+    context = StrategyContext(symbol=symbol.upper(), features=features, raw={"source": "api_contract_preview"})
+    return [draft.to_dict() for draft in _strategy_registry().generate_all(context)]
 
 
 def _normalize_opportunity(row: dict, bucket: str, index: int) -> dict:
@@ -205,6 +213,11 @@ def _opportunities_payload(limit: int) -> list[dict]:
     return normalized[:limit]
 
 
+def _candidate_truth_payload(limit: int) -> list[dict]:
+    rows = _opportunities_payload(limit)
+    return [record.to_dict() for record in normalize_candidates(rows, source="api.opportunities")]
+
+
 def _runtime_snapshot_payload() -> dict:
     root = _runtime_root()
     cycle = _load_json(root / "logs" / "engine_cycle_status.json", {})
@@ -293,6 +306,11 @@ def opportunities(limit: int = Query(default=25, ge=1, le=200)):
     return _opportunities_payload(limit=limit)
 
 
+@app.get("/candidate-truth", response_model=list[CandidateTruthRecordResponse])
+def candidate_truth(limit: int = Query(default=25, ge=1, le=200)):
+    return _candidate_truth_payload(limit)
+
+
 @app.get("/strategies", response_model=list[StrategyInfoResponse])
 def strategies():
     return _strategy_registry().list()
@@ -306,9 +324,13 @@ def draft_candidates(request: Request, symbol: str = Query(..., min_length=1)):
     contract preview endpoint for PR 3; real runtime strategy wiring belongs in
     later candidate truth/opportunity-layer PRs.
     """
-    features = _query_feature_map(request)
-    context = StrategyContext(symbol=symbol.upper(), features=features, raw={"source": "api_contract_preview"})
-    return [draft.to_dict() for draft in _strategy_registry().generate_all(context)]
+    return _strategy_draft_payload(request, symbol)
+
+
+@app.get("/strategies/draft-candidates/truth", response_model=list[CandidateTruthRecordResponse])
+def draft_candidate_truth(request: Request, symbol: str = Query(..., min_length=1)):
+    drafts = _strategy_draft_payload(request, symbol)
+    return [record.to_dict() for record in normalize_candidates(drafts, source="api.strategy_draft_preview")]
 
 
 @app.websocket("/ws")
