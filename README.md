@@ -46,7 +46,7 @@ Algotradify solves the observability and runtime bridge layer around a trading e
 
 ```mermaid
 flowchart LR
-    A[Tradebot Runtime] --> B[Runtime Artifacts]
+    A[Tradebot-Compatible Runtime] --> B[Runtime Artifacts]
     A --> C[Redis tradebot_events]
     B --> D[FastAPI Runtime Bridge]
     C --> D
@@ -64,17 +64,38 @@ flowchart LR
 
 ## Current architecture
 
+- `main.py`: canonical Algotradify runtime entrypoint. It starts the Tradebot-compatible runtime and does not start Streamlit.
 - `core_bot/`: optional embedded copy of the Tradebot runtime copied from `ramgolladi1503-sys/tradebot` `main`.
-- `TRADEBOT_ROOT`: optional pointer to a separate local Tradebot checkout. Use this when you want Tradebot untouched and outside this repo.
+- `ALGOTRADIFY_ENGINE_ROOT`: explicit external engine root override.
+- `TRADEBOT_ROOT`: optional pointer to a separate local Tradebot checkout.
+- `CORE_BOT_ROOT`: compatibility alias for a separate local Tradebot checkout.
+- `runner/live_wrapper.py`: compatibility wrapper that delegates to `main.py`.
 - `api/server.py`: FastAPI runtime bridge and WebSocket stream.
-- `runner/live_wrapper.py`: wrapper entrypoint that resolves embedded or external Tradebot, then runs the Tradebot `main()` entrypoint.
 - `frontend/`: Vite React UI for runtime health, snapshot, opportunities, and live events.
+
+---
+
+## Canonical runtime command
+
+Use this as the primary runtime command:
+
+```bash
+python main.py
+```
+
+Compatibility command for older scripts:
+
+```bash
+python -m runner.live_wrapper
+```
+
+The wrapper must remain thin. It should not contain separate runtime-root resolution logic.
 
 ---
 
 ## Tradebot alignment modes
 
-Tradebot remains the source of truth. Algotradify should be aligned to it, not the other way around.
+Tradebot remains the engine source of truth until Algotradify owns the full engine directly.
 
 ### Mode A — External Tradebot checkout
 
@@ -82,10 +103,17 @@ This is safest while developing because it does not copy engine code into Algotr
 
 ```bash
 export TRADEBOT_ROOT=/absolute/path/to/tradebot
-python -m runner.live_wrapper
+python main.py
 ```
 
-The wrapper checks that the target has `main.py`, `core/`, and `config/`, then loads Tradebot's `main.py` directly.
+You can also use the explicit Algotradify variable:
+
+```bash
+export ALGOTRADIFY_ENGINE_ROOT=/absolute/path/to/tradebot
+python main.py
+```
+
+The runtime resolver checks that the target has `main.py`, `core/`, and `config/`.
 
 ### Mode B — Embedded synced core
 
@@ -93,7 +121,7 @@ Use this when Algotradify needs to be self-contained:
 
 ```bash
 python scripts/sync_tradebot_core.py --source ../tradebot --force
-python -m runner.live_wrapper
+python main.py
 ```
 
 The sync utility copies Tradebot into `core_bot/`, excludes runtime artifacts, logs, tokens, env files, local DBs, caches, and large local data files, then writes `core_bot/TRADEBOT_SOURCE.json`.
@@ -102,11 +130,33 @@ Full details: [Tradebot core alignment workflow](docs/tradebot-core-alignment.md
 
 ---
 
+## Runtime root priority
+
+Both `main.py` and `api/server.py` must use the same engine-root priority:
+
+1. `ALGOTRADIFY_ENGINE_ROOT`
+2. `TRADEBOT_ROOT`
+3. `CORE_BOT_ROOT`
+4. `./core_bot`
+5. `../tradebot`
+6. `~/tradebot`
+
+Runtime artifact root priority:
+
+1. `CORE_BOT_RUNTIME_ROOT`
+2. selected engine root `.runtime`
+3. selected engine root `runtime`
+4. `./core_bot/.runtime`
+5. `./core_bot/runtime`
+
+---
+
 ## What is integrated
 
-- Wrapper boot path surfaces real import failures instead of hiding them.
-- Wrapper can run against an external Tradebot checkout via `TRADEBOT_ROOT`.
-- Wrapper can run against embedded synced Tradebot under `core_bot/`.
+- `python main.py` boot path surfaces real import/runtime failures instead of hiding them.
+- Compatibility wrapper delegates to `main.py`.
+- Runtime can run against an external Tradebot checkout via `ALGOTRADIFY_ENGINE_ROOT`, `TRADEBOT_ROOT`, or `CORE_BOT_ROOT`.
+- Runtime can run against embedded synced Tradebot under `core_bot/`.
 - Backend resolves runtime artifacts from `CORE_BOT_RUNTIME_ROOT`, external Tradebot, or embedded `core_bot/`.
 - Backend exposes runtime endpoints:
   - `GET /health`
@@ -153,8 +203,8 @@ This project should be tested like a production runtime bridge, not a static fro
 - Opportunity endpoint response-shape tests.
 - Redis-unavailable degradation tests.
 - WebSocket connection and event-forwarding tests.
-- Import-failure surfacing tests for `runner/live_wrapper.py`.
-- Tradebot resolution tests for `TRADEBOT_ROOT` and embedded `core_bot/` modes.
+- Runtime-root parity tests for `main.py` and `api/server.py`.
+- Wrapper delegation tests for `runner/live_wrapper.py`.
 
 ### Frontend tests
 
@@ -169,7 +219,7 @@ This project should be tested like a production runtime bridge, not a static fro
 - Start Redis.
 - Start backend.
 - Start frontend.
-- Start wrapper.
+- Start runtime through `python main.py`.
 - Verify health, snapshot, opportunity, and WebSocket event flow.
 
 See: [Test reports guide](docs/test-reports/README.md)
@@ -179,8 +229,8 @@ See: [Test reports guide](docs/test-reports/README.md)
 ## Failure modes handled
 
 - Redis unavailable: WebSocket degrades instead of crashing hard.
-- Tradebot import failure: wrapper surfaces the real error.
-- Missing embedded `core_bot/`: wrapper gives a specific fix path instead of a vague `ModuleNotFoundError`.
+- Tradebot import failure: runtime boot path surfaces the real error.
+- Missing embedded `core_bot/`: runtime gives a specific fix path instead of a vague `ModuleNotFoundError`.
 - Missing runtime artifacts: API returns safe empty/degraded states.
 - No opportunities: UI shows an honest empty state.
 - Backend unavailable: frontend shows connection failure clearly.
@@ -193,7 +243,7 @@ See: [Test reports guide](docs/test-reports/README.md)
 - Python 3.11+
 - Node.js 18+
 - Redis on `localhost:6379`
-- A local Tradebot checkout if using `TRADEBOT_ROOT` mode
+- A local Tradebot checkout if using external mode
 
 ---
 
@@ -244,19 +294,25 @@ python -m uvicorn api.server:app --host 0.0.0.0 --port 8000
 npm --prefix frontend run dev -- --host 0.0.0.0 --port 3000
 ```
 
-### 4. Optional wrapper process
+### 4. Runtime
 
 External Tradebot checkout:
 
 ```bash
 export TRADEBOT_ROOT=/absolute/path/to/tradebot
-python -m runner.live_wrapper
+python main.py
 ```
 
 Embedded synced core:
 
 ```bash
 python scripts/sync_tradebot_core.py --source ../tradebot --force
+python main.py
+```
+
+Compatibility wrapper:
+
+```bash
 python -m runner.live_wrapper
 ```
 
@@ -274,9 +330,10 @@ python -m runner.live_wrapper
 
 ## Environment knobs
 
-- `TRADEBOT_ROOT`: path to a local Tradebot checkout. Used by wrapper and API runtime discovery.
-- `CORE_BOT_ROOT`: alternate name for Tradebot root.
-- `CORE_BOT_RUNTIME_ROOT`: explicit runtime artifact root. Highest priority.
+- `ALGOTRADIFY_ENGINE_ROOT`: explicit path to a Tradebot-compatible runtime root. Highest engine-root priority.
+- `TRADEBOT_ROOT`: path to a local Tradebot checkout.
+- `CORE_BOT_ROOT`: alternate compatibility name for Tradebot root.
+- `CORE_BOT_RUNTIME_ROOT`: explicit runtime artifact root. Highest artifact-root priority.
 - `REDIS_HOST`: default `localhost`.
 - `REDIS_PORT`: default `6379`.
 - `TRADEBOT_REDIS_CHANNEL`: default `tradebot_events`.
@@ -314,7 +371,7 @@ Some alternate UI builds in this repo history also attempt these endpoints if pr
 
 Planned demo flow:
 
-1. Start Redis, backend, frontend, and wrapper.
+1. Start Redis, backend, frontend, and runtime through `python main.py`.
 2. Show runtime health endpoint.
 3. Show runtime snapshot in the UI.
 4. Stream live events through WebSocket.

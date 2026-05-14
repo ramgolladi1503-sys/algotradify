@@ -9,7 +9,7 @@ on:
 
 jobs:
   portfolio-quality-gate:
-    name: Documentation, architecture, API, WebSocket, schema, and portfolio quality gate
+    name: Documentation, runtime, API, WebSocket, schema, and portfolio quality gate
     runs-on: ubuntu-latest
 
     steps:
@@ -24,6 +24,7 @@ jobs:
           test -f docs/one-pagers/sdet-platform-portfolio.md
           test -f docs/test-reports/README.md
           test -f api/schemas.py
+          test -f tests/test_runtime_contract.py
           test -f tests/test_api_contracts.py
           test -f tests/test_websocket_contracts.py
           test -f tests/test_api_schema_contracts.py
@@ -33,6 +34,8 @@ jobs:
           set -euo pipefail
           grep -qi "Problem statement" README.md
           grep -qi "Architecture" README.md
+          grep -qi "Canonical runtime command" README.md
+          grep -qi "Runtime root priority" README.md
           grep -qi "Test strategy" README.md
           grep -qi "Failure modes" README.md
           grep -qi "Roadmap" README.md
@@ -47,8 +50,8 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r api/requirements.txt pytest httpx
 
-      - name: Run real API, WebSocket, and schema contract tests
-        run: pytest -q tests/test_api_contracts.py tests/test_websocket_contracts.py tests/test_api_schema_contracts.py
+      - name: Run runtime, API, WebSocket, and schema contract tests
+        run: pytest -q tests/test_runtime_contract.py tests/test_api_contracts.py tests/test_websocket_contracts.py tests/test_api_schema_contracts.py
 
       - name: Generate portfolio test report
         run: |
@@ -58,7 +61,7 @@ jobs:
 
           ## Scope
 
-          This CI gate validates the repository as a recruiter-facing SDET/API/WebSocket testing portfolio and runs real FastAPI + WebSocket + schema contract tests.
+          This CI gate validates the repository as a recruiter-facing SDET/API/WebSocket testing portfolio and runs runtime-root, FastAPI, WebSocket, and schema contract tests.
 
           ## Checks
 
@@ -67,14 +70,16 @@ jobs:
           - SDET one-pager exists.
           - Test reports guide exists.
           - Typed API schemas exist.
-          - README includes problem statement, architecture, test strategy, failure modes, and roadmap.
+          - README includes problem statement, architecture, canonical runtime command, runtime root priority, test strategy, failure modes, and roadmap.
+          - Runtime contract tests prove `main.py` and `api/server.py` share engine-root priority.
+          - Runtime contract tests prove `runner/live_wrapper.py` delegates to `main.py`.
           - FastAPI contract tests run for health, runtime health degradation, runtime snapshot parsing, opportunity normalization, and JSONL fallback behavior.
           - WebSocket contract tests run for degraded Redis notice, runtime snapshot event emission, and snapshot event shape stability.
           - OpenAPI schema contract tests validate typed response models and required fields.
 
           ## Current honest limitation
 
-          These tests validate API, schema, and WebSocket contracts without starting the full trading runtime. That is intentional: fast contract tests should fail before expensive integration tests.
+          These tests validate runtime-root contracts plus API, schema, and WebSocket contracts without starting the full trading runtime. Full runtime preflight and engine integration are handled in the next PR.
           REPORT
 
       - name: Upload portfolio report
