@@ -20,11 +20,45 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
 
-def _tradebot_root() -> Path:
-    for env_name in ("TRADEBOT_ROOT", "CORE_BOT_ROOT"):
+def _is_tradebot_compatible_root(path: Path) -> bool:
+    root = path.expanduser().resolve()
+    return (root / "main.py").is_file() and (root / "core").is_dir() and (root / "config").is_dir()
+
+
+def _candidate_tradebot_roots() -> list[Path]:
+    repo_root = _repo_root()
+    candidates: list[Path] = []
+
+    for env_name in ("ALGOTRADIFY_ENGINE_ROOT", "TRADEBOT_ROOT", "CORE_BOT_ROOT"):
         configured = str(os.getenv(env_name, "")).strip()
         if configured:
-            return Path(configured).expanduser().resolve()
+            candidates.append(Path(configured))
+
+    candidates.extend(
+        [
+            repo_root / "core_bot",
+            repo_root.parent / "tradebot",
+            Path.home() / "tradebot",
+        ]
+    )
+
+    unique: list[Path] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        try:
+            key = str(candidate.expanduser().resolve())
+        except Exception:
+            key = str(candidate)
+        if key not in seen:
+            seen.add(key)
+            unique.append(candidate)
+    return unique
+
+
+def _tradebot_root() -> Path:
+    for candidate in _candidate_tradebot_roots():
+        if _is_tradebot_compatible_root(candidate):
+            return candidate.expanduser().resolve()
     return (_repo_root() / "core_bot").resolve()
 
 
@@ -96,6 +130,20 @@ def _normalize_opportunity(row: dict, bucket: str, index: int) -> dict:
     }
 
 
+def _split_top_opportunities(top: dict) -> tuple[list, list]:
+    if not isinstance(top, dict):
+        return [], []
+    payload = top.get("payload")
+    if not isinstance(payload, dict):
+        payload = top
+    executable = payload.get("top_executable_opportunities") or payload.get("executable") or []
+    advisory = payload.get("top_advisory_opportunities") or payload.get("advisory") or []
+    return (
+        executable if isinstance(executable, list) else [],
+        advisory if isinstance(advisory, list) else [],
+    )
+
+
 def _runtime_health_payload() -> dict:
     root = _runtime_root()
     health_path_candidates = [
@@ -140,26 +188,20 @@ def _opportunities_payload(limit: int) -> list[dict]:
     snap = _load_json(root / "top_opportunities_latest.json", {})
     if not snap:
         snap = _load_json(root / "logs" / "top_opportunities_latest.json", {})
-    if isinstance(snap, dict):
-        payload = snap.get("payload") or snap
-        if isinstance(payload, dict):
-            executable = payload.get("top_executable_opportunities") or payload.get("executable")
-            advisory = payload.get("top_advisory_opportunities") or payload.get("advisory")
-            rows: list[dict] = []
-            if isinstance(executable, list):
-                rows.extend(
-                    _normalize_opportunity(row, "executable", idx)
-                    for idx, row in enumerate(executable, start=1)
-                    if isinstance(row, dict)
-                )
-            if isinstance(advisory, list):
-                rows.extend(
-                    _normalize_opportunity(row, "advisory", idx)
-                    for idx, row in enumerate(advisory, start=1)
-                    if isinstance(row, dict)
-                )
-            if rows:
-                return rows[:limit]
+    executable, advisory = _split_top_opportunities(snap)
+    rows: list[dict] = []
+    rows.extend(
+        _normalize_opportunity(row, "executable", idx)
+        for idx, row in enumerate(executable, start=1)
+        if isinstance(row, dict)
+    )
+    rows.extend(
+        _normalize_opportunity(row, "advisory", idx)
+        for idx, row in enumerate(advisory, start=1)
+        if isinstance(row, dict)
+    )
+    if rows:
+        return rows[:limit]
 
     fallback_paths = [
         root / "logs" / "suggestions.jsonl",
@@ -186,19 +228,15 @@ def _runtime_snapshot_payload() -> dict:
     top = _load_json(root / "top_opportunities_latest.json", {})
     if not top:
         top = _load_json(root / "logs" / "top_opportunities_latest.json", {})
-    top_payload = top.get("payload") if isinstance(top, dict) else {}
-    if not isinstance(top_payload, dict) and isinstance(top, dict):
-        top_payload = top
-    executable = top_payload.get("top_executable_opportunities") if isinstance(top_payload, dict) else []
-    advisory = top_payload.get("top_advisory_opportunities") if isinstance(top_payload, dict) else []
+    executable, advisory = _split_top_opportunities(top)
     return {
         "runtime_root": str(root),
         "tradebot_root": str(_tradebot_root()),
         "cycle_stage": cycle.get("cycle_stage") if isinstance(cycle, dict) else None,
         "market_mode": cycle.get("market_mode") if isinstance(cycle, dict) else None,
         "cycle_ok": cycle.get("cycle_ok") if isinstance(cycle, dict) else None,
-        "top_executable_count": len(executable) if isinstance(executable, list) else 0,
-        "top_advisory_count": len(advisory) if isinstance(advisory, list) else 0,
+        "top_executable_count": len(executable),
+        "top_advisory_count": len(advisory),
         "primary_blocker": cycle.get("primary_blocker") if isinstance(cycle, dict) else None,
         "reason": cycle.get("reason") if isinstance(cycle, dict) else None,
         "ts_epoch": cycle.get("ts_epoch") if isinstance(cycle, dict) else None,
