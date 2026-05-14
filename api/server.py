@@ -3,7 +3,7 @@ import json
 import os
 from pathlib import Path
 
-from fastapi import FastAPI, Query, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 import redis
 from redis.exceptions import RedisError
@@ -76,6 +76,18 @@ def _tail_jsonl(path: Path, limit: int = 100) -> list[dict]:
         if isinstance(row, dict):
             out.append(row)
     return out
+
+
+def _query_feature_map(request: Request) -> dict[str, float | str]:
+    features: dict[str, float | str] = {}
+    for key, value in request.query_params.items():
+        if key in {"symbol"}:
+            continue
+        try:
+            features[key] = float(value)
+        except (TypeError, ValueError):
+            features[key] = value
+    return features
 
 
 def _normalize_opportunity(row: dict, bucket: str, index: int) -> dict:
@@ -287,14 +299,15 @@ def strategies():
 
 
 @app.get("/strategies/draft-candidates", response_model=list[StrategyCandidateDraftResponse])
-def draft_candidates(symbol: str = Query(..., min_length=1)):
+def draft_candidates(request: Request, symbol: str = Query(..., min_length=1)):
     """Generate strategy candidate drafts from supplied score features.
 
-    Query params other than `symbol` are intentionally not parsed yet. This
-    endpoint is a contract visibility endpoint for PR 3; real runtime strategy
-    wiring belongs in later candidate truth/opportunity-layer PRs.
+    Query params other than `symbol` are treated as feature values. This is a
+    contract preview endpoint for PR 3; real runtime strategy wiring belongs in
+    later candidate truth/opportunity-layer PRs.
     """
-    context = StrategyContext(symbol=symbol.upper(), features={}, raw={"source": "api_contract_preview"})
+    features = _query_feature_map(request)
+    context = StrategyContext(symbol=symbol.upper(), features=features, raw={"source": "api_contract_preview"})
     return [draft.to_dict() for draft in _strategy_registry().generate_all(context)]
 
 
