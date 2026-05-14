@@ -115,6 +115,35 @@ class CandidateTruthRecordResponse(BaseModel):
     is_execution_decision: bool
 
 
+class OpportunityLayerRecordResponse(BaseModel):
+    candidate_id: str
+    symbol: str | None = None
+    strategy_id: str | None = None
+    setup_family: str | None = None
+    truth_status: str
+    opportunity_status: str
+    rank_score: float | int
+    rank: int | None = None
+    selected: bool
+    blockers: list[str]
+    warnings: list[str]
+    provenance: dict[str, Any]
+    candidate_truth: dict[str, Any]
+    is_execution_decision: bool
+
+
+class OpportunityLayerResponse(BaseModel):
+    status: str
+    reason: str | None = None
+    counts: dict[str, int]
+    selected: OpportunityLayerRecordResponse | None = None
+    ranked: list[OpportunityLayerRecordResponse]
+    blocked: list[OpportunityLayerRecordResponse]
+    dropped: list[OpportunityLayerRecordResponse]
+    diagnostics: dict[str, Any]
+    is_execution_decision: bool
+
+
 class RuntimeNoticePayload(BaseModel):
     source: str
     status: str
