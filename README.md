@@ -67,12 +67,13 @@ flowchart LR
 - `main.py`: canonical Algotradify runtime entrypoint. It starts the Tradebot-compatible runtime and does not start Streamlit.
 - `runtime_contract.py`: shared runtime root, artifact root, and preflight contract used by CLI and API.
 - `scripts/preflight_runtime.py`: CLI preflight checker for runtime health before startup.
+- `strategies/`: strategy contract and registry layer that emits candidate drafts only.
 - `core_bot/`: optional embedded copy of the Tradebot runtime copied from `ramgolladi1503-sys/tradebot` `main`.
 - `ALGOTRADIFY_ENGINE_ROOT`: explicit external engine root override.
 - `TRADEBOT_ROOT`: optional pointer to a separate local Tradebot checkout.
 - `CORE_BOT_ROOT`: compatibility alias for a separate local Tradebot checkout.
 - `runner/live_wrapper.py`: compatibility wrapper that delegates to `main.py`.
-- `api/server.py`: FastAPI runtime bridge, WebSocket stream, and runtime preflight API.
+- `api/server.py`: FastAPI runtime bridge, WebSocket stream, strategy registry API, and runtime preflight API.
 - `frontend/`: Vite React UI for runtime health, snapshot, opportunities, and live events.
 
 ---
@@ -193,6 +194,44 @@ Preflight status meanings:
 
 ---
 
+## Strategy contract
+
+Strategies in Algotradify emit **candidate drafts only**. They must not mark trades executable, resolve broker contracts, bypass readiness gates, or create orders.
+
+A strategy draft includes:
+
+- `candidate_id`
+- `symbol`
+- `strategy_id`
+- `setup_family`
+- `direction`
+- `confidence`
+- `entry_hypothesis`
+- `invalidation_hypothesis`
+- `required_market_regime`
+- `required_data`
+- `signal_features`
+- `blockers`
+- `warnings`
+- `provenance`
+- `raw`
+
+Current strategy registry endpoint:
+
+```bash
+curl http://localhost:8000/strategies
+```
+
+Candidate draft preview endpoint:
+
+```bash
+curl 'http://localhost:8000/strategies/draft-candidates?symbol=NIFTY&orb_retest_score=85'
+```
+
+Important: these drafts are not executable trades. They are inputs for the upcoming Candidate Truth Layer and Opportunity Layer.
+
+---
+
 ## What is integrated
 
 - `python main.py` boot path surfaces real import/runtime failures instead of hiding them.
@@ -206,6 +245,8 @@ Preflight status meanings:
   - `GET /runtime/preflight`
   - `GET /runtime/snapshot`
   - `GET /opportunities?limit=...`
+  - `GET /strategies`
+  - `GET /strategies/draft-candidates?symbol=...&<feature>=...`
 - Backend WebSocket endpoint:
   - `/ws`
   - forwards Redis `tradebot_events`
@@ -243,6 +284,8 @@ This project should be tested like a production runtime bridge, not a static fro
 
 - Health endpoint contract tests.
 - Runtime preflight contract tests.
+- Strategy registry contract tests.
+- Strategy candidate draft tests.
 - Runtime snapshot parsing tests.
 - Opportunity endpoint response-shape tests.
 - Redis-unavailable degradation tests.
@@ -265,7 +308,7 @@ This project should be tested like a production runtime bridge, not a static fro
 - Start backend.
 - Start frontend.
 - Start runtime through `python main.py`.
-- Verify health, preflight, snapshot, opportunity, and WebSocket event flow.
+- Verify health, preflight, snapshot, opportunity, strategy registry, and WebSocket event flow.
 
 See: [Test reports guide](docs/test-reports/README.md)
 
@@ -280,6 +323,7 @@ See: [Test reports guide](docs/test-reports/README.md)
 - Invalid execution mode: preflight fails.
 - Missing PAPER/LIVE broker token candidate: preflight fails.
 - Missing SIM broker token candidate: preflight warns.
+- Strategy output cannot claim executable status.
 - No opportunities: UI shows an honest empty state.
 - Backend unavailable: frontend shows connection failure clearly.
 - WebSocket interruption: UI does not pretend live data is still flowing.
@@ -379,6 +423,8 @@ python -m runner.live_wrapper
 - Runtime health: `http://localhost:8000/runtime/health`
 - Runtime snapshot: `http://localhost:8000/runtime/snapshot`
 - Opportunities: `http://localhost:8000/opportunities?limit=20`
+- Strategy registry: `http://localhost:8000/strategies`
+- Strategy draft preview: `http://localhost:8000/strategies/draft-candidates?symbol=NIFTY&orb_retest_score=85`
 - Frontend: `http://localhost:3000`
 
 ---
@@ -431,9 +477,10 @@ Planned demo flow:
 3. Show runtime preflight endpoint.
 4. Show runtime health endpoint.
 5. Show runtime snapshot in the UI.
-6. Stream live events through WebSocket.
-7. Kill Redis and show graceful degradation.
-8. Restore Redis and verify recovery.
+6. Show strategy registry and draft candidate preview.
+7. Stream live events through WebSocket.
+8. Kill Redis and show graceful degradation.
+9. Restore Redis and verify recovery.
 
 ---
 
