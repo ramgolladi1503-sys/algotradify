@@ -126,10 +126,13 @@ def _classify(raw: dict[str, Any], blockers: list[str]) -> CandidateTruthStatus:
     if bool(raw.get("synthetic")) or bool(raw.get("is_synthetic")) or _contains_hint(raw, _SYNTHETIC_HINTS):
         return CandidateTruthStatus.SYNTHETIC
 
-    if raw.get("is_execution_decision") is False or raw.get("entry_hypothesis") or raw.get("signal_features"):
+    if raw.get("is_execution_decision") is False or raw.get("entry_hypothesis") is not None or raw.get("signal_features") is not None:
         return CandidateTruthStatus.REAL
 
-    return CandidateTruthStatus.UNKNOWN
+    # If the candidate has a complete identity and no synthetic/fallback/advisory
+    # hints, treat it as a real candidate hypothesis. Execution readiness is
+    # decided later; REAL does not mean executable.
+    return CandidateTruthStatus.REAL
 
 
 def normalize_candidate(candidate: Any, *, source: str = "unknown") -> CandidateTruthRecord:
