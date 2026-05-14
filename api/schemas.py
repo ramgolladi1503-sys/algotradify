@@ -74,6 +74,32 @@ class OpportunityResponse(BaseModel):
     raw: dict[str, Any]
 
 
+class StrategyInfoResponse(BaseModel):
+    strategy_id: str
+    setup_family: str
+    display_name: str
+    required_data: list[str]
+
+
+class StrategyCandidateDraftResponse(BaseModel):
+    candidate_id: str
+    symbol: str
+    strategy_id: str
+    setup_family: str
+    direction: str
+    confidence: float | int
+    entry_hypothesis: dict[str, Any]
+    invalidation_hypothesis: dict[str, Any]
+    required_market_regime: str | None = None
+    required_data: list[str]
+    signal_features: dict[str, Any]
+    blockers: list[str]
+    warnings: list[str]
+    provenance: dict[str, Any]
+    raw: dict[str, Any]
+    is_execution_decision: bool
+
+
 class RuntimeNoticePayload(BaseModel):
     source: str
     status: str
