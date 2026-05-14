@@ -11,6 +11,7 @@ from redis.exceptions import RedisError
 from api.schemas import (
     CandidateTruthRecordResponse,
     HealthResponse,
+    OpportunityLayerResponse,
     OpportunityResponse,
     RuntimeHealthResponse,
     RuntimePreflightResponse,
@@ -19,6 +20,7 @@ from api.schemas import (
     StrategyInfoResponse,
 )
 from candidate_truth import normalize_candidates
+from opportunity_layer import run_opportunity_pipeline
 from runtime_contract import (
     candidate_runtime_roots,
     is_tradebot_compatible_root,
@@ -218,6 +220,11 @@ def _candidate_truth_payload(limit: int) -> list[dict]:
     return [record.to_dict() for record in normalize_candidates(rows, source="api.opportunities")]
 
 
+def _opportunity_layer_payload(limit: int) -> dict:
+    rows = _opportunities_payload(limit)
+    return run_opportunity_pipeline(rows, source="api.opportunities").to_dict()
+
+
 def _runtime_snapshot_payload() -> dict:
     root = _runtime_root()
     cycle = _load_json(root / "logs" / "engine_cycle_status.json", {})
@@ -311,6 +318,11 @@ def candidate_truth(limit: int = Query(default=25, ge=1, le=200)):
     return _candidate_truth_payload(limit)
 
 
+@app.get("/opportunity-layer", response_model=OpportunityLayerResponse)
+def opportunity_layer(limit: int = Query(default=25, ge=1, le=200)):
+    return _opportunity_layer_payload(limit)
+
+
 @app.get("/strategies", response_model=list[StrategyInfoResponse])
 def strategies():
     return _strategy_registry().list()
@@ -331,6 +343,12 @@ def draft_candidates(request: Request, symbol: str = Query(..., min_length=1)):
 def draft_candidate_truth(request: Request, symbol: str = Query(..., min_length=1)):
     drafts = _strategy_draft_payload(request, symbol)
     return [record.to_dict() for record in normalize_candidates(drafts, source="api.strategy_draft_preview")]
+
+
+@app.get("/strategies/draft-candidates/opportunity-layer", response_model=OpportunityLayerResponse)
+def draft_candidate_opportunity_layer(request: Request, symbol: str = Query(..., min_length=1)):
+    drafts = _strategy_draft_payload(request, symbol)
+    return run_opportunity_pipeline(drafts, source="api.strategy_draft_preview").to_dict()
 
 
 @app.websocket("/ws")
