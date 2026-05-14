@@ -10,8 +10,8 @@ The runtime engine is expected under ./core_bot after running:
 
   python scripts/sync_tradebot_core.py --source ../tradebot --force
 
-A separate external checkout can still be used with TRADEBOT_ROOT, but the
-preferred self-contained Algotradify path is ./core_bot.
+A separate external checkout can still be used with ALGOTRADIFY_ENGINE_ROOT or
+TRADEBOT_ROOT, but the preferred self-contained Algotradify path is ./core_bot.
 """
 from __future__ import annotations
 
@@ -22,6 +22,9 @@ import traceback
 from pathlib import Path
 from types import ModuleType
 from typing import Callable
+
+from runtime_contract import candidate_runtime_roots, is_tradebot_compatible_root
+from runtime_contract import resolve_runtime_root as _resolve_runtime_root
 
 REPO_ROOT = Path(__file__).resolve().parent
 EMBEDDED_ENGINE_ROOT = REPO_ROOT / "core_bot"
@@ -40,49 +43,17 @@ class AlgotradifyRuntimeNotFound(RuntimeError):
 
 
 def _is_tradebot_compatible_root(path: Path) -> bool:
-    root = path.expanduser().resolve()
-    return (root / "main.py").is_file() and (root / "core").is_dir() and (root / "config").is_dir()
+    return is_tradebot_compatible_root(path)
 
 
 def _candidate_runtime_roots() -> list[Path]:
-    """Return runtime roots in the order Algotradify should try them.
-
-    Embedded core comes first because this repo should be able to run on its own.
-    TRADEBOT_ROOT/CORE_BOT_ROOT are still respected as explicit overrides for
-    local development or verification against a separate checkout.
-    """
-    candidates: list[Path] = []
-
-    for env_name in ("ALGOTRADIFY_ENGINE_ROOT", "TRADEBOT_ROOT", "CORE_BOT_ROOT"):
-        configured = os.getenv(env_name)
-        if configured:
-            candidates.append(Path(configured))
-
-    candidates.extend(
-        [
-            EMBEDDED_ENGINE_ROOT,
-            REPO_ROOT.parent / "tradebot",
-            Path.home() / "tradebot",
-        ]
-    )
-
-    unique: list[Path] = []
-    seen: set[str] = set()
-    for candidate in candidates:
-        try:
-            key = str(candidate.expanduser().resolve())
-        except Exception:
-            key = str(candidate)
-        if key not in seen:
-            seen.add(key)
-            unique.append(candidate)
-    return unique
+    return candidate_runtime_roots(base_repo_root=REPO_ROOT)
 
 
 def resolve_runtime_root() -> Path:
-    for candidate in _candidate_runtime_roots():
-        if _is_tradebot_compatible_root(candidate):
-            return candidate.expanduser().resolve()
+    runtime_root = _resolve_runtime_root(base_repo_root=REPO_ROOT)
+    if runtime_root is not None:
+        return runtime_root
 
     checked = "\n".join(f"  - {p.expanduser()}" for p in _candidate_runtime_roots())
     raise AlgotradifyRuntimeNotFound(
@@ -93,7 +64,7 @@ def resolve_runtime_root() -> Path:
         "  python scripts/sync_tradebot_core.py --source ../tradebot --force\n"
         "  python main.py\n\n"
         "Temporary external-checkout mode:\n"
-        "  export TRADEBOT_ROOT=/absolute/path/to/tradebot\n"
+        "  export ALGOTRADIFY_ENGINE_ROOT=/absolute/path/to/tradebot\n"
         "  python main.py"
     )
 

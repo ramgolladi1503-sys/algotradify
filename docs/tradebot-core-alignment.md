@@ -27,6 +27,34 @@ python -m runner.live_wrapper
 
 The wrapper must delegate to `main.py`. It must not reimplement engine-root resolution.
 
+## Runtime preflight
+
+Before PAPER or LIVE mode, run:
+
+```bash
+python scripts/preflight_runtime.py
+```
+
+For machine-readable output:
+
+```bash
+python scripts/preflight_runtime.py --json
+```
+
+The API exposes the same shared preflight contract:
+
+```bash
+curl http://localhost:8000/runtime/preflight
+```
+
+Preflight returns:
+
+- `PASS`: startup contract looks valid.
+- `WARN`: usable for SIM/dev but something important is missing.
+- `FAIL`: do not start live/paper runtime until fixed.
+
+The preflight checks runtime root discovery, `main.py`, `core/`, `config/`, `requirements.txt`, runtime artifact root, writability, execution mode validity, and broker token expectations.
+
 ## Engine root resolution
 
 Both `main.py` and `api/server.py` must use the same engine-root priority:
@@ -50,6 +78,7 @@ Use this when you want zero copied engine code inside Algotradify:
 
 ```bash
 export ALGOTRADIFY_ENGINE_ROOT=/absolute/path/to/tradebot
+python scripts/preflight_runtime.py
 python main.py
 ```
 
@@ -57,11 +86,13 @@ Compatibility variables also work:
 
 ```bash
 export TRADEBOT_ROOT=/absolute/path/to/tradebot
+python scripts/preflight_runtime.py
 python main.py
 ```
 
 ```bash
 export CORE_BOT_ROOT=/absolute/path/to/tradebot
+python scripts/preflight_runtime.py
 python main.py
 ```
 
@@ -73,6 +104,7 @@ Use this when Algotradify must be self-contained:
 
 ```bash
 python scripts/sync_tradebot_core.py --source ../tradebot --force
+python scripts/preflight_runtime.py
 python main.py
 ```
 
@@ -119,9 +151,11 @@ export TRADEBOT_REDIS_CHANNEL=tradebot_events
 ## Local verification
 
 ```bash
+python scripts/preflight_runtime.py
 python main.py
 python -m uvicorn api.server:app --host 0.0.0.0 --port 8000
 curl http://localhost:8000/health
+curl http://localhost:8000/runtime/preflight
 curl http://localhost:8000/runtime/health
 curl http://localhost:8000/runtime/snapshot
 curl 'http://localhost:8000/opportunities?limit=20'
