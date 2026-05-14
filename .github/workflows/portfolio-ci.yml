@@ -9,7 +9,7 @@ on:
 
 jobs:
   portfolio-quality-gate:
-    name: Documentation, runtime, preflight, API, WebSocket, schema, and portfolio quality gate
+    name: Documentation, runtime, preflight, strategy, API, WebSocket, schema, and portfolio quality gate
     runs-on: ubuntu-latest
 
     steps:
@@ -25,9 +25,12 @@ jobs:
           test -f docs/test-reports/README.md
           test -f runtime_contract.py
           test -f scripts/preflight_runtime.py
+          test -f strategies/base.py
+          test -f strategies/registry.py
           test -f api/schemas.py
           test -f tests/test_runtime_contract.py
           test -f tests/test_runtime_preflight.py
+          test -f tests/test_strategy_registry.py
           test -f tests/test_api_contracts.py
           test -f tests/test_websocket_contracts.py
           test -f tests/test_api_schema_contracts.py
@@ -40,6 +43,7 @@ jobs:
           grep -qi "Canonical runtime command" README.md
           grep -qi "Runtime root priority" README.md
           grep -qi "Runtime preflight" README.md
+          grep -qi "Strategy contract" README.md
           grep -qi "Test strategy" README.md
           grep -qi "Failure modes" README.md
           grep -qi "Roadmap" README.md
@@ -54,8 +58,8 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r api/requirements.txt pytest httpx
 
-      - name: Run runtime, preflight, API, WebSocket, and schema contract tests
-        run: pytest -q tests/test_runtime_contract.py tests/test_runtime_preflight.py tests/test_api_contracts.py tests/test_websocket_contracts.py tests/test_api_schema_contracts.py
+      - name: Run runtime, preflight, strategy, API, WebSocket, and schema contract tests
+        run: pytest -q tests/test_runtime_contract.py tests/test_runtime_preflight.py tests/test_strategy_registry.py tests/test_api_contracts.py tests/test_websocket_contracts.py tests/test_api_schema_contracts.py
 
       - name: Generate portfolio test report
         run: |
@@ -65,7 +69,7 @@ jobs:
 
           ## Scope
 
-          This CI gate validates the repository as a recruiter-facing SDET/API/WebSocket testing portfolio and runs runtime-root, runtime-preflight, FastAPI, WebSocket, and schema contract tests.
+          This CI gate validates the repository as a recruiter-facing SDET/API/WebSocket testing portfolio and runs runtime-root, runtime-preflight, strategy-contract, FastAPI, WebSocket, and schema contract tests.
 
           ## Checks
 
@@ -75,18 +79,20 @@ jobs:
           - Test reports guide exists.
           - Runtime contract module exists.
           - Runtime preflight CLI exists.
+          - Strategy contract and registry exist.
           - Typed API schemas exist.
-          - README includes problem statement, architecture, canonical runtime command, runtime root priority, runtime preflight, test strategy, failure modes, and roadmap.
+          - README includes problem statement, architecture, canonical runtime command, runtime root priority, runtime preflight, strategy contract, test strategy, failure modes, and roadmap.
           - Runtime contract tests prove `main.py` and `api/server.py` share engine-root priority.
           - Runtime contract tests prove `runner/live_wrapper.py` delegates to `main.py`.
           - Runtime preflight tests validate PASS/WARN/FAIL behavior, invalid mode detection, token expectation, and `/runtime/preflight` response shape.
+          - Strategy registry tests validate strategy listing, candidate draft generation, and API contract shape.
           - FastAPI contract tests run for health, runtime health degradation, runtime snapshot parsing, opportunity normalization, and JSONL fallback behavior.
           - WebSocket contract tests run for degraded Redis notice, runtime snapshot event emission, and snapshot event shape stability.
           - OpenAPI schema contract tests validate typed response models and required fields.
 
           ## Current honest limitation
 
-          These tests validate runtime-root contracts, preflight contracts, API, schema, and WebSocket behavior without starting the full trading runtime. Full engine-level integration continues in later PRs.
+          These tests validate runtime-root, preflight, strategy-contract, API, schema, and WebSocket behavior without starting the full trading runtime. Candidate Truth Layer and Opportunity Layer integration continue in later PRs.
           REPORT
 
       - name: Upload portfolio report
