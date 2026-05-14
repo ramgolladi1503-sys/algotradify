@@ -15,10 +15,8 @@ from __future__ import annotations
 import argparse
 import fnmatch
 import json
-import os
 import shutil
 import subprocess
-import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -28,7 +26,7 @@ DEFAULT_TARGET = REPO_ROOT / "core_bot"
 EXCLUDE_PATTERNS = {
     ".git",
     ".git/*",
-    ".github/workflows/*",  # algotradify owns its own workflows
+    ".github/workflows/*",
     ".venv",
     ".venv/*",
     "venv",
@@ -99,7 +97,7 @@ def _clean_target(target: Path, force: bool) -> None:
     if target.exists() and not force:
         raise SystemExit(
             f"Target already exists: {target}\n"
-            "Use --force to replace it, or set TRADEBOT_ROOT to a separate checkout instead."
+            "Use --force to replace it, or set ALGOTRADIFY_ENGINE_ROOT/TRADEBOT_ROOT to a separate checkout instead."
         )
     if target.exists():
         shutil.rmtree(target)
@@ -197,6 +195,7 @@ def main() -> int:
     print(f"Synced tradebot core into {target}")
     print(f"Copied files: {copied_files}")
     print("Next checks:")
+    print("  python main.py")
     print("  python -m runner.live_wrapper")
     print("  python -m uvicorn api.server:app --host 0.0.0.0 --port 8000")
     return 0
