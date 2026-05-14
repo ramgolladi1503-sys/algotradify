@@ -12,7 +12,14 @@ from api.schemas import (
     HealthResponse,
     OpportunityResponse,
     RuntimeHealthResponse,
+    RuntimePreflightResponse,
     RuntimeSnapshotResponse,
+)
+from runtime_contract import (
+    candidate_runtime_roots,
+    is_tradebot_compatible_root,
+    run_preflight,
+    runtime_artifact_root,
 )
 
 
@@ -21,38 +28,11 @@ def _repo_root() -> Path:
 
 
 def _is_tradebot_compatible_root(path: Path) -> bool:
-    root = path.expanduser().resolve()
-    return (root / "main.py").is_file() and (root / "core").is_dir() and (root / "config").is_dir()
+    return is_tradebot_compatible_root(path)
 
 
 def _candidate_tradebot_roots() -> list[Path]:
-    repo_root = _repo_root()
-    candidates: list[Path] = []
-
-    for env_name in ("ALGOTRADIFY_ENGINE_ROOT", "TRADEBOT_ROOT", "CORE_BOT_ROOT"):
-        configured = str(os.getenv(env_name, "")).strip()
-        if configured:
-            candidates.append(Path(configured))
-
-    candidates.extend(
-        [
-            repo_root / "core_bot",
-            repo_root.parent / "tradebot",
-            Path.home() / "tradebot",
-        ]
-    )
-
-    unique: list[Path] = []
-    seen: set[str] = set()
-    for candidate in candidates:
-        try:
-            key = str(candidate.expanduser().resolve())
-        except Exception:
-            key = str(candidate)
-        if key not in seen:
-            seen.add(key)
-            unique.append(candidate)
-    return unique
+    return candidate_runtime_roots(base_repo_root=_repo_root())
 
 
 def _tradebot_root() -> Path:
@@ -63,21 +43,7 @@ def _tradebot_root() -> Path:
 
 
 def _runtime_root() -> Path:
-    configured = str(os.getenv("CORE_BOT_RUNTIME_ROOT", "")).strip()
-    if configured:
-        return Path(configured).expanduser().resolve()
-
-    bot_root = _tradebot_root()
-    candidates = [
-        bot_root / ".runtime",
-        bot_root / "runtime",
-        _repo_root() / "core_bot" / ".runtime",
-        _repo_root() / "core_bot" / "runtime",
-    ]
-    for candidate in candidates:
-        if candidate.exists():
-            return candidate.resolve()
-    return (bot_root / ".runtime").resolve()
+    return runtime_artifact_root(engine_root=_tradebot_root(), base_repo_root=_repo_root())
 
 
 def _load_json(path: Path, default):
@@ -243,6 +209,10 @@ def _runtime_snapshot_payload() -> dict:
     }
 
 
+def _runtime_preflight_payload() -> dict:
+    return run_preflight(base_repo_root=_repo_root())
+
+
 app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
@@ -287,6 +257,11 @@ def health():
 @app.get("/runtime/health", response_model=RuntimeHealthResponse)
 def runtime_health():
     return _runtime_health_payload()
+
+
+@app.get("/runtime/preflight", response_model=RuntimePreflightResponse)
+def runtime_preflight():
+    return _runtime_preflight_payload()
 
 
 @app.get("/runtime/snapshot", response_model=RuntimeSnapshotResponse)
