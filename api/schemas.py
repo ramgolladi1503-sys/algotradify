@@ -15,6 +15,7 @@ class RuntimeHealthResponse(BaseModel):
     status: str
     reason: str | None = None
     runtime_root: str | None = None
+    tradebot_root: str | None = None
     mode: str | None = None
     market_open: bool | None = None
     feed: dict[str, Any] | None = None
@@ -24,8 +25,30 @@ class RuntimeHealthResponse(BaseModel):
     raw: dict[str, Any] | None = None
 
 
+class RuntimePreflightCheck(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    name: str
+    status: str
+    message: str
+    path: str | None = None
+    metadata: dict[str, Any] | None = None
+
+
+class RuntimePreflightResponse(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    status: str
+    runtime_root: str | None = None
+    runtime_artifact_root: str | None = None
+    checked_at_source: str
+    summary: dict[str, int]
+    checks: list[RuntimePreflightCheck]
+
+
 class RuntimeSnapshotResponse(BaseModel):
     runtime_root: str
+    tradebot_root: str | None = None
     cycle_stage: str | None = None
     market_mode: str | None = None
     cycle_ok: bool | None = None

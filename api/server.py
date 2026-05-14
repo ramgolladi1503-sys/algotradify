@@ -12,15 +12,38 @@ from api.schemas import (
     HealthResponse,
     OpportunityResponse,
     RuntimeHealthResponse,
+    RuntimePreflightResponse,
     RuntimeSnapshotResponse,
+)
+from runtime_contract import (
+    candidate_runtime_roots,
+    is_tradebot_compatible_root,
+    run_preflight,
+    runtime_artifact_root,
 )
 
 
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parents[1]
+
+
+def _is_tradebot_compatible_root(path: Path) -> bool:
+    return is_tradebot_compatible_root(path)
+
+
+def _candidate_tradebot_roots() -> list[Path]:
+    return candidate_runtime_roots(base_repo_root=_repo_root())
+
+
+def _tradebot_root() -> Path:
+    for candidate in _candidate_tradebot_roots():
+        if _is_tradebot_compatible_root(candidate):
+            return candidate.expanduser().resolve()
+    return (_repo_root() / "core_bot").resolve()
+
+
 def _runtime_root() -> Path:
-    configured = str(os.getenv("CORE_BOT_RUNTIME_ROOT", "")).strip()
-    if configured:
-        return Path(configured).expanduser().resolve()
-    return (Path(__file__).resolve().parents[1] / "core_bot" / ".runtime").resolve()
+    return runtime_artifact_root(engine_root=_tradebot_root(), base_repo_root=_repo_root())
 
 
 def _load_json(path: Path, default):
@@ -51,12 +74,14 @@ def _tail_jsonl(path: Path, limit: int = 100) -> list[dict]:
 def _normalize_opportunity(row: dict, bucket: str, index: int) -> dict:
     symbol = row.get("symbol") or row.get("underlying") or row.get("index_symbol")
     strategy = row.get("strategy") or row.get("strategy_family")
-    candidate_id = row.get("trade_id") or row.get("advisory_id") or f"{bucket}_{index}"
+    candidate_id = row.get("trade_id") or row.get("advisory_id") or row.get("candidate_id") or f"{bucket}_{index}"
     score = row.get("final_score")
     if score is None:
         score = row.get("rank_score")
+    if score is None:
+        score = row.get("score")
     return {
-        "candidate_id": candidate_id,
+        "candidate_id": str(candidate_id),
         "symbol": symbol,
         "strategy": strategy,
         "permission": row.get("permission"),
@@ -71,21 +96,48 @@ def _normalize_opportunity(row: dict, bucket: str, index: int) -> dict:
     }
 
 
+def _split_top_opportunities(top: dict) -> tuple[list, list]:
+    if not isinstance(top, dict):
+        return [], []
+    payload = top.get("payload")
+    if not isinstance(payload, dict):
+        payload = top
+    executable = payload.get("top_executable_opportunities") or payload.get("executable") or []
+    advisory = payload.get("top_advisory_opportunities") or payload.get("advisory") or []
+    return (
+        executable if isinstance(executable, list) else [],
+        advisory if isinstance(advisory, list) else [],
+    )
+
+
 def _runtime_health_payload() -> dict:
     root = _runtime_root()
-    health_path = root / "logs" / "runtime_health_latest.json"
-    payload = _load_json(health_path, {})
+    health_path_candidates = [
+        root / "logs" / "runtime_health_latest.json",
+        root / "runtime_health_latest.json",
+    ]
+    payload = {}
+    for health_path in health_path_candidates:
+        payload = _load_json(health_path, {})
+        if isinstance(payload, dict) and payload:
+            break
+
+    base = {
+        "runtime_root": str(root),
+        "tradebot_root": str(_tradebot_root()),
+    }
     if not isinstance(payload, dict) or not payload:
         return {
+            **base,
             "status": "unknown",
             "reason": "runtime_health_unavailable",
-            "runtime_root": str(root),
         }
     feed = payload.get("feed")
     risk = payload.get("risk")
     execution = payload.get("execution")
     blocked = bool(feed and feed.get("blocked")) or bool(risk and risk.get("halted"))
     return {
+        **base,
         "status": "blocked" if blocked else "ok",
         "mode": payload.get("mode"),
         "market_open": payload.get("market_open"),
@@ -100,28 +152,33 @@ def _runtime_health_payload() -> dict:
 def _opportunities_payload(limit: int) -> list[dict]:
     root = _runtime_root()
     snap = _load_json(root / "top_opportunities_latest.json", {})
-    if isinstance(snap, dict):
-        payload = snap.get("payload") or {}
-        if isinstance(payload, dict):
-            executable = payload.get("top_executable_opportunities")
-            advisory = payload.get("top_advisory_opportunities")
-            rows: list[dict] = []
-            if isinstance(executable, list):
-                rows.extend(
-                    _normalize_opportunity(row, "executable", idx)
-                    for idx, row in enumerate(executable, start=1)
-                    if isinstance(row, dict)
-                )
-            if isinstance(advisory, list):
-                rows.extend(
-                    _normalize_opportunity(row, "advisory", idx)
-                    for idx, row in enumerate(advisory, start=1)
-                    if isinstance(row, dict)
-                )
-            if rows:
-                return rows[:limit]
+    if not snap:
+        snap = _load_json(root / "logs" / "top_opportunities_latest.json", {})
+    executable, advisory = _split_top_opportunities(snap)
+    rows: list[dict] = []
+    rows.extend(
+        _normalize_opportunity(row, "executable", idx)
+        for idx, row in enumerate(executable, start=1)
+        if isinstance(row, dict)
+    )
+    rows.extend(
+        _normalize_opportunity(row, "advisory", idx)
+        for idx, row in enumerate(advisory, start=1)
+        if isinstance(row, dict)
+    )
+    if rows:
+        return rows[:limit]
 
-    fallback_rows = _tail_jsonl(root / "logs" / "suggestions.jsonl", limit=max(limit, 100))
+    fallback_paths = [
+        root / "logs" / "suggestions.jsonl",
+        root / "suggestions.jsonl",
+        root / "analytics" / "events" / "suggestions.jsonl",
+    ]
+    fallback_rows: list[dict] = []
+    for path in fallback_paths:
+        fallback_rows = _tail_jsonl(path, limit=max(limit, 100))
+        if fallback_rows:
+            break
     normalized = [
         _normalize_opportunity(row, "suggestion", idx)
         for idx, row in enumerate(reversed(fallback_rows), start=1)
@@ -132,21 +189,28 @@ def _opportunities_payload(limit: int) -> list[dict]:
 def _runtime_snapshot_payload() -> dict:
     root = _runtime_root()
     cycle = _load_json(root / "logs" / "engine_cycle_status.json", {})
+    if not cycle:
+        cycle = _load_json(root / "engine_cycle_status.json", {})
     top = _load_json(root / "top_opportunities_latest.json", {})
-    top_payload = top.get("payload") if isinstance(top, dict) else {}
-    executable = top_payload.get("top_executable_opportunities") if isinstance(top_payload, dict) else []
-    advisory = top_payload.get("top_advisory_opportunities") if isinstance(top_payload, dict) else []
+    if not top:
+        top = _load_json(root / "logs" / "top_opportunities_latest.json", {})
+    executable, advisory = _split_top_opportunities(top)
     return {
         "runtime_root": str(root),
+        "tradebot_root": str(_tradebot_root()),
         "cycle_stage": cycle.get("cycle_stage") if isinstance(cycle, dict) else None,
         "market_mode": cycle.get("market_mode") if isinstance(cycle, dict) else None,
         "cycle_ok": cycle.get("cycle_ok") if isinstance(cycle, dict) else None,
-        "top_executable_count": len(executable) if isinstance(executable, list) else 0,
-        "top_advisory_count": len(advisory) if isinstance(advisory, list) else 0,
+        "top_executable_count": len(executable),
+        "top_advisory_count": len(advisory),
         "primary_blocker": cycle.get("primary_blocker") if isinstance(cycle, dict) else None,
         "reason": cycle.get("reason") if isinstance(cycle, dict) else None,
         "ts_epoch": cycle.get("ts_epoch") if isinstance(cycle, dict) else None,
     }
+
+
+def _runtime_preflight_payload() -> dict:
+    return run_preflight(base_repo_root=_repo_root())
 
 
 app = FastAPI()
@@ -160,10 +224,9 @@ app.add_middleware(
 
 
 def _build_redis_client():
-    # Keep Redis polling non-blocking for the websocket pipeline.
     return redis.Redis(
-        host="localhost",
-        port=6379,
+        host=os.getenv("REDIS_HOST", "localhost"),
+        port=int(os.getenv("REDIS_PORT", "6379")),
         decode_responses=True,
         socket_connect_timeout=0.2,
         socket_timeout=0.2,
@@ -176,7 +239,7 @@ def _open_tradebot_pubsub():
         client = _build_redis_client()
         client.ping()
         pubsub = client.pubsub(ignore_subscribe_messages=True)
-        pubsub.subscribe("tradebot_events")
+        pubsub.subscribe(os.getenv("TRADEBOT_REDIS_CHANNEL", "tradebot_events"))
         return pubsub, None
     except Exception as exc:
         return None, f"{type(exc).__name__}:{exc}"
@@ -194,6 +257,11 @@ def health():
 @app.get("/runtime/health", response_model=RuntimeHealthResponse)
 def runtime_health():
     return _runtime_health_payload()
+
+
+@app.get("/runtime/preflight", response_model=RuntimePreflightResponse)
+def runtime_preflight():
+    return _runtime_preflight_payload()
 
 
 @app.get("/runtime/snapshot", response_model=RuntimeSnapshotResponse)
@@ -258,7 +326,7 @@ async def ws(ws: WebSocket):
     finally:
         if pubsub is not None:
             try:
-                pubsub.unsubscribe("tradebot_events")
+                pubsub.unsubscribe(os.getenv("TRADEBOT_REDIS_CHANNEL", "tradebot_events"))
             except Exception:
                 pass
             pubsub.close()

@@ -15,6 +15,7 @@ This repository is positioned as a portfolio-grade example of backend QA, API au
 - [Architecture image](docs/architecture/algotradify-architecture.svg)
 - [SDET platform one-pager](docs/one-pagers/sdet-platform-portfolio.md)
 - [Test reports guide](docs/test-reports/README.md)
+- [Tradebot core alignment workflow](docs/tradebot-core-alignment.md)
 - LinkedIn: https://www.linkedin.com/in/ram-golladi
 
 ---
@@ -45,7 +46,7 @@ Algotradify solves the observability and runtime bridge layer around a trading e
 
 ```mermaid
 flowchart LR
-    A[Core Trading Bot Runtime] --> B[Runtime Artifacts]
+    A[Tradebot-Compatible Runtime] --> B[Runtime Artifacts]
     A --> C[Redis tradebot_events]
     B --> D[FastAPI Runtime Bridge]
     C --> D
@@ -63,24 +64,152 @@ flowchart LR
 
 ## Current architecture
 
-- `core_bot/`: trading engine and runtime artifacts (`core_bot/.runtime/...`).
-- `api/server.py`: FastAPI runtime bridge and WebSocket stream.
-- `runner/live_wrapper.py`: wrapper entrypoint that loads `core_bot.main` and surfaces import/runtime failures.
+- `main.py`: canonical Algotradify runtime entrypoint. It starts the Tradebot-compatible runtime and does not start Streamlit.
+- `runtime_contract.py`: shared runtime root, artifact root, and preflight contract used by CLI and API.
+- `scripts/preflight_runtime.py`: CLI preflight checker for runtime health before startup.
+- `core_bot/`: optional embedded copy of the Tradebot runtime copied from `ramgolladi1503-sys/tradebot` `main`.
+- `ALGOTRADIFY_ENGINE_ROOT`: explicit external engine root override.
+- `TRADEBOT_ROOT`: optional pointer to a separate local Tradebot checkout.
+- `CORE_BOT_ROOT`: compatibility alias for a separate local Tradebot checkout.
+- `runner/live_wrapper.py`: compatibility wrapper that delegates to `main.py`.
+- `api/server.py`: FastAPI runtime bridge, WebSocket stream, and runtime preflight API.
 - `frontend/`: Vite React UI for runtime health, snapshot, opportunities, and live events.
+
+---
+
+## Canonical runtime command
+
+Use this as the primary runtime command:
+
+```bash
+python main.py
+```
+
+Compatibility command for older scripts:
+
+```bash
+python -m runner.live_wrapper
+```
+
+The wrapper must remain thin. It should not contain separate runtime-root resolution logic.
+
+---
+
+## Tradebot alignment modes
+
+Tradebot remains the engine source of truth until Algotradify owns the full engine directly.
+
+### Mode A — External Tradebot checkout
+
+This is safest while developing because it does not copy engine code into Algotradify:
+
+```bash
+export TRADEBOT_ROOT=/absolute/path/to/tradebot
+python main.py
+```
+
+You can also use the explicit Algotradify variable:
+
+```bash
+export ALGOTRADIFY_ENGINE_ROOT=/absolute/path/to/tradebot
+python main.py
+```
+
+The runtime resolver checks that the target has `main.py`, `core/`, and `config/`.
+
+### Mode B — Embedded synced core
+
+Use this when Algotradify needs to be self-contained:
+
+```bash
+python scripts/sync_tradebot_core.py --source ../tradebot --force
+python main.py
+```
+
+The sync utility copies Tradebot into `core_bot/`, excludes runtime artifacts, logs, tokens, env files, local DBs, caches, and large local data files, then writes `core_bot/TRADEBOT_SOURCE.json`.
+
+Full details: [Tradebot core alignment workflow](docs/tradebot-core-alignment.md)
+
+---
+
+## Runtime root priority
+
+Both `main.py` and `api/server.py` must use the same engine-root priority:
+
+1. `ALGOTRADIFY_ENGINE_ROOT`
+2. `TRADEBOT_ROOT`
+3. `CORE_BOT_ROOT`
+4. `./core_bot`
+5. `../tradebot`
+6. `~/tradebot`
+
+Runtime artifact root priority:
+
+1. `CORE_BOT_RUNTIME_ROOT`
+2. selected engine root `.runtime`
+3. selected engine root `runtime`
+4. `./core_bot/.runtime`
+5. `./core_bot/runtime`
+
+---
+
+## Runtime preflight
+
+Before starting PAPER or LIVE mode, run:
+
+```bash
+python scripts/preflight_runtime.py
+```
+
+For machine-readable output:
+
+```bash
+python scripts/preflight_runtime.py --json
+```
+
+The API exposes the same shared preflight contract:
+
+```bash
+curl http://localhost:8000/runtime/preflight
+```
+
+Preflight checks include:
+
+- compatible runtime root discovery
+- required `main.py`
+- required `core/`
+- required `config/`
+- required `requirements.txt`
+- runtime artifact root existence
+- runtime artifact root writability
+- execution mode validity
+- broker token expectation for PAPER/LIVE
+
+Preflight status meanings:
+
+- `PASS`: startup contract looks valid.
+- `WARN`: usable for SIM/dev but something important is missing, such as broker token.
+- `FAIL`: do not start live/paper runtime until fixed.
 
 ---
 
 ## What is integrated
 
-- Wrapper boot path surfaces real import failures instead of hiding them.
+- `python main.py` boot path surfaces real import/runtime failures instead of hiding them.
+- Compatibility wrapper delegates to `main.py`.
+- Runtime can run against an external Tradebot checkout via `ALGOTRADIFY_ENGINE_ROOT`, `TRADEBOT_ROOT`, or `CORE_BOT_ROOT`.
+- Runtime can run against embedded synced Tradebot under `core_bot/`.
+- Backend resolves runtime artifacts from `CORE_BOT_RUNTIME_ROOT`, external Tradebot, or embedded `core_bot/`.
 - Backend exposes runtime endpoints:
   - `GET /health`
   - `GET /runtime/health`
+  - `GET /runtime/preflight`
   - `GET /runtime/snapshot`
   - `GET /opportunities?limit=...`
 - Backend WebSocket endpoint:
   - `/ws`
   - forwards Redis `tradebot_events`
+  - supports `REDIS_HOST`, `REDIS_PORT`, and `TRADEBOT_REDIS_CHANNEL`
   - emits `runtime_snapshot` updates
   - degrades cleanly if Redis is unavailable
 - Frontend renders:
@@ -113,11 +242,13 @@ This project should be tested like a production runtime bridge, not a static fro
 ### Backend tests
 
 - Health endpoint contract tests.
+- Runtime preflight contract tests.
 - Runtime snapshot parsing tests.
 - Opportunity endpoint response-shape tests.
 - Redis-unavailable degradation tests.
 - WebSocket connection and event-forwarding tests.
-- Import-failure surfacing tests for `runner/live_wrapper.py`.
+- Runtime-root parity tests for `main.py` and `api/server.py`.
+- Wrapper delegation tests for `runner/live_wrapper.py`.
 
 ### Frontend tests
 
@@ -129,11 +260,12 @@ This project should be tested like a production runtime bridge, not a static fro
 
 ### End-to-end checks
 
+- Run runtime preflight.
 - Start Redis.
 - Start backend.
 - Start frontend.
-- Start wrapper.
-- Verify health, snapshot, opportunity, and WebSocket event flow.
+- Start runtime through `python main.py`.
+- Verify health, preflight, snapshot, opportunity, and WebSocket event flow.
 
 See: [Test reports guide](docs/test-reports/README.md)
 
@@ -142,11 +274,15 @@ See: [Test reports guide](docs/test-reports/README.md)
 ## Failure modes handled
 
 - Redis unavailable: WebSocket degrades instead of crashing hard.
-- Core bot import failure: wrapper surfaces the real error.
-- Missing runtime artifacts: API should return safe empty/degraded states.
-- No opportunities: UI should show an honest empty state.
-- Backend unavailable: frontend should show connection failure clearly.
-- WebSocket interruption: UI should not pretend live data is still flowing.
+- Tradebot import failure: runtime boot path surfaces the real error.
+- Missing embedded `core_bot/`: runtime gives a specific fix path instead of a vague `ModuleNotFoundError`.
+- Missing runtime artifacts: API returns safe empty/degraded states.
+- Invalid execution mode: preflight fails.
+- Missing PAPER/LIVE broker token candidate: preflight fails.
+- Missing SIM broker token candidate: preflight warns.
+- No opportunities: UI shows an honest empty state.
+- Backend unavailable: frontend shows connection failure clearly.
+- WebSocket interruption: UI does not pretend live data is still flowing.
 
 ---
 
@@ -155,6 +291,7 @@ See: [Test reports guide](docs/test-reports/README.md)
 - Python 3.11+
 - Node.js 18+
 - Redis on `localhost:6379`
+- A local Tradebot checkout if using external mode
 
 ---
 
@@ -164,11 +301,21 @@ See: [Test reports guide](docs/test-reports/README.md)
 # API dependencies
 pip install -r api/requirements.txt
 
-# Core bot dependencies
-pip install -r core_bot/requirements.txt
-
 # Frontend dependencies
 npm --prefix frontend install
+```
+
+If using embedded sync mode, sync Tradebot first and then install its dependencies:
+
+```bash
+python scripts/sync_tradebot_core.py --source ../tradebot --force
+pip install -r core_bot/requirements.txt
+```
+
+If using external checkout mode, install dependencies from Tradebot directly:
+
+```bash
+pip install -r /absolute/path/to/tradebot/requirements.txt
 ```
 
 ---
@@ -177,25 +324,47 @@ npm --prefix frontend install
 
 Use separate terminals.
 
-### 1. Redis
+### 1. Runtime preflight
+
+```bash
+python scripts/preflight_runtime.py
+```
+
+### 2. Redis
 
 ```bash
 redis-server
 ```
 
-### 2. Backend
+### 3. Backend
 
 ```bash
 python -m uvicorn api.server:app --host 0.0.0.0 --port 8000
 ```
 
-### 3. Frontend
+### 4. Frontend
 
 ```bash
 npm --prefix frontend run dev -- --host 0.0.0.0 --port 3000
 ```
 
-### 4. Optional wrapper process
+### 5. Runtime
+
+External Tradebot checkout:
+
+```bash
+export TRADEBOT_ROOT=/absolute/path/to/tradebot
+python main.py
+```
+
+Embedded synced core:
+
+```bash
+python scripts/sync_tradebot_core.py --source ../tradebot --force
+python main.py
+```
+
+Compatibility wrapper:
 
 ```bash
 python -m runner.live_wrapper
@@ -206,6 +375,7 @@ python -m runner.live_wrapper
 ## Local checks
 
 - Backend health: `http://localhost:8000/health`
+- Runtime preflight: `http://localhost:8000/runtime/preflight`
 - Runtime health: `http://localhost:8000/runtime/health`
 - Runtime snapshot: `http://localhost:8000/runtime/snapshot`
 - Opportunities: `http://localhost:8000/opportunities?limit=20`
@@ -215,7 +385,13 @@ python -m runner.live_wrapper
 
 ## Environment knobs
 
-- `CORE_BOT_RUNTIME_ROOT`: override runtime artifact root. Default: `core_bot/.runtime`.
+- `ALGOTRADIFY_ENGINE_ROOT`: explicit path to a Tradebot-compatible runtime root. Highest engine-root priority.
+- `TRADEBOT_ROOT`: path to a local Tradebot checkout.
+- `CORE_BOT_ROOT`: alternate compatibility name for Tradebot root.
+- `CORE_BOT_RUNTIME_ROOT`: explicit runtime artifact root. Highest artifact-root priority.
+- `REDIS_HOST`: default `localhost`.
+- `REDIS_PORT`: default `6379`.
+- `TRADEBOT_REDIS_CHANNEL`: default `tradebot_events`.
 
 Frontend config is defined in `frontend/.env.example`:
 
@@ -250,12 +426,14 @@ Some alternate UI builds in this repo history also attempt these endpoints if pr
 
 Planned demo flow:
 
-1. Start Redis, backend, frontend, and wrapper.
-2. Show runtime health endpoint.
-3. Show runtime snapshot in the UI.
-4. Stream live events through WebSocket.
-5. Kill Redis and show graceful degradation.
-6. Restore Redis and verify recovery.
+1. Run runtime preflight.
+2. Start Redis, backend, frontend, and runtime through `python main.py`.
+3. Show runtime preflight endpoint.
+4. Show runtime health endpoint.
+5. Show runtime snapshot in the UI.
+6. Stream live events through WebSocket.
+7. Kill Redis and show graceful degradation.
+8. Restore Redis and verify recovery.
 
 ---
 
