@@ -68,12 +68,13 @@ flowchart LR
 - `runtime_contract.py`: shared runtime root, artifact root, and preflight contract used by CLI and API.
 - `scripts/preflight_runtime.py`: CLI preflight checker for runtime health before startup.
 - `strategies/`: strategy contract and registry layer that emits candidate drafts only.
+- `candidate_truth/`: Candidate Truth Layer that normalizes candidate identity, classifies real/synthetic/fallback/advisory/malformed records, merges blockers/warnings, and preserves provenance.
 - `core_bot/`: optional embedded copy of the Tradebot runtime copied from `ramgolladi1503-sys/tradebot` `main`.
 - `ALGOTRADIFY_ENGINE_ROOT`: explicit external engine root override.
 - `TRADEBOT_ROOT`: optional pointer to a separate local Tradebot checkout.
 - `CORE_BOT_ROOT`: compatibility alias for a separate local Tradebot checkout.
 - `runner/live_wrapper.py`: compatibility wrapper that delegates to `main.py`.
-- `api/server.py`: FastAPI runtime bridge, WebSocket stream, strategy registry API, and runtime preflight API.
+- `api/server.py`: FastAPI runtime bridge, WebSocket stream, strategy registry API, Candidate Truth API, and runtime preflight API.
 - `frontend/`: Vite React UI for runtime health, snapshot, opportunities, and live events.
 
 ---
@@ -228,7 +229,49 @@ Candidate draft preview endpoint:
 curl 'http://localhost:8000/strategies/draft-candidates?symbol=NIFTY&orb_retest_score=85'
 ```
 
-Important: these drafts are not executable trades. They are inputs for the upcoming Candidate Truth Layer and Opportunity Layer.
+Important: these drafts are not executable trades. They are inputs for the Candidate Truth Layer and Opportunity Layer.
+
+---
+
+## Candidate Truth Layer
+
+The Candidate Truth Layer converts strategy drafts and runtime-shaped opportunity rows into strict candidate truth records.
+
+It classifies candidates as:
+
+- `REAL`
+- `SYNTHETIC`
+- `FALLBACK`
+- `ADVISORY`
+- `MALFORMED`
+- `UNKNOWN`
+
+A candidate truth record includes:
+
+- normalized candidate identity
+- normalized symbol
+- strategy id
+- setup family
+- truth status
+- merged blockers
+- merged warnings
+- provenance
+- normalized payload
+- raw payload
+- `is_candidate_truth_record=true`
+- `is_execution_decision=false`
+
+Candidate Truth endpoints:
+
+```bash
+curl http://localhost:8000/candidate-truth
+```
+
+```bash
+curl 'http://localhost:8000/strategies/draft-candidates/truth?symbol=NIFTY&orb_retest_score=85'
+```
+
+Important: Candidate Truth does not decide execution readiness. A `REAL` candidate is still not executable until later readiness, broker contract, quote freshness, liquidity, risk, and selector gates pass.
 
 ---
 
@@ -245,8 +288,10 @@ Important: these drafts are not executable trades. They are inputs for the upcom
   - `GET /runtime/preflight`
   - `GET /runtime/snapshot`
   - `GET /opportunities?limit=...`
+  - `GET /candidate-truth`
   - `GET /strategies`
   - `GET /strategies/draft-candidates?symbol=...&<feature>=...`
+  - `GET /strategies/draft-candidates/truth?symbol=...&<feature>=...`
 - Backend WebSocket endpoint:
   - `/ws`
   - forwards Redis `tradebot_events`
@@ -286,6 +331,8 @@ This project should be tested like a production runtime bridge, not a static fro
 - Runtime preflight contract tests.
 - Strategy registry contract tests.
 - Strategy candidate draft tests.
+- Candidate Truth Layer classification tests.
+- Candidate Truth API tests.
 - Runtime snapshot parsing tests.
 - Opportunity endpoint response-shape tests.
 - Redis-unavailable degradation tests.
@@ -308,7 +355,7 @@ This project should be tested like a production runtime bridge, not a static fro
 - Start backend.
 - Start frontend.
 - Start runtime through `python main.py`.
-- Verify health, preflight, snapshot, opportunity, strategy registry, and WebSocket event flow.
+- Verify health, preflight, snapshot, opportunity, strategy registry, candidate truth, and WebSocket event flow.
 
 See: [Test reports guide](docs/test-reports/README.md)
 
@@ -324,6 +371,9 @@ See: [Test reports guide](docs/test-reports/README.md)
 - Missing PAPER/LIVE broker token candidate: preflight fails.
 - Missing SIM broker token candidate: preflight warns.
 - Strategy output cannot claim executable status.
+- Candidate Truth output cannot claim executable status.
+- Missing candidate identity becomes `MALFORMED` with blockers.
+- Fallback/synthetic/advisory candidates are visible instead of hidden.
 - No opportunities: UI shows an honest empty state.
 - Backend unavailable: frontend shows connection failure clearly.
 - WebSocket interruption: UI does not pretend live data is still flowing.
@@ -423,8 +473,10 @@ python -m runner.live_wrapper
 - Runtime health: `http://localhost:8000/runtime/health`
 - Runtime snapshot: `http://localhost:8000/runtime/snapshot`
 - Opportunities: `http://localhost:8000/opportunities?limit=20`
+- Candidate Truth: `http://localhost:8000/candidate-truth`
 - Strategy registry: `http://localhost:8000/strategies`
 - Strategy draft preview: `http://localhost:8000/strategies/draft-candidates?symbol=NIFTY&orb_retest_score=85`
+- Strategy truth preview: `http://localhost:8000/strategies/draft-candidates/truth?symbol=NIFTY&orb_retest_score=85`
 - Frontend: `http://localhost:3000`
 
 ---
@@ -477,7 +529,7 @@ Planned demo flow:
 3. Show runtime preflight endpoint.
 4. Show runtime health endpoint.
 5. Show runtime snapshot in the UI.
-6. Show strategy registry and draft candidate preview.
+6. Show strategy registry, draft candidate preview, and Candidate Truth output.
 7. Stream live events through WebSocket.
 8. Kill Redis and show graceful degradation.
 9. Restore Redis and verify recovery.
@@ -514,4 +566,4 @@ Planned demo flow:
 
 ## Portfolio value
 
-This project demonstrates backend QA, API testing, WebSocket testing, runtime observability, graceful degradation, and full-stack monitoring for fintech-style real-time systems.
+This project demonstrates backend QA, API testing, WebSocket testing, runtime observability, graceful degradation, candidate normalization, and full-stack monitoring for fintech-style real-time systems.
