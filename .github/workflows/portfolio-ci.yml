@@ -30,6 +30,7 @@ jobs:
           test -f candidate_truth/layer.py
           test -f opportunity_layer/pipeline.py
           test -f broker_contract/resolver.py
+          test -f broker_contract/readiness.py
           test -f api/schemas.py
           test -f tests/test_runtime_contract.py
           test -f tests/test_runtime_preflight.py
@@ -37,6 +38,7 @@ jobs:
           test -f tests/test_candidate_truth.py
           test -f tests/test_opportunity_layer.py
           test -f tests/test_broker_contract_resolver.py
+          test -f tests/test_broker_contract_readiness.py
           test -f tests/test_api_contracts.py
           test -f tests/test_websocket_contracts.py
           test -f tests/test_api_schema_contracts.py
@@ -53,6 +55,7 @@ jobs:
           grep -qi "Candidate Truth Layer" README.md
           grep -qi "Opportunity Layer" README.md
           grep -qi "Broker contract resolver" README.md
+          grep -qi "Broker contract readiness" README.md
           grep -qi "Test strategy" README.md
           grep -qi "Failure modes" README.md
           grep -qi "Roadmap" README.md
@@ -68,7 +71,7 @@ jobs:
           python -m pip install -r api/requirements.txt pytest httpx
 
       - name: Run runtime, preflight, strategy, candidate-truth, opportunity-layer, broker-contract, API, WebSocket, and schema contract tests
-        run: pytest -q tests/test_runtime_contract.py tests/test_runtime_preflight.py tests/test_strategy_registry.py tests/test_candidate_truth.py tests/test_opportunity_layer.py tests/test_broker_contract_resolver.py tests/test_api_contracts.py tests/test_websocket_contracts.py tests/test_api_schema_contracts.py
+        run: pytest -q tests/test_runtime_contract.py tests/test_runtime_preflight.py tests/test_strategy_registry.py tests/test_candidate_truth.py tests/test_opportunity_layer.py tests/test_broker_contract_resolver.py tests/test_broker_contract_readiness.py tests/test_api_contracts.py tests/test_websocket_contracts.py tests/test_api_schema_contracts.py
 
       - name: Generate portfolio test report
         run: |
@@ -78,7 +81,7 @@ jobs:
 
           ## Scope
 
-          This CI gate validates runtime-root, runtime-preflight, strategy-contract, candidate-truth, opportunity-layer, broker-contract, FastAPI, WebSocket, and schema contract tests.
+          This CI gate validates runtime-root, runtime-preflight, strategy-contract, candidate-truth, opportunity-layer, broker-contract resolver/readiness, FastAPI, WebSocket, and schema contract tests.
 
           ## Checks
 
@@ -88,11 +91,12 @@ jobs:
           - Candidate Truth Layer tests run.
           - Opportunity Layer tests run.
           - Broker contract resolver tests run for exact match, fallback, no-fallback, invalid request, and token coverage failure.
+          - Broker contract readiness tests run for exact, fallback, not found, missing request, coverage failure, and blocker preservation.
           - FastAPI, WebSocket, and OpenAPI schema contract tests run.
 
           ## Current honest limitation
 
-          Broker contract resolver behavior is now standardized in Algotradify. Wiring this resolver into full broker readiness and synced Tradebot engine artifacts continues in PR 7.
+          Broker contract readiness is now represented as evidence attached to candidate truth records. Quote freshness, liquidity, risk, and execution readiness are later PRs.
           REPORT
 
       - name: Upload portfolio report

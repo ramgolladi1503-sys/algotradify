@@ -17,6 +17,7 @@ A trading signal is not automatically a tradable opportunity. Real-time trading 
 - Are candidates real, synthetic, fallback, advisory, malformed, or unknown?
 - Did candidates survive normalization, classification, ranking, selection, and emit?
 - Did broker contract resolution return exact, fallback, not found, coverage failed, or invalid request?
+- Is broker contract readiness resolved, fallback, blocked, missing request, or coverage failed?
 - Is Redis available?
 - Can API and WebSocket contracts be tested repeatedly?
 
@@ -34,9 +35,10 @@ flowchart LR
     D --> E[Candidate Truth Layer]
     E --> F[Opportunity Layer]
     F --> G[Broker Contract Resolver]
-    G --> H[React UI]
-    A --> I[Redis tradebot_events]
-    I --> C
+    G --> H[Broker Contract Readiness]
+    H --> I[React UI]
+    A --> J[Redis tradebot_events]
+    J --> C
 ```
 
 ---
@@ -194,15 +196,35 @@ No exact match + no safe fallback = NOT_FOUND with OPTION_TOKEN_NOT_FOUND blocke
 
 It must never crash by reading from a missing fallback contract. It must never hide fallback usage. It must never mark the candidate executable.
 
-The resolver supports:
+---
 
-- exact contract match
-- safe nearest-strike fallback within configured distance
-- no-fallback structured blocker
-- invalid request structured blocker
-- token coverage threshold failure
+## Broker contract readiness
 
-Important: this PR standardizes the Algotradify resolver contract. Full broker readiness wiring into the runtime pipeline continues in the next PR.
+Broker contract readiness attaches resolver evidence to a candidate truth record.
+
+Readiness statuses:
+
+- `RESOLVED_EXACT`
+- `RESOLVED_FALLBACK`
+- `BLOCKED_NOT_FOUND`
+- `BLOCKED_COVERAGE_FAILED`
+- `BLOCKED_INVALID_REQUEST`
+- `BLOCKED_MISSING_REQUEST`
+
+Readiness includes:
+
+- requested symbol
+- requested expiry
+- requested strike
+- requested option type
+- resolved instrument token
+- exact/fallback/not-found status
+- fallback distance
+- blockers
+- warnings
+- original Candidate Truth record
+
+Important: broker contract readiness is evidence only. `RESOLVED_EXACT` or `RESOLVED_FALLBACK` still does **not** mean executable. Quote freshness, liquidity, risk, and execution readiness come later.
 
 ---
 
@@ -257,6 +279,7 @@ Backend tests cover:
 - Candidate Truth Layer
 - Opportunity Layer
 - broker contract resolver
+- broker contract readiness
 - API contracts
 - WebSocket degraded Redis behavior
 - OpenAPI schema contracts
@@ -264,7 +287,7 @@ Backend tests cover:
 CI command:
 
 ```bash
-pytest -q tests/test_runtime_contract.py tests/test_runtime_preflight.py tests/test_strategy_registry.py tests/test_candidate_truth.py tests/test_opportunity_layer.py tests/test_broker_contract_resolver.py tests/test_api_contracts.py tests/test_websocket_contracts.py tests/test_api_schema_contracts.py
+pytest -q tests/test_runtime_contract.py tests/test_runtime_preflight.py tests/test_strategy_registry.py tests/test_candidate_truth.py tests/test_opportunity_layer.py tests/test_broker_contract_resolver.py tests/test_broker_contract_readiness.py tests/test_api_contracts.py tests/test_websocket_contracts.py tests/test_api_schema_contracts.py
 ```
 
 ---
@@ -282,6 +305,7 @@ pytest -q tests/test_runtime_contract.py tests/test_runtime_preflight.py tests/t
 - Selected opportunity is not treated as executable.
 - Missing option contract returns `OPTION_TOKEN_NOT_FOUND` instead of crashing.
 - Fallback contract usage is visible through `fallback_used=true` and `FALLBACK_CONTRACT_USED` warning.
+- Broker contract readiness preserves candidate blockers and exposes missing request/coverage/not-found states.
 
 ---
 
@@ -295,10 +319,10 @@ Completed foundation:
 - Candidate Truth Layer
 - Opportunity Layer
 - Broker contract resolver contract
+- Broker contract readiness
 
 Next work:
 
-- Broker contract readiness
 - Quote freshness and liquidity gates
 - Execution readiness contract
 - Trade quality score
