@@ -14,10 +14,15 @@ class CandidateTruthStatus(StrEnum):
     UNKNOWN = "UNKNOWN"
 
 
-_REQUIRED_FIELDS = ("candidate_id", "symbol", "strategy_id", "setup_family")
 _SYNTHETIC_HINTS = ("synthetic", "mock", "demo", "simulated")
 _FALLBACK_HINTS = ("fallback", "nearest", "substitute")
 _ADVISORY_ACTIONS = {"ADVISORY", "ADVISORY_ONLY", "WATCH", "INFO"}
+_MALFORMED_BLOCKERS = {
+    "MISSING_CANDIDATE_ID",
+    "MISSING_SYMBOL",
+    "MISSING_STRATEGY_ID",
+    "MISSING_SETUP_FAMILY",
+}
 
 
 @dataclass(frozen=True)
@@ -102,7 +107,7 @@ def _contains_hint(raw: dict[str, Any], hints: tuple[str, ...]) -> bool:
 
 
 def _classify(raw: dict[str, Any], blockers: list[str]) -> CandidateTruthStatus:
-    if blockers:
+    if any(blocker in _MALFORMED_BLOCKERS for blocker in blockers):
         return CandidateTruthStatus.MALFORMED
 
     explicit = str(raw.get("truth_status") or raw.get("candidate_truth") or "").upper()
@@ -136,7 +141,6 @@ def normalize_candidate(candidate: Any, *, source: str = "unknown") -> Candidate
     setup_family = _first_present(raw, "setup_family", "strategy_family", "setup")
 
     blockers: list[str] = []
-    missing = [field for field in _REQUIRED_FIELDS if _first_present(raw, field, field.replace("strategy_id", "strategy")) is None]
     if candidate_id is None:
         blockers.append("MISSING_CANDIDATE_ID")
     if symbol is None:
