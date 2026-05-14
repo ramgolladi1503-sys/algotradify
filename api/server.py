@@ -14,6 +14,8 @@ from api.schemas import (
     RuntimeHealthResponse,
     RuntimePreflightResponse,
     RuntimeSnapshotResponse,
+    StrategyCandidateDraftResponse,
+    StrategyInfoResponse,
 )
 from runtime_contract import (
     candidate_runtime_roots,
@@ -21,6 +23,7 @@ from runtime_contract import (
     run_preflight,
     runtime_artifact_root,
 )
+from strategies import StrategyContext, build_default_strategy_registry
 
 
 def _repo_root() -> Path:
@@ -44,6 +47,10 @@ def _tradebot_root() -> Path:
 
 def _runtime_root() -> Path:
     return runtime_artifact_root(engine_root=_tradebot_root(), base_repo_root=_repo_root())
+
+
+def _strategy_registry():
+    return build_default_strategy_registry()
 
 
 def _load_json(path: Path, default):
@@ -272,6 +279,23 @@ def runtime_snapshot():
 @app.get("/opportunities", response_model=list[OpportunityResponse])
 def opportunities(limit: int = Query(default=25, ge=1, le=200)):
     return _opportunities_payload(limit=limit)
+
+
+@app.get("/strategies", response_model=list[StrategyInfoResponse])
+def strategies():
+    return _strategy_registry().list()
+
+
+@app.get("/strategies/draft-candidates", response_model=list[StrategyCandidateDraftResponse])
+def draft_candidates(symbol: str = Query(..., min_length=1)):
+    """Generate strategy candidate drafts from supplied score features.
+
+    Query params other than `symbol` are intentionally not parsed yet. This
+    endpoint is a contract visibility endpoint for PR 3; real runtime strategy
+    wiring belongs in later candidate truth/opportunity-layer PRs.
+    """
+    context = StrategyContext(symbol=symbol.upper(), features={}, raw={"source": "api_contract_preview"})
+    return [draft.to_dict() for draft in _strategy_registry().generate_all(context)]
 
 
 @app.websocket("/ws")
