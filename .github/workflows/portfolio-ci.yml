@@ -9,7 +9,7 @@ on:
 
 jobs:
   portfolio-quality-gate:
-    name: Documentation, runtime, preflight, strategy, candidate-truth, opportunity-layer, broker-contract, market-readiness, execution-readiness, evidence-wiring, trade-quality, top-selector, fill-lifecycle, outcome-replay, replay-drilldown-ui, frontend-filtering-analytics, persisted-ui-preferences, execution-safety-api-ui, API, WebSocket, schema, and portfolio quality gate
+    name: Documentation, runtime, preflight, strategy, candidate-truth, opportunity-layer, broker-contract, market-readiness, execution-readiness, evidence-wiring, trade-quality, top-selector, fill-lifecycle, outcome-replay, execution-safety, dry-run-execution, API, WebSocket, schema, and portfolio quality gate
     runs-on: ubuntu-latest
 
     steps:
@@ -24,6 +24,8 @@ jobs:
           test -f docs/one-pagers/sdet-platform-portfolio.md
           test -f docs/test-reports/README.md
           test -f docs/execution-safety-design.md
+          test -f docs/dry-run-execution-adapter.md
+          test -f docs/dry-run-api-mount.md
           test -f runtime_contract.py
           test -f scripts/preflight_runtime.py
           test -f strategies/base.py
@@ -39,6 +41,10 @@ jobs:
           test -f fill_lifecycle/lifecycle.py
           test -f outcome_replay/replay.py
           test -f execution_safety/contract.py
+          test -f dry_run_execution/adapter.py
+          test -f api/__init__.py
+          test -f api/dry_run_execution_route.py
+          test -f api/server_with_dry_run.py
           test -f frontend/main.jsx
           test -f api/schemas.py
           test -f tests/test_runtime_contract.py
@@ -62,6 +68,10 @@ jobs:
           test -f tests/test_outcome_replay_api.py
           test -f tests/test_execution_safety.py
           test -f tests/test_execution_safety_api.py
+          test -f tests/test_dry_run_execution_adapter.py
+          test -f tests/test_dry_run_execution_api.py
+          test -f tests/test_dry_run_execution_api_mount.py
+          test -f tests/test_dry_run_execution_api_direct_mount.py
           test -f tests/test_control_tower_ui.py
           test -f tests/test_api_contracts.py
           test -f tests/test_websocket_contracts.py
@@ -108,8 +118,8 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r api/requirements.txt pytest httpx
 
-      - name: Run runtime, preflight, strategy, candidate-truth, opportunity-layer, broker-contract, market-readiness, execution-readiness, evidence-wiring, trade-quality, top-selector, fill-lifecycle, outcome-replay, replay-drilldown-ui, frontend-filtering-analytics, persisted-ui-preferences, execution-safety-api-ui, API, WebSocket, and schema contract tests
-        run: pytest -q tests/test_runtime_contract.py tests/test_runtime_preflight.py tests/test_strategy_registry.py tests/test_candidate_truth.py tests/test_opportunity_layer.py tests/test_broker_contract_resolver.py tests/test_broker_contract_readiness.py tests/test_market_readiness.py tests/test_execution_readiness.py tests/test_execution_readiness_api.py tests/test_execution_readiness_evidence_wiring.py tests/test_trade_quality.py tests/test_trade_quality_api.py tests/test_top_selector.py tests/test_top_selector_api.py tests/test_fill_lifecycle.py tests/test_fill_lifecycle_api.py tests/test_outcome_replay.py tests/test_outcome_replay_api.py tests/test_execution_safety.py tests/test_execution_safety_api.py tests/test_control_tower_ui.py tests/test_api_contracts.py tests/test_websocket_contracts.py tests/test_api_schema_contracts.py
+      - name: Run runtime, preflight, strategy, candidate-truth, opportunity-layer, broker-contract, market-readiness, execution-readiness, evidence-wiring, trade-quality, top-selector, fill-lifecycle, outcome-replay, execution-safety, dry-run-execution, API, WebSocket, and schema contract tests
+        run: pytest -q tests/test_runtime_contract.py tests/test_runtime_preflight.py tests/test_strategy_registry.py tests/test_candidate_truth.py tests/test_opportunity_layer.py tests/test_broker_contract_resolver.py tests/test_broker_contract_readiness.py tests/test_market_readiness.py tests/test_execution_readiness.py tests/test_execution_readiness_api.py tests/test_execution_readiness_evidence_wiring.py tests/test_trade_quality.py tests/test_trade_quality_api.py tests/test_top_selector.py tests/test_top_selector_api.py tests/test_fill_lifecycle.py tests/test_fill_lifecycle_api.py tests/test_outcome_replay.py tests/test_outcome_replay_api.py tests/test_execution_safety.py tests/test_execution_safety_api.py tests/test_dry_run_execution_adapter.py tests/test_dry_run_execution_api.py tests/test_dry_run_execution_api_mount.py tests/test_dry_run_execution_api_direct_mount.py tests/test_control_tower_ui.py tests/test_api_contracts.py tests/test_websocket_contracts.py tests/test_api_schema_contracts.py
 
       - name: Generate portfolio test report
         run: |
@@ -119,7 +129,7 @@ jobs:
 
           ## Scope
 
-          This CI gate validates runtime-root, runtime-preflight, strategy-contract, candidate-truth, opportunity-layer, broker-contract resolver/readiness, market-readiness, execution-readiness, runtime evidence wiring, trade-quality, top-selector, fill-lifecycle, outcome-replay, replay-drilldown UI, frontend filtering/analytics, persisted UI preferences/operator views, execution-safety API/UI visibility, FastAPI, WebSocket, and schema contract tests.
+          This CI gate validates runtime-root, runtime-preflight, strategy-contract, candidate-truth, opportunity-layer, broker-contract resolver/readiness, market-readiness, execution-readiness, runtime evidence wiring, trade-quality, top-selector, fill-lifecycle, outcome-replay, execution-safety, dry-run execution adapter/API mounts, FastAPI, WebSocket, and schema contract tests.
 
           ## Checks
 
@@ -137,12 +147,13 @@ jobs:
           - Fill lifecycle tests prove order/fill evidence can be normalized without submitting orders.
           - Outcome replay tests prove candidate outcomes can be audited without order actions.
           - Execution safety tests prove manual approval, kill switch, loss/order/quantity guards, dry-run and broker-confirmation gates block execution by default.
+          - Dry-run execution tests prove preview-only evidence creation, append-only JSONL persistence, safe flags, and direct API mount behavior.
           - Execution safety API/UI tests prove safety decisions are visible but do not trigger orders.
           - FastAPI, WebSocket, and OpenAPI schema contract tests run.
 
           ## Current honest limitation
 
-          Execution safety API/UI is visibility-only. It does not place orders, call broker APIs, or expose execution buttons.
+          Execution safety and dry-run execution are visibility/evidence layers. They do not place orders, call broker APIs, or expose execution buttons.
           REPORT
 
       - name: Upload portfolio report
