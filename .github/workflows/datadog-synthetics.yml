@@ -1,15 +1,17 @@
-# This workflow triggers Datadog Synthetic tests only when Datadog secrets are configured.
-# Required repository secrets:
+# Optional Datadog Synthetic tests.
+#
+# This workflow is manual-only because Datadog tests depend on external
+# account configuration and repository secrets. It must not block normal
+# product PRs or portfolio CI.
+#
+# Required repository secrets when manually running this workflow:
 # - DD_API_KEY
 # - DD_APP_KEY
 
 name: Run Datadog Synthetic tests
 
 on:
-  push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
+  workflow_dispatch:
 
 jobs:
   build:
@@ -19,18 +21,18 @@ jobs:
       DD_APP_KEY_PRESENT: ${{ secrets.DD_APP_KEY != '' }}
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Skip Datadog Synthetic tests when secrets are not configured
-      if: ${{ env.DD_API_KEY_PRESENT != 'true' || env.DD_APP_KEY_PRESENT != 'true' }}
-      run: |
-        echo "Skipping Datadog Synthetic tests because DD_API_KEY and/or DD_APP_KEY are not configured."
-        echo "Configure repository secrets DD_API_KEY and DD_APP_KEY to enable this workflow."
+      - name: Skip Datadog Synthetic tests when secrets are not configured
+        if: ${{ env.DD_API_KEY_PRESENT != 'true' || env.DD_APP_KEY_PRESENT != 'true' }}
+        run: |
+          echo "Skipping Datadog Synthetic tests because DD_API_KEY and/or DD_APP_KEY are not configured."
+          echo "Configure repository secrets DD_API_KEY and DD_APP_KEY to enable this workflow."
 
-    - name: Run Datadog Synthetic tests
-      if: ${{ env.DD_API_KEY_PRESENT == 'true' && env.DD_APP_KEY_PRESENT == 'true' }}
-      uses: DataDog/synthetics-ci-github-action@87b505388a22005bb8013481e3f73a367b9a53eb # v1.4.0
-      with:
-        api_key: ${{ secrets.DD_API_KEY }}
-        app_key: ${{ secrets.DD_APP_KEY }}
-        test_search_query: 'tag:e2e-tests'
+      - name: Run Datadog Synthetic tests
+        if: ${{ env.DD_API_KEY_PRESENT == 'true' && env.DD_APP_KEY_PRESENT == 'true' }}
+        uses: DataDog/synthetics-ci-github-action@87b505388a22005bb8013481e3f73a367b9a53eb # v1.4.0
+        with:
+          api_key: ${{ secrets.DD_API_KEY }}
+          app_key: ${{ secrets.DD_APP_KEY }}
+          test_search_query: 'tag:e2e-tests'
