@@ -168,6 +168,16 @@ class TradeQualityResponse(BaseModel):
     is_order: bool
 
 
+class TopExecutableSelectionResponse(BaseModel):
+    status: str
+    selected: dict[str, Any] | None = None
+    eligible: list[dict[str, Any]]
+    rejected: list[dict[str, Any]]
+    reason: str | None = None
+    is_order: bool
+    is_selector_decision: bool
+
+
 class RuntimeNoticePayload(BaseModel):
     source: str
     status: str
