@@ -24,6 +24,7 @@ def test_control_tower_ui_calls_all_tradability_endpoints():
         "/trade-quality?limit=20",
         "/top-executable?limit=20",
         "/fill-lifecycle",
+        "/outcome-replay",
     ]
 
     for endpoint in required_endpoints:
@@ -39,6 +40,7 @@ def test_control_tower_ui_renders_required_sections():
         "Cycle Snapshot",
         "Tradability Summary",
         "Top Executable",
+        "Outcome Replay Drilldown",
         "Execution Readiness",
         "Trade Quality",
         "Candidate Truth",
@@ -61,6 +63,22 @@ def test_control_tower_ui_exposes_blockers_and_no_order_boundaries():
     assert "selector_rejection_reasons" in source
     assert "is_order" in source
     assert "is_order_submission" in source
+    assert "is_order_action" in source
+
+
+def test_control_tower_ui_exposes_outcome_replay_filter_counts_and_timeline():
+    source = _frontend_source()
+
+    assert "replayCandidateId" in source
+    assert "candidate_id filter" in source
+    assert "Replay" in source
+    assert "selected_count" in source
+    assert "blocked_count" in source
+    assert "filled_count" in source
+    assert "rejected_count" in source
+    assert "best_quality_score" in source
+    assert "outcome blockers" in source
+    assert "no outcome replay events yet" in source
 
 
 def test_control_tower_ui_keeps_websocket_event_feed():

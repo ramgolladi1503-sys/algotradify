@@ -10,7 +10,7 @@ Algotradify connects a Tradebot-compatible runtime to a FastAPI backend and Reac
 
 ## Problem statement
 
-A trading signal is not automatically tradable. Algotradify explains candidate survival across strategy output, candidate truth, opportunity ranking, contract evidence, market evidence, risk evidence, execution readiness, trade quality score, top executable selector, fill lifecycle sync, outcome logging and replay, and Control Tower UI.
+A trading signal is not automatically tradable. Algotradify explains candidate survival across strategy output, candidate truth, opportunity ranking, contract evidence, market evidence, risk evidence, execution readiness, trade quality score, top executable selector, fill lifecycle sync, outcome logging and replay, replay drilldowns and outcome analytics UI, and Control Tower UI.
 
 ---
 
@@ -29,7 +29,8 @@ flowchart LR
     I --> J[Top Executable Selector]
     J --> K[Fill Lifecycle Sync]
     K --> L[Outcome Logging and Replay]
-    L --> M[Control Tower UI]
+    L --> M[Replay Drilldowns and Outcome Analytics UI]
+    M --> N[Control Tower UI]
 ```
 
 ---
@@ -321,6 +322,31 @@ Hard rule: outcome replay reads evidence only. It does not submit orders, mutate
 
 ---
 
+## Replay drilldowns and outcome analytics UI
+
+The Control Tower now exposes outcome replay directly instead of hiding it behind the API.
+
+UI capabilities:
+
+- candidate_id filter for replay drilldown
+- selected/blocked/filled/rejected counts
+- best quality score from replay evidence
+- terminal state visibility
+- latest outcome timeline
+- outcome blockers
+- no-order safety flag via `is_order_action`
+
+The UI calls:
+
+```text
+/outcome-replay
+/outcome-replay?candidate_id=<candidate_id>
+```
+
+Hard rule: replay drilldowns are display-only. They do not trigger orders, mutate broker state, or decide new trades.
+
+---
+
 ## Control Tower UI
 
 The Vite React UI displays the full tradability pipeline instead of only runtime health and raw opportunities.
@@ -331,6 +357,7 @@ UI sections:
 - Cycle Snapshot
 - Tradability Summary
 - Top Executable
+- Outcome Replay Drilldown
 - Execution Readiness
 - Trade Quality
 - Candidate Truth
@@ -352,6 +379,7 @@ The UI polls these endpoints:
 /trade-quality?limit=20
 /top-executable?limit=20
 /fill-lifecycle
+/outcome-replay
 ```
 
 Hard rule: Control Tower UI displays evidence only. It does not submit orders, call broker APIs, or bypass readiness gates.
@@ -398,7 +426,7 @@ python main.py
 
 ## Test strategy
 
-CI runs runtime contract, preflight, strategy registry, candidate truth, opportunity layer, broker contract, market readiness, execution readiness, runtime evidence wiring, trade quality, top executable selector, fill lifecycle sync, outcome logging and replay, Control Tower UI, API, WebSocket, and schema tests.
+CI runs runtime contract, preflight, strategy registry, candidate truth, opportunity layer, broker contract, market readiness, execution readiness, runtime evidence wiring, trade quality, top executable selector, fill lifecycle sync, outcome logging and replay, replay drilldowns and outcome analytics UI, Control Tower UI, API, WebSocket, and schema tests.
 
 ---
 
@@ -420,12 +448,12 @@ CI runs runtime contract, preflight, strategy registry, candidate truth, opportu
 - Unknown lifecycle status is surfaced instead of hidden.
 - Missing outcome evidence returns `NO_OUTCOME_EVENTS`.
 - Unknown outcome status is surfaced instead of hidden.
-- Control Tower UI exposes blockers, warnings, readiness, quality, selection, and lifecycle evidence.
+- Control Tower UI exposes blockers, warnings, readiness, quality, selection, lifecycle, and outcome replay evidence.
 
 ---
 
 ## Roadmap
 
-Completed foundation: runtime contract, preflight, strategy contract, Candidate Truth Layer, Opportunity Layer, broker contract resolver, broker contract readiness, quote/liquidity gates, execution readiness contract, execution readiness API, runtime evidence wiring, trade quality score, top executable selector, fill lifecycle sync, outcome logging and replay, and Control Tower UI.
+Completed foundation: runtime contract, preflight, strategy contract, Candidate Truth Layer, Opportunity Layer, broker contract resolver, broker contract readiness, quote/liquidity gates, execution readiness contract, execution readiness API, runtime evidence wiring, trade quality score, top executable selector, fill lifecycle sync, outcome logging and replay, replay drilldowns and outcome analytics UI, and Control Tower UI.
 
-Next work: richer frontend filtering, replay drilldowns, and outcome analytics.
+Next work: richer frontend filtering and outcome analytics charts.

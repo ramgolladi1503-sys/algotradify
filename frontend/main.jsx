@@ -25,7 +25,7 @@ function show(value) {
 
 function color(value) {
   const v = String(value || "").toUpperCase();
-  if (["OK", "PASS", "READY", "ALLOWED", "QUALIFIED", "SELECTED", "FILLED", "POSITION_CLOSED"].includes(v)) return "#123c2c";
+  if (["OK", "PASS", "READY", "ALLOWED", "QUALIFIED", "SELECTED", "FILLED", "POSITION_CLOSED", "CLOSED"].includes(v)) return "#123c2c";
   if (v.includes("BLOCK") || v.includes("FAIL") || v.includes("REJECT") || v.includes("UNKNOWN")) return "#421c24";
   return "#2b2a16";
 }
@@ -110,6 +110,7 @@ function Table({ rows, columns, empty }) {
 
 function App() {
   const [events, setEvents] = useState([]);
+  const [replayCandidateId, setReplayCandidateId] = useState("");
   const [state, setState] = useState({
     health: null,
     preflight: null,
@@ -121,6 +122,7 @@ function App() {
     tradeQuality: [],
     topExecutable: null,
     fillLifecycle: null,
+    outcomeReplay: null,
   });
   const [errors, setErrors] = useState([]);
   const [lastRefresh, setLastRefresh] = useState(null);
@@ -143,7 +145,8 @@ function App() {
     return response.json();
   }
 
-  async function fetchControlTower() {
+  async function fetchControlTower(candidateOverride = replayCandidateId) {
+    const candidateQuery = candidateOverride.trim() ? `?candidate_id=${encodeURIComponent(candidateOverride.trim())}` : "";
     const requests = [
       ["health", "/runtime/health"],
       ["preflight", "/runtime/preflight"],
@@ -155,6 +158,7 @@ function App() {
       ["tradeQuality", "/trade-quality?limit=20"],
       ["topExecutable", "/top-executable?limit=20"],
       ["fillLifecycle", "/fill-lifecycle"],
+      ["outcomeReplay", `/outcome-replay${candidateQuery}`],
     ];
     const results = await Promise.allSettled(requests.map(([, path]) => fetchJson(path)));
     const next = {};
@@ -189,24 +193,25 @@ function App() {
   useEffect(() => {
     connect();
     fetchControlTower();
-    const timer = setInterval(fetchControlTower, 3000);
+    const timer = setInterval(() => fetchControlTower(), 3000);
     return () => clearInterval(timer);
   }, []);
 
   const selected = state.topExecutable?.selected;
   const rejectedTop = arr(state.topExecutable?.rejected);
+  const replayEvents = arr(state.outcomeReplay?.events).slice(-12).reverse();
 
   return (
     <div style={{ background: "#0b1220", color: "#e8eefc", minHeight: "100vh", padding: 20, fontFamily: "Inter, system-ui, sans-serif" }}>
       <header style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap", marginBottom: 18 }}>
         <div>
           <h1 style={{ margin: 0, fontSize: 28 }}>Algotradify Control Tower</h1>
-          <p style={{ ...muted, marginTop: 6, maxWidth: 850 }}>
-            Runtime health, candidate truth, opportunity pipeline, execution readiness, trade quality, top executable selection, blockers, warnings, and fill lifecycle in one UI.
+          <p style={{ ...muted, marginTop: 6, maxWidth: 900 }}>
+            Runtime health, candidate truth, opportunity pipeline, execution readiness, trade quality, top executable selection, outcome replay, blockers, warnings, and fill lifecycle in one UI.
           </p>
         </div>
         <div style={{ textAlign: "right" }}>
-          <button onClick={fetchControlTower} style={{ background: "#2563eb", color: "white", border: 0, borderRadius: 8, padding: "9px 12px", fontWeight: 800 }}>Refresh</button>
+          <button onClick={() => fetchControlTower()} style={{ background: "#2563eb", color: "white", border: 0, borderRadius: 8, padding: "9px 12px", fontWeight: 800 }}>Refresh</button>
           <div style={{ ...muted, fontSize: 12, marginTop: 6 }}>last refresh: {lastRefresh || "-"}</div>
         </div>
       </header>
@@ -257,6 +262,44 @@ function App() {
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(420px, 1fr))", gap: 14, marginBottom: 14 }}>
+        <Card title="Outcome Replay Drilldown" right={<Pill value={state.outcomeReplay?.current_status || "unknown"} />}>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "end", marginBottom: 12 }}>
+            <label style={{ display: "grid", gap: 4 }}>
+              <span style={{ ...muted, fontSize: 12 }}>candidate_id filter</span>
+              <input
+                value={replayCandidateId}
+                onChange={(event) => setReplayCandidateId(event.target.value)}
+                placeholder="c1"
+                style={{ background: "#0b1220", color: "#e8eefc", border: "1px solid #334155", borderRadius: 8, padding: "8px 10px" }}
+              />
+            </label>
+            <button onClick={() => fetchControlTower(replayCandidateId)} style={{ background: "#2563eb", color: "white", border: 0, borderRadius: 8, padding: "9px 12px", fontWeight: 800 }}>
+              Replay
+            </button>
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginBottom: 12 }}>
+            <Metric label="candidate" value={state.outcomeReplay?.candidate_id} />
+            <Metric label="selected" value={state.outcomeReplay?.selected_count ?? 0} />
+            <Metric label="blocked" value={state.outcomeReplay?.blocked_count ?? 0} />
+            <Metric label="filled" value={state.outcomeReplay?.filled_count ?? 0} />
+            <Metric label="rejected" value={state.outcomeReplay?.rejected_count ?? 0} />
+            <Metric label="best quality" value={state.outcomeReplay?.best_quality_score ?? "-"} />
+            <Metric label="terminal" value={String(state.outcomeReplay?.terminal ?? "-")} />
+          </div>
+          <div style={{ marginBottom: 8 }}>
+            <div style={muted}>outcome blockers</div>
+            <Chips items={state.outcomeReplay?.blockers} />
+          </div>
+          <div style={muted}>is_order_action: {show(state.outcomeReplay?.is_order_action)}</div>
+          <Table rows={replayEvents} empty="no outcome replay events yet" columns={[
+            { key: "status", label: "outcome", render: (row) => <Pill value={row.status} /> },
+            { key: "ts_epoch", label: "time" },
+            { key: "reason", label: "reason" },
+            { key: "quality_score", label: "quality" },
+            { key: "source", label: "source" },
+          ]} />
+        </Card>
+
         <Card title="Execution Readiness">
           <Table rows={arr(state.executionReadiness)} empty="no readiness records yet" columns={[
             { key: "candidate_id", label: "candidate" },
@@ -265,7 +308,9 @@ function App() {
             { key: "blockers", label: "blockers", render: (row) => <Chips items={row.blockers} /> },
           ]} />
         </Card>
+      </div>
 
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(420px, 1fr))", gap: 14, marginBottom: 14 }}>
         <Card title="Trade Quality">
           <Table rows={arr(state.tradeQuality)} empty="no quality records yet" columns={[
             { key: "rank", label: "rank" },
@@ -275,9 +320,7 @@ function App() {
             { key: "penalties", label: "penalties", render: (row) => show(row.penalties) },
           ]} />
         </Card>
-      </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(420px, 1fr))", gap: 14, marginBottom: 14 }}>
         <Card title="Top Executable Rejections">
           <Table rows={rejectedTop} empty="no selector rejections" columns={[
             { key: "candidate_id", label: "candidate" },
@@ -286,7 +329,9 @@ function App() {
             { key: "blockers", label: "blockers", render: (row) => <Chips items={row.blockers} /> },
           ]} />
         </Card>
+      </div>
 
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(420px, 1fr))", gap: 14, marginBottom: 14 }}>
         <Card title="Candidate Truth">
           <Table rows={arr(state.candidateTruth)} empty="no candidate truth records yet" columns={[
             { key: "candidate_id", label: "candidate" },
@@ -296,9 +341,7 @@ function App() {
             { key: "blockers", label: "blockers", render: (row) => <Chips items={row.blockers} /> },
           ]} />
         </Card>
-      </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(420px, 1fr))", gap: 14, marginBottom: 14 }}>
         <Card title="Opportunity Layer" right={<Pill value={state.opportunityLayer?.status || "unknown"} />}>
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
             {Object.entries(state.opportunityLayer?.counts || {}).map(([key, value]) => <Metric key={key} label={key} value={value} />)}
@@ -310,7 +353,9 @@ function App() {
             { key: "rank_score", label: "score" },
           ]} />
         </Card>
+      </div>
 
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(420px, 1fr))", gap: 14, marginBottom: 14 }}>
         <Card title="Fill Lifecycle" right={<Pill value={state.fillLifecycle?.current_status || "unknown"} />}>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginBottom: 12 }}>
             <Metric label="candidate" value={state.fillLifecycle?.candidate_id} />
@@ -330,9 +375,7 @@ function App() {
             { key: "average_price", label: "avg price" },
           ]} />
         </Card>
-      </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(420px, 1fr))", gap: 14, marginBottom: 14 }}>
         <Card title="Raw Runtime Opportunities">
           <Table rows={arr(state.opportunities)} empty="no runtime opportunities yet" columns={[
             { key: "symbol", label: "symbol" },
@@ -343,17 +386,17 @@ function App() {
             { key: "score", label: "score" },
           ]} />
         </Card>
-
-        <Card title="Live Event Feed">
-          {events.map((event, index) => (
-            <div key={index} style={{ border: "1px solid #334155", padding: 10, marginBottom: 10, borderRadius: 8 }}>
-              <div style={{ fontWeight: 700 }}>{event.type}</div>
-              <div style={{ opacity: 0.95, wordBreak: "break-word", fontSize: 12 }}>{JSON.stringify(event.payload)}</div>
-            </div>
-          ))}
-          {!events.length ? <div style={muted}>no websocket events yet</div> : null}
-        </Card>
       </div>
+
+      <Card title="Live Event Feed">
+        {events.map((event, index) => (
+          <div key={index} style={{ border: "1px solid #334155", padding: 10, marginBottom: 10, borderRadius: 8 }}>
+            <div style={{ fontWeight: 700 }}>{event.type}</div>
+            <div style={{ opacity: 0.95, wordBreak: "break-word", fontSize: 12 }}>{JSON.stringify(event.payload)}</div>
+          </div>
+        ))}
+        {!events.length ? <div style={muted}>no websocket events yet</div> : null}
+      </Card>
     </div>
   );
 }
