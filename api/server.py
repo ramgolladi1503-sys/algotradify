@@ -28,6 +28,7 @@ from candidate_truth import normalize_candidates
 from execution_readiness import build_execution_readiness
 from fill_lifecycle import normalize_fill_lifecycle
 from opportunity_layer import run_opportunity_pipeline
+from outcome_replay import normalize_outcome_replay
 from runtime_contract import (
     candidate_runtime_roots,
     is_tradebot_compatible_root,
@@ -268,7 +269,7 @@ def _extract_records(payload: Any, collection_keys: tuple[str, ...]) -> list[dic
         value = payload.get(key)
         if isinstance(value, list):
             return [row for row in value if isinstance(row, dict)]
-    if any(key in payload for key in ("candidate_id", "symbol", "status", "readiness_status", "execution_allowed", "allowed", "order_id", "broker_order_id")):
+    if any(key in payload for key in ("candidate_id", "symbol", "status", "readiness_status", "execution_allowed", "allowed", "order_id", "broker_order_id", "outcome_status")):
         return [payload]
     return []
 
@@ -301,6 +302,36 @@ def _fill_lifecycle_records() -> list[dict[str, Any]]:
 
 def _fill_lifecycle_payload(candidate_id: str | None = None) -> dict:
     return normalize_fill_lifecycle(_fill_lifecycle_records(), candidate_id=candidate_id).to_dict()
+
+
+def _outcome_replay_records() -> list[dict[str, Any]]:
+    root = _runtime_root()
+    json_records = _runtime_records_from_files(
+        root,
+        [
+            "outcome_replay_latest.json",
+            "outcomes_latest.json",
+            "trade_outcomes_latest.json",
+            "selection_outcomes_latest.json",
+        ],
+        ("outcome_replay", "outcomes", "trade_outcomes", "selection_outcomes", "events", "records", "items"),
+    )
+    if json_records:
+        return json_records
+    return _runtime_jsonl_records_from_files(
+        root,
+        [
+            "outcome_replay.jsonl",
+            "outcomes.jsonl",
+            "trade_outcomes.jsonl",
+            "selection_outcomes.jsonl",
+        ],
+        limit=1000,
+    )
+
+
+def _outcome_replay_payload(candidate_id: str | None = None) -> dict:
+    return normalize_outcome_replay(_outcome_replay_records(), candidate_id=candidate_id).to_dict()
 
 
 def _index_by_keys(records: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
@@ -595,6 +626,11 @@ def top_executable(
 @app.get("/fill-lifecycle", response_model=FillLifecycleStateResponse)
 def fill_lifecycle(candidate_id: str | None = Query(default=None)):
     return _fill_lifecycle_payload(candidate_id=candidate_id)
+
+
+@app.get("/outcome-replay")
+def outcome_replay(candidate_id: str | None = Query(default=None)):
+    return _outcome_replay_payload(candidate_id=candidate_id)
 
 
 @app.get("/strategies", response_model=list[StrategyInfoResponse])
