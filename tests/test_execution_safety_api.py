@@ -1,28 +1,80 @@
 from __future__ import annotations
 
+import json
+
 from fastapi.testclient import TestClient
 
 from api.server import app
 
 
+def _write_json(path, payload):
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+
 def _allowed_artifacts(tmp_path):
     runtime_root = tmp_path / ".runtime"
     runtime_root.mkdir()
-    (runtime_root / "top_opportunities_latest.json").write_text(
-        '{"top_executable_opportunities":[{"candidate_id":"c1","symbol":"NIFTY","strategy":"test","score":90,"confidence":90,"permission":"EXECUTE","final_action":"EXECUTE"}]}',
-        encoding="utf-8",
+    _write_json(
+        runtime_root / "top_opportunities_latest.json",
+        {
+            "top_executable_opportunities": [
+                {
+                    "candidate_id": "c1",
+                    "symbol": "NIFTY26MAY25500CE",
+                    "strategy": "orb_retest",
+                    "strategy_family": "ORB_RETEST",
+                    "score": 90,
+                    "confidence": 90,
+                    "permission": "EXECUTE",
+                    "final_action": "EXECUTE",
+                }
+            ]
+        },
     )
-    (runtime_root / "broker_contract_readiness_latest.json").write_text(
-        '{"records":[{"candidate_id":"c1","status":"RESOLVED_EXACT","instrument":{"tradingsymbol":"NIFTY","instrument_token":"1"}}]}',
-        encoding="utf-8",
+    _write_json(
+        runtime_root / "broker_contract_readiness_latest.json",
+        {
+            "broker_contract_readiness": [
+                {
+                    "candidate_id": "c1",
+                    "symbol": "NIFTY26MAY25500CE",
+                    "readiness_status": "RESOLVED_EXACT",
+                    "resolved": True,
+                    "instrument_token": 12345,
+                    "fallback_used": False,
+                    "blockers": [],
+                    "warnings": [],
+                }
+            ]
+        },
     )
-    (runtime_root / "market_readiness_latest.json").write_text(
-        '{"records":[{"candidate_id":"c1","status":"READY","quote_age_seconds":1,"depth_age_seconds":1,"spread_pct":1,"slippage_budget_pct":2}]}',
-        encoding="utf-8",
+    _write_json(
+        runtime_root / "market_readiness_latest.json",
+        {
+            "market_readiness": [
+                {
+                    "candidate_id": "c1",
+                    "symbol": "NIFTY26MAY25500CE",
+                    "status": "READY",
+                    "blockers": [],
+                    "warnings": [],
+                }
+            ]
+        },
     )
-    (runtime_root / "risk_readiness_latest.json").write_text(
-        '{"records":[{"candidate_id":"c1","status":"READY","allowed":true}]}',
-        encoding="utf-8",
+    _write_json(
+        runtime_root / "risk_readiness_latest.json",
+        {
+            "risk_readiness": [
+                {
+                    "candidate_id": "c1",
+                    "allowed": True,
+                    "status": "RISK_OK",
+                    "blockers": [],
+                    "warnings": [],
+                }
+            ]
+        },
     )
     return runtime_root
 
