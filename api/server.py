@@ -10,6 +10,7 @@ from redis.exceptions import RedisError
 
 from api.schemas import (
     CandidateTruthRecordResponse,
+    ExecutionReadinessResponse,
     HealthResponse,
     OpportunityLayerResponse,
     OpportunityResponse,
@@ -20,6 +21,7 @@ from api.schemas import (
     StrategyInfoResponse,
 )
 from candidate_truth import normalize_candidates
+from execution_readiness import build_execution_readiness
 from opportunity_layer import run_opportunity_pipeline
 from runtime_contract import (
     candidate_runtime_roots,
@@ -102,7 +104,8 @@ def _strategy_draft_payload(request: Request, symbol: str) -> list[dict]:
 
 def _normalize_opportunity(row: dict, bucket: str, index: int) -> dict:
     symbol = row.get("symbol") or row.get("underlying") or row.get("index_symbol")
-    strategy = row.get("strategy") or row.get("strategy_family")
+    strategy = row.get("strategy") or row.get("strategy_id") or row.get("strategy_family")
+    setup_family = row.get("setup_family") or row.get("strategy_family") or row.get("setup") or strategy
     candidate_id = row.get("trade_id") or row.get("advisory_id") or row.get("candidate_id") or f"{bucket}_{index}"
     score = row.get("final_score")
     if score is None:
@@ -113,6 +116,9 @@ def _normalize_opportunity(row: dict, bucket: str, index: int) -> dict:
         "candidate_id": str(candidate_id),
         "symbol": symbol,
         "strategy": strategy,
+        "strategy_id": strategy,
+        "strategy_family": setup_family,
+        "setup_family": setup_family,
         "permission": row.get("permission"),
         "final_action": row.get("final_action"),
         "status": row.get("status"),
@@ -225,6 +231,56 @@ def _opportunity_layer_payload(limit: int) -> dict:
     return run_opportunity_pipeline(rows, source="api.opportunities").to_dict()
 
 
+def _execution_readiness_payload(limit: int) -> list[dict]:
+    rows = _opportunities_payload(limit)
+    truth_records = [record.to_dict() for record in normalize_candidates(rows, source="api.opportunities")]
+    opportunity_result = run_opportunity_pipeline(rows, source="api.opportunities").to_dict()
+    opportunities_by_id = {
+        row["candidate_id"]: row
+        for section in ("ranked", "blocked", "dropped")
+        for row in opportunity_result.get(section, [])
+    }
+    if opportunity_result.get("selected"):
+        selected = opportunity_result["selected"]
+        opportunities_by_id[selected["candidate_id"]] = selected
+
+    return [
+        build_execution_readiness(
+            candidate_truth=truth,
+            opportunity=opportunities_by_id.get(truth["candidate_id"]),
+            broker_contract=None,
+            market_readiness=None,
+            risk=None,
+        ).to_dict()
+        for truth in truth_records
+    ]
+
+
+def _strategy_execution_readiness_payload(request: Request, symbol: str) -> list[dict]:
+    drafts = _strategy_draft_payload(request, symbol)
+    truth_records = [record.to_dict() for record in normalize_candidates(drafts, source="api.strategy_draft_preview")]
+    opportunity_result = run_opportunity_pipeline(drafts, source="api.strategy_draft_preview").to_dict()
+    opportunities_by_id = {
+        row["candidate_id"]: row
+        for section in ("ranked", "blocked", "dropped")
+        for row in opportunity_result.get(section, [])
+    }
+    if opportunity_result.get("selected"):
+        selected = opportunity_result["selected"]
+        opportunities_by_id[selected["candidate_id"]] = selected
+
+    return [
+        build_execution_readiness(
+            candidate_truth=truth,
+            opportunity=opportunities_by_id.get(truth["candidate_id"]),
+            broker_contract=None,
+            market_readiness=None,
+            risk=None,
+        ).to_dict()
+        for truth in truth_records
+    ]
+
+
 def _runtime_snapshot_payload() -> dict:
     root = _runtime_root()
     cycle = _load_json(root / "logs" / "engine_cycle_status.json", {})
@@ -323,6 +379,11 @@ def opportunity_layer(limit: int = Query(default=25, ge=1, le=200)):
     return _opportunity_layer_payload(limit)
 
 
+@app.get("/execution-readiness", response_model=list[ExecutionReadinessResponse])
+def execution_readiness(limit: int = Query(default=25, ge=1, le=200)):
+    return _execution_readiness_payload(limit)
+
+
 @app.get("/strategies", response_model=list[StrategyInfoResponse])
 def strategies():
     return _strategy_registry().list()
@@ -349,6 +410,11 @@ def draft_candidate_truth(request: Request, symbol: str = Query(..., min_length=
 def draft_candidate_opportunity_layer(request: Request, symbol: str = Query(..., min_length=1)):
     drafts = _strategy_draft_payload(request, symbol)
     return run_opportunity_pipeline(drafts, source="api.strategy_draft_preview").to_dict()
+
+
+@app.get("/strategies/draft-candidates/execution-readiness", response_model=list[ExecutionReadinessResponse])
+def draft_candidate_execution_readiness(request: Request, symbol: str = Query(..., min_length=1)):
+    return _strategy_execution_readiness_payload(request, symbol)
 
 
 @app.websocket("/ws")

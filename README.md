@@ -278,6 +278,33 @@ A record with `execution_allowed=true` is still not an order. It is readiness ev
 
 ---
 
+## Execution readiness API
+
+Execution readiness is exposed through API as evidence only.
+
+Endpoints:
+
+```bash
+curl http://localhost:8000/execution-readiness
+curl 'http://localhost:8000/strategies/draft-candidates/execution-readiness?symbol=NIFTY&orb_retest_score=85'
+```
+
+Current behavior is intentionally conservative. If broker contract readiness, market readiness, or risk readiness evidence is not wired for a candidate, the API returns blocked incomplete evidence instead of manufacturing executable status.
+
+Example blockers:
+
+- `MISSING_BROKER_CONTRACT_READINESS`
+- `MISSING_MARKET_READINESS`
+- `MISSING_RISK_READINESS`
+
+Hard rule:
+
+```text
+API exposure does not place orders and does not call broker APIs.
+```
+
+---
+
 ## Current API endpoints
 
 ```text
@@ -288,10 +315,12 @@ GET /runtime/snapshot
 GET /opportunities
 GET /candidate-truth
 GET /opportunity-layer
+GET /execution-readiness
 GET /strategies
 GET /strategies/draft-candidates
 GET /strategies/draft-candidates/truth
 GET /strategies/draft-candidates/opportunity-layer
+GET /strategies/draft-candidates/execution-readiness
 WS  /ws
 ```
 
@@ -332,6 +361,7 @@ Backend tests cover:
 - broker contract readiness
 - quote freshness and liquidity gates
 - unified execution readiness contract
+- execution readiness API
 - API contracts
 - WebSocket degraded Redis behavior
 - OpenAPI schema contracts
@@ -339,7 +369,7 @@ Backend tests cover:
 CI command:
 
 ```bash
-pytest -q tests/test_runtime_contract.py tests/test_runtime_preflight.py tests/test_strategy_registry.py tests/test_candidate_truth.py tests/test_opportunity_layer.py tests/test_broker_contract_resolver.py tests/test_broker_contract_readiness.py tests/test_market_readiness.py tests/test_execution_readiness.py tests/test_api_contracts.py tests/test_websocket_contracts.py tests/test_api_schema_contracts.py
+pytest -q tests/test_runtime_contract.py tests/test_runtime_preflight.py tests/test_strategy_registry.py tests/test_candidate_truth.py tests/test_opportunity_layer.py tests/test_broker_contract_resolver.py tests/test_broker_contract_readiness.py tests/test_market_readiness.py tests/test_execution_readiness.py tests/test_execution_readiness_api.py tests/test_api_contracts.py tests/test_websocket_contracts.py tests/test_api_schema_contracts.py
 ```
 
 ---
@@ -364,6 +394,7 @@ pytest -q tests/test_runtime_contract.py tests/test_runtime_preflight.py tests/t
 - Slippage budget breach is blocked.
 - Missing execution-readiness evidence blocks execution.
 - Missing risk readiness blocks execution.
+- Execution readiness API returns blocked incomplete evidence when downstream evidence is missing.
 
 ---
 
@@ -380,10 +411,10 @@ Completed foundation:
 - Broker contract readiness
 - Quote freshness and liquidity gates
 - Unified execution readiness contract
+- Execution readiness API
 
 Next work:
 
-- Execution readiness APIs
 - Trade quality score
 - Top executable selector
 - Fill lifecycle sync
