@@ -24,6 +24,7 @@ def test_control_tower_ui_calls_all_tradability_endpoints():
         "/trade-quality?limit=20",
         "/top-executable?limit=20",
         "/execution-safety?limit=20",
+        "/dry-run-execution?limit=20",
         "/fill-lifecycle",
         "/outcome-replay",
     ]
@@ -44,6 +45,7 @@ def test_control_tower_ui_renders_required_sections():
         "Tradability Summary",
         "Top Executable",
         "Execution Safety",
+        "Dry-Run Execution Adapter",
         "Readiness Breakdown Chart",
         "Outcome Counts Chart",
         "Quality Score Distribution Chart",
@@ -91,6 +93,28 @@ def test_control_tower_ui_exposes_execution_safety_decision():
 
     for term in required_terms:
         assert term in source
+
+
+def test_control_tower_ui_exposes_dry_run_execution_visibility_without_append():
+    source = _frontend_source()
+
+    required_terms = [
+        "dryRunExecution",
+        "Dry-Run Execution Adapter",
+        "dry_run_only",
+        "dry_run_order_id",
+        "real_order_id",
+        "broker_api_called",
+        "dry-run blockers",
+        "dry-run warnings",
+        "Preview Dry Run",
+    ]
+
+    for term in required_terms:
+        assert term in source
+
+    assert "/dry-run-execution?limit=20" in source
+    assert "append=true" not in source
 
 
 def test_control_tower_ui_exposes_outcome_replay_filter_counts_and_timeline():
