@@ -4,13 +4,13 @@
 
 **Runtime bridge, candidate pipeline, and live monitoring UI for trading systems.**
 
-Algotradify connects a Tradebot-compatible runtime to a FastAPI backend and React frontend so operators can monitor runtime health, opportunities, candidate truth, lifecycle evidence, outcome replay, and live events.
+Algotradify connects a Tradebot-compatible runtime to a FastAPI backend and React frontend so operators can monitor runtime health, opportunities, candidate truth, lifecycle evidence, outcome replay, execution safety, and live events.
 
 ---
 
 ## Problem statement
 
-A trading signal is not automatically tradable. Algotradify explains candidate survival across strategy output, candidate truth, opportunity ranking, contract evidence, market evidence, risk evidence, execution readiness, trade quality score, top executable selector, fill lifecycle sync, outcome logging and replay, replay drilldowns and outcome analytics UI, richer frontend filtering and outcome analytics charts, persisted UI preferences and operator views, production execution-safety design, and Control Tower UI.
+A trading signal is not automatically tradable. Algotradify explains candidate survival across strategy output, candidate truth, opportunity ranking, contract evidence, market evidence, risk evidence, execution readiness, trade quality score, top executable selector, fill lifecycle sync, outcome logging and replay, replay drilldowns and outcome analytics UI, richer frontend filtering and outcome analytics charts, persisted UI preferences and operator views, production execution-safety design, execution-safety API and UI visibility, and Control Tower UI.
 
 ---
 
@@ -33,7 +33,8 @@ flowchart LR
     M --> N[Richer Frontend Filtering and Outcome Analytics Charts]
     N --> O[Persisted UI Preferences and Operator Views]
     O --> P[Production Execution-Safety Design]
-    P --> Q[Control Tower UI]
+    P --> Q[Execution-Safety API and UI Visibility]
+    Q --> R[Control Tower UI]
 ```
 
 ---
@@ -234,6 +235,76 @@ Hard rule: top executable selection is still not an order. It does not call brok
 
 ---
 
+## Production execution-safety design
+
+Execution safety is the pre-order contract that must pass before any future execution surface can exist.
+
+Implemented package:
+
+```text
+execution_safety/
+  __init__.py
+  contract.py
+```
+
+Design document:
+
+```text
+docs/execution-safety-design.md
+```
+
+Required gates:
+
+- paper/live mode separation
+- manual approval model
+- operator identity
+- dry-run requirement
+- kill switch
+- broker confirmation gate
+- max daily loss guard
+- max orders per day guard
+- max quantity guard
+- warning acknowledgement
+- top executable candidate evidence
+- execution readiness evidence
+
+Hard rule: this layer is still not execution. It does not place orders, call broker APIs, modify orders, cancel orders, exit positions, or expose order buttons.
+
+---
+
+## Execution-safety API and UI visibility
+
+The execution-safety decision is exposed as visibility only.
+
+Endpoint:
+
+```bash
+curl http://localhost:8000/execution-safety
+curl 'http://localhost:8000/execution-safety?dry_run_required=false&approval_id=a1&operator_id=o1&broker_confirmation_id=b1&warnings_acknowledged=true'
+```
+
+The API evaluates the current top executable candidate and execution readiness evidence against the execution safety policy.
+
+Visible fields include:
+
+```text
+execution_permitted
+status
+mode
+blockers
+warnings
+requires_manual_approval
+readiness_records_checked
+safety_visibility_only
+is_order_action
+```
+
+The Control Tower shows an `Execution Safety` card with safety blockers and warnings.
+
+Hard rule: execution-safety API and UI visibility do not submit orders, call broker APIs, mutate runtime state, or expose order buttons.
+
+---
+
 ## Fill lifecycle sync
 
 Fill lifecycle sync normalizes local order/fill evidence into current lifecycle state.
@@ -402,43 +473,6 @@ Hard rule: persisted preferences are browser-local UI settings only. They do not
 
 ---
 
-## Production execution-safety design
-
-Execution safety is the pre-order contract that must pass before any future execution surface can exist.
-
-Implemented package:
-
-```text
-execution_safety/
-  __init__.py
-  contract.py
-```
-
-Design document:
-
-```text
-docs/execution-safety-design.md
-```
-
-Required gates:
-
-- paper/live mode separation
-- manual approval model
-- operator identity
-- dry-run requirement
-- kill switch
-- broker confirmation gate
-- max daily loss guard
-- max orders per day guard
-- max quantity guard
-- warning acknowledgement
-- top executable candidate evidence
-- execution readiness evidence
-
-Hard rule: this layer is still not execution. It does not place orders, call broker APIs, modify orders, cancel orders, exit positions, or expose order buttons.
-
----
-
 ## Control Tower UI
 
 The Vite React UI displays the full tradability pipeline instead of only runtime health and raw opportunities.
@@ -450,6 +484,7 @@ UI sections:
 - Cycle Snapshot
 - Tradability Summary
 - Top Executable
+- Execution Safety
 - Frontend Filters
 - Readiness Breakdown Chart
 - Outcome Counts Chart
@@ -476,6 +511,7 @@ The UI polls these endpoints:
 /execution-readiness?limit=20
 /trade-quality?limit=20
 /top-executable?limit=20
+/execution-safety?limit=20
 /fill-lifecycle
 /outcome-replay
 ```
@@ -497,6 +533,7 @@ GET /opportunity-layer
 GET /execution-readiness
 GET /trade-quality
 GET /top-executable
+GET /execution-safety
 GET /fill-lifecycle
 GET /outcome-replay
 GET /strategies
@@ -524,7 +561,7 @@ python main.py
 
 ## Test strategy
 
-CI runs runtime contract, preflight, strategy registry, candidate truth, opportunity layer, broker contract, market readiness, execution readiness, runtime evidence wiring, trade quality, top executable selector, fill lifecycle sync, outcome logging and replay, replay drilldowns and outcome analytics UI, richer frontend filtering and outcome analytics charts, persisted UI preferences and operator views, production execution-safety design, Control Tower UI, API, WebSocket, and schema tests.
+CI runs runtime contract, preflight, strategy registry, candidate truth, opportunity layer, broker contract, market readiness, execution readiness, runtime evidence wiring, trade quality, top executable selector, execution safety API/UI visibility, fill lifecycle sync, outcome logging and replay, replay drilldowns and outcome analytics UI, richer frontend filtering and outcome analytics charts, persisted UI preferences and operator views, Control Tower UI, API, WebSocket, and schema tests.
 
 ---
 
@@ -546,15 +583,16 @@ CI runs runtime contract, preflight, strategy registry, candidate truth, opportu
 - Unknown lifecycle status is surfaced instead of hidden.
 - Missing outcome evidence returns `NO_OUTCOME_EVENTS`.
 - Unknown outcome status is surfaced instead of hidden.
-- Control Tower UI exposes blockers, warnings, readiness, quality, selection, lifecycle, and outcome replay evidence.
+- Control Tower UI exposes blockers, warnings, readiness, quality, selection, lifecycle, execution safety, and outcome replay evidence.
 - Frontend filters reduce dashboard noise without changing backend state.
 - Persisted UI preferences survive refresh without changing backend/runtime state.
 - Execution safety blocks by default until approvals, dry-run, broker confirmation, kill switch, and limits pass.
+- Execution-safety API/UI visibility exposes safety blockers without creating orders.
 
 ---
 
 ## Roadmap
 
-Completed foundation: runtime contract, preflight, strategy contract, Candidate Truth Layer, Opportunity Layer, broker contract resolver, broker contract readiness, quote/liquidity gates, execution readiness contract, execution readiness API, runtime evidence wiring, trade quality score, top executable selector, fill lifecycle sync, outcome logging and replay, replay drilldowns and outcome analytics UI, richer frontend filtering and outcome analytics charts, persisted UI preferences and operator views, production execution-safety design, and Control Tower UI.
+Completed foundation: runtime contract, preflight, strategy contract, Candidate Truth Layer, Opportunity Layer, broker contract resolver, broker contract readiness, quote/liquidity gates, execution readiness contract, execution readiness API, runtime evidence wiring, trade quality score, top executable selector, production execution-safety design, execution-safety API/UI visibility, fill lifecycle sync, outcome logging and replay, replay drilldowns and outcome analytics UI, richer frontend filtering and outcome analytics charts, persisted UI preferences and operator views, and Control Tower UI.
 
-Next work: execution-safety API/UI visibility, approval audit log, and dry-run execution adapter.
+Next work: approval audit log and dry-run execution adapter.
