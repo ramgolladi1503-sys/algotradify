@@ -20,6 +20,7 @@ from api.schemas import (
     RuntimeSnapshotResponse,
     StrategyCandidateDraftResponse,
     StrategyInfoResponse,
+    TopExecutableSelectionResponse,
     TradeQualityResponse,
 )
 from candidate_truth import normalize_candidates
@@ -32,6 +33,7 @@ from runtime_contract import (
     runtime_artifact_root,
 )
 from strategies import StrategyContext, build_default_strategy_registry
+from top_selector import select_top_executable
 from trade_quality import rank_trade_quality
 
 
@@ -403,6 +405,11 @@ def _trade_quality_payload(limit: int) -> list[dict]:
     return [row.to_dict() for row in rank_trade_quality(readiness)]
 
 
+def _top_executable_payload(limit: int, min_quality_score: float) -> dict:
+    quality = _trade_quality_payload(limit)
+    return select_top_executable(quality, min_quality_score=min_quality_score).to_dict()
+
+
 def _strategy_execution_readiness_payload(request: Request, symbol: str) -> list[dict]:
     drafts = _strategy_draft_payload(request, symbol)
     truth_records = [record.to_dict() for record in normalize_candidates(drafts, source="api.strategy_draft_preview")]
@@ -534,6 +541,14 @@ def execution_readiness(limit: int = Query(default=25, ge=1, le=200)):
 @app.get("/trade-quality", response_model=list[TradeQualityResponse])
 def trade_quality(limit: int = Query(default=25, ge=1, le=200)):
     return _trade_quality_payload(limit)
+
+
+@app.get("/top-executable", response_model=TopExecutableSelectionResponse)
+def top_executable(
+    limit: int = Query(default=25, ge=1, le=200),
+    min_quality_score: float = Query(default=50.0, ge=0.0, le=100.0),
+):
+    return _top_executable_payload(limit=limit, min_quality_score=min_quality_score)
 
 
 @app.get("/strategies", response_model=list[StrategyInfoResponse])
