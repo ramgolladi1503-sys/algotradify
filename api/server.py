@@ -26,6 +26,7 @@ from api.schemas import (
 )
 from candidate_truth import normalize_candidates
 from execution_readiness import build_execution_readiness
+from execution_safety import ExecutionMode, ExecutionSafetyPolicy, evaluate_execution_safety
 from fill_lifecycle import normalize_fill_lifecycle
 from opportunity_layer import run_opportunity_pipeline
 from outcome_replay import normalize_outcome_replay
@@ -482,6 +483,73 @@ def _top_executable_payload(limit: int, min_quality_score: float) -> dict:
     return select_top_executable(quality, min_quality_score=min_quality_score).to_dict()
 
 
+def _bool_query(request: Request, name: str, default: bool) -> bool:
+    raw = request.query_params.get(name)
+    if raw is None:
+        return default
+    return str(raw).lower() in {"1", "true", "yes", "y", "on"}
+
+
+def _float_query(request: Request, name: str, default: float) -> float:
+    try:
+        return float(request.query_params.get(name, default))
+    except (TypeError, ValueError):
+        return default
+
+
+def _int_query(request: Request, name: str, default: int) -> int:
+    try:
+        return int(request.query_params.get(name, default))
+    except (TypeError, ValueError):
+        return default
+
+
+def _execution_safety_policy_from_request(request: Request) -> ExecutionSafetyPolicy:
+    mode_raw = str(request.query_params.get("mode", "PAPER")).upper()
+    mode = ExecutionMode.LIVE if mode_raw == "LIVE" else ExecutionMode.PAPER
+    return ExecutionSafetyPolicy(
+        mode=mode,
+        manual_approval_required=_bool_query(request, "manual_approval_required", True),
+        kill_switch_enabled=_bool_query(request, "kill_switch_enabled", False),
+        broker_confirmation_required=_bool_query(request, "broker_confirmation_required", True),
+        dry_run_required=_bool_query(request, "dry_run_required", True),
+        max_daily_loss=_float_query(request, "max_daily_loss", 0.0),
+        current_daily_loss=_float_query(request, "current_daily_loss", 0.0),
+        max_orders_per_day=_int_query(request, "max_orders_per_day", 0),
+        orders_today=_int_query(request, "orders_today", 0),
+        max_quantity=_int_query(request, "max_quantity", 0),
+        requested_quantity=_int_query(request, "requested_quantity", 0),
+        approval_id=request.query_params.get("approval_id"),
+        operator_id=request.query_params.get("operator_id"),
+        broker_confirmation_id=request.query_params.get("broker_confirmation_id"),
+        warnings_acknowledged=_bool_query(request, "warnings_acknowledged", False),
+    )
+
+
+def _matching_readiness(top_executable: dict[str, Any], readiness: list[dict[str, Any]]) -> dict[str, Any] | None:
+    selected = top_executable.get("selected") if isinstance(top_executable, dict) else None
+    candidate_id = selected.get("candidate_id") if isinstance(selected, dict) else None
+    if candidate_id:
+        for row in readiness:
+            if row.get("candidate_id") == candidate_id:
+                return row
+    return readiness[0] if readiness else None
+
+
+def _execution_safety_payload(request: Request, limit: int, min_quality_score: float) -> dict:
+    top_executable = _top_executable_payload(limit=limit, min_quality_score=min_quality_score)
+    readiness = _execution_readiness_payload(limit=limit)
+    decision = evaluate_execution_safety(
+        _execution_safety_policy_from_request(request),
+        top_executable=top_executable,
+        execution_readiness=_matching_readiness(top_executable, readiness),
+    ).to_dict()
+    decision["top_executable"] = top_executable
+    decision["readiness_records_checked"] = len(readiness)
+    decision["safety_visibility_only"] = True
+    return decision
+
+
 def _strategy_execution_readiness_payload(request: Request, symbol: str) -> list[dict]:
     drafts = _strategy_draft_payload(request, symbol)
     truth_records = [record.to_dict() for record in normalize_candidates(drafts, source="api.strategy_draft_preview")]
@@ -621,6 +689,15 @@ def top_executable(
     min_quality_score: float = Query(default=50.0, ge=0.0, le=100.0),
 ):
     return _top_executable_payload(limit=limit, min_quality_score=min_quality_score)
+
+
+@app.get("/execution-safety")
+def execution_safety(
+    request: Request,
+    limit: int = Query(default=25, ge=1, le=200),
+    min_quality_score: float = Query(default=50.0, ge=0.0, le=100.0),
+):
+    return _execution_safety_payload(request=request, limit=limit, min_quality_score=min_quality_score)
 
 
 @app.get("/fill-lifecycle", response_model=FillLifecycleStateResponse)

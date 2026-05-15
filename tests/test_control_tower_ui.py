@@ -23,6 +23,7 @@ def test_control_tower_ui_calls_all_tradability_endpoints():
         "/execution-readiness?limit=20",
         "/trade-quality?limit=20",
         "/top-executable?limit=20",
+        "/execution-safety?limit=20",
         "/fill-lifecycle",
         "/outcome-replay",
     ]
@@ -42,6 +43,7 @@ def test_control_tower_ui_renders_required_sections():
         "Cycle Snapshot",
         "Tradability Summary",
         "Top Executable",
+        "Execution Safety",
         "Readiness Breakdown Chart",
         "Outcome Counts Chart",
         "Quality Score Distribution Chart",
@@ -65,11 +67,30 @@ def test_control_tower_ui_exposes_blockers_and_no_order_boundaries():
 
     assert "blockers" in source
     assert "execution_allowed" in source
+    assert "execution_permitted" in source
     assert "quality_score" in source
     assert "selector_rejection_reasons" in source
     assert "is_order" in source
     assert "is_order_submission" in source
     assert "is_order_action" in source
+    assert "safety_visibility_only" in source
+
+
+def test_control_tower_ui_exposes_execution_safety_decision():
+    source = _frontend_source()
+
+    required_terms = [
+        "executionSafety",
+        "safety blockers",
+        "safety warnings",
+        "requires_manual_approval",
+        "readiness_records_checked",
+        "execution_permitted",
+        "safety_visibility_only",
+    ]
+
+    for term in required_terms:
+        assert term in source
 
 
 def test_control_tower_ui_exposes_outcome_replay_filter_counts_and_timeline():
