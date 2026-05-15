@@ -7,10 +7,10 @@ app = server.app
 
 install_dry_run_execution_route(
     app,
-    runtime_root_provider=server._runtime_root,
-    top_executable_provider=server._top_executable_payload,
-    readiness_provider=server._execution_readiness_payload,
-    safety_provider=server._execution_safety_payload,
-    approval_provider=server._approval_audit_payload,
-    readiness_matcher=server._matching_readiness,
+    runtime_root_provider=lambda: server._runtime_root(),
+    top_executable_provider=lambda limit, min_quality_score: server._top_executable_payload(limit, min_quality_score),
+    readiness_provider=lambda limit: server._execution_readiness_payload(limit),
+    safety_provider=lambda request, limit, min_quality_score: server._execution_safety_payload(request, limit, min_quality_score),
+    approval_provider=lambda candidate_id, now_epoch: server._approval_audit_payload(candidate_id=candidate_id, now_epoch=now_epoch),
+    readiness_matcher=lambda top_executable, readiness: server._matching_readiness(top_executable, readiness),
 )
