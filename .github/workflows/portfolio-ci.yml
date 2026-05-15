@@ -9,7 +9,7 @@ on:
 
 jobs:
   portfolio-quality-gate:
-    name: Documentation, runtime, preflight, strategy, candidate-truth, opportunity-layer, broker-contract, market-readiness, execution-readiness, evidence-wiring, trade-quality, top-selector, fill-lifecycle, outcome-replay, replay-drilldown-ui, frontend-filtering-analytics, API, WebSocket, schema, and portfolio quality gate
+    name: Documentation, runtime, preflight, strategy, candidate-truth, opportunity-layer, broker-contract, market-readiness, execution-readiness, evidence-wiring, trade-quality, top-selector, fill-lifecycle, outcome-replay, replay-drilldown-ui, frontend-filtering-analytics, persisted-ui-preferences, API, WebSocket, schema, and portfolio quality gate
     runs-on: ubuntu-latest
 
     steps:
@@ -86,6 +86,7 @@ jobs:
           grep -qi "Outcome logging and replay" README.md
           grep -qi "Replay drilldowns and outcome analytics UI" README.md
           grep -qi "Richer frontend filtering and outcome analytics charts" README.md
+          grep -qi "Persisted UI preferences and operator views" README.md
           grep -qi "Control Tower UI" README.md
           grep -qi "Test strategy" README.md
           grep -qi "Failure modes" README.md
@@ -101,7 +102,7 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r api/requirements.txt pytest httpx
 
-      - name: Run runtime, preflight, strategy, candidate-truth, opportunity-layer, broker-contract, market-readiness, execution-readiness, evidence-wiring, trade-quality, top-selector, fill-lifecycle, outcome-replay, replay-drilldown-ui, frontend-filtering-analytics, API, WebSocket, and schema contract tests
+      - name: Run runtime, preflight, strategy, candidate-truth, opportunity-layer, broker-contract, market-readiness, execution-readiness, evidence-wiring, trade-quality, top-selector, fill-lifecycle, outcome-replay, replay-drilldown-ui, frontend-filtering-analytics, persisted-ui-preferences, API, WebSocket, and schema contract tests
         run: pytest -q tests/test_runtime_contract.py tests/test_runtime_preflight.py tests/test_strategy_registry.py tests/test_candidate_truth.py tests/test_opportunity_layer.py tests/test_broker_contract_resolver.py tests/test_broker_contract_readiness.py tests/test_market_readiness.py tests/test_execution_readiness.py tests/test_execution_readiness_api.py tests/test_execution_readiness_evidence_wiring.py tests/test_trade_quality.py tests/test_trade_quality_api.py tests/test_top_selector.py tests/test_top_selector_api.py tests/test_fill_lifecycle.py tests/test_fill_lifecycle_api.py tests/test_outcome_replay.py tests/test_outcome_replay_api.py tests/test_control_tower_ui.py tests/test_api_contracts.py tests/test_websocket_contracts.py tests/test_api_schema_contracts.py
 
       - name: Generate portfolio test report
@@ -112,7 +113,7 @@ jobs:
 
           ## Scope
 
-          This CI gate validates runtime-root, runtime-preflight, strategy-contract, candidate-truth, opportunity-layer, broker-contract resolver/readiness, market-readiness, execution-readiness, runtime evidence wiring, trade-quality, top-selector, fill-lifecycle, outcome-replay, replay-drilldown UI, frontend filtering/analytics, FastAPI, WebSocket, and schema contract tests.
+          This CI gate validates runtime-root, runtime-preflight, strategy-contract, candidate-truth, opportunity-layer, broker-contract resolver/readiness, market-readiness, execution-readiness, runtime evidence wiring, trade-quality, top-selector, fill-lifecycle, outcome-replay, replay-drilldown UI, frontend filtering/analytics, persisted UI preferences/operator views, FastAPI, WebSocket, and schema contract tests.
 
           ## Checks
 
@@ -131,11 +132,12 @@ jobs:
           - Outcome replay tests prove candidate outcomes can be audited without order actions.
           - Replay drilldown UI contract tests prove outcome replay is visible and filterable in the Control Tower.
           - Frontend filtering and analytics contract tests prove filters and charts are visible in the Control Tower.
+          - Persisted UI preference contract tests prove operator view state is saved locally and resettable.
           - FastAPI, WebSocket, and OpenAPI schema contract tests run.
 
           ## Current honest limitation
 
-          Frontend filtering and analytics are local UI-only controls. They do not trigger orders.
+          Persisted preferences are local UI-only controls in browser localStorage. They do not trigger orders or mutate backend state.
           REPORT
 
       - name: Upload portfolio report
