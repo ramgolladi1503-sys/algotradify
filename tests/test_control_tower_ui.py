@@ -117,6 +117,31 @@ def test_control_tower_ui_exposes_dry_run_execution_visibility_without_append():
     assert "append=true" not in source
 
 
+def test_control_tower_ui_exposes_dry_run_evidence_drilldown_and_operator_explanation():
+    source = _frontend_source()
+
+    required_terms = [
+        "dryRunExplanation",
+        "Dry-run operator explanation",
+        "selected candidate snapshot",
+        "execution safety snapshot",
+        "approval snapshot",
+        "readiness snapshot",
+        "outcome event",
+        "selectedCandidateSnapshot",
+        "executionSafetySnapshot",
+        "approvalSnapshot",
+        "readinessSnapshot",
+        "outcomeEvent",
+        "JsonBlock",
+        "local simulation evidence only",
+        "Resolve the upstream evidence before moving forward",
+    ]
+
+    for term in required_terms:
+        assert term in source
+
+
 def test_control_tower_ui_exposes_outcome_replay_filter_counts_and_timeline():
     source = _frontend_source()
 
