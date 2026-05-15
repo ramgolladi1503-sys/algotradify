@@ -4,13 +4,13 @@
 
 **Runtime bridge, candidate pipeline, and live monitoring UI for trading systems.**
 
-Algotradify connects a Tradebot-compatible runtime to a FastAPI backend and React frontend so operators can monitor runtime health, opportunities, candidate truth, and live events.
+Algotradify connects a Tradebot-compatible runtime to a FastAPI backend and React frontend so operators can monitor runtime health, opportunities, candidate truth, lifecycle evidence, and live events.
 
 ---
 
 ## Problem statement
 
-A trading signal is not automatically tradable. Algotradify explains candidate survival across strategy output, candidate truth, opportunity ranking, contract evidence, market evidence, risk evidence, execution readiness, trade quality score, and top executable selector.
+A trading signal is not automatically tradable. Algotradify explains candidate survival across strategy output, candidate truth, opportunity ranking, contract evidence, market evidence, risk evidence, execution readiness, trade quality score, top executable selector, and fill lifecycle sync.
 
 ---
 
@@ -27,7 +27,8 @@ flowchart LR
     G --> H[Unified Execution Readiness Contract]
     H --> I[Trade Quality Score]
     I --> J[Top Executable Selector]
-    J --> K[React UI]
+    J --> K[Fill Lifecycle Sync]
+    K --> L[React UI]
 ```
 
 ---
@@ -228,6 +229,52 @@ Hard rule: top executable selection is still not an order. It does not call brok
 
 ---
 
+## Fill lifecycle sync
+
+Fill lifecycle sync normalizes local order/fill evidence into current lifecycle state.
+
+Endpoint:
+
+```bash
+curl http://localhost:8000/fill-lifecycle
+curl 'http://localhost:8000/fill-lifecycle?candidate_id=c1'
+```
+
+Supported lifecycle states:
+
+```text
+ORDER_INTENT_CREATED
+ORDER_SUBMITTED
+ORDER_ACCEPTED
+ORDER_REJECTED
+PARTIALLY_FILLED
+FILLED
+CANCELLED
+EXIT_SUBMITTED
+EXIT_FILLED
+POSITION_CLOSED
+UNKNOWN
+```
+
+Supported artifact filenames:
+
+```text
+fill_lifecycle_latest.json
+order_lifecycle_latest.json
+fills_latest.json
+orders_latest.json
+fill_lifecycle.jsonl
+order_lifecycle.jsonl
+fills.jsonl
+orders.jsonl
+```
+
+Files may live under `.runtime/` or `.runtime/logs/`.
+
+Hard rule: fill lifecycle sync reads evidence only. It does not submit, modify, cancel, or exit orders.
+
+---
+
 ## Current API endpoints
 
 ```text
@@ -241,6 +288,7 @@ GET /opportunity-layer
 GET /execution-readiness
 GET /trade-quality
 GET /top-executable
+GET /fill-lifecycle
 GET /strategies
 GET /strategies/draft-candidates
 GET /strategies/draft-candidates/truth
@@ -266,7 +314,7 @@ python main.py
 
 ## Test strategy
 
-CI runs runtime contract, preflight, strategy registry, candidate truth, opportunity layer, broker contract, market readiness, execution readiness, runtime evidence wiring, trade quality, top executable selector, API, WebSocket, and schema tests.
+CI runs runtime contract, preflight, strategy registry, candidate truth, opportunity layer, broker contract, market readiness, execution readiness, runtime evidence wiring, trade quality, top executable selector, fill lifecycle sync, API, WebSocket, and schema tests.
 
 ---
 
@@ -284,11 +332,13 @@ CI runs runtime contract, preflight, strategy registry, candidate truth, opportu
 - Runtime evidence wiring can allow readiness only when broker, market, and risk evidence are all present and valid.
 - Blocked candidates receive zero trade quality score.
 - Top executable selector rejects blocked or below-threshold candidates.
+- Missing fill lifecycle evidence returns `NO_FILL_LIFECYCLE_EVENTS`.
+- Unknown lifecycle status is surfaced instead of hidden.
 
 ---
 
 ## Roadmap
 
-Completed foundation: runtime contract, preflight, strategy contract, Candidate Truth Layer, Opportunity Layer, broker contract resolver, broker contract readiness, quote/liquidity gates, execution readiness contract, execution readiness API, runtime evidence wiring, trade quality score, and top executable selector.
+Completed foundation: runtime contract, preflight, strategy contract, Candidate Truth Layer, Opportunity Layer, broker contract resolver, broker contract readiness, quote/liquidity gates, execution readiness contract, execution readiness API, runtime evidence wiring, trade quality score, top executable selector, and fill lifecycle sync.
 
-Next work: fill lifecycle sync, control tower UI, outcome logging, and replay.
+Next work: control tower UI, outcome logging, and replay.
