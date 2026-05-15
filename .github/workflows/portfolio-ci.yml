@@ -9,7 +9,7 @@ on:
 
 jobs:
   portfolio-quality-gate:
-    name: Documentation, runtime, preflight, strategy, candidate-truth, opportunity-layer, broker-contract, API, WebSocket, schema, and portfolio quality gate
+    name: Documentation, runtime, preflight, strategy, candidate-truth, opportunity-layer, broker-contract, market-readiness, API, WebSocket, schema, and portfolio quality gate
     runs-on: ubuntu-latest
 
     steps:
@@ -31,6 +31,7 @@ jobs:
           test -f opportunity_layer/pipeline.py
           test -f broker_contract/resolver.py
           test -f broker_contract/readiness.py
+          test -f market_readiness/quote_liquidity.py
           test -f api/schemas.py
           test -f tests/test_runtime_contract.py
           test -f tests/test_runtime_preflight.py
@@ -39,6 +40,7 @@ jobs:
           test -f tests/test_opportunity_layer.py
           test -f tests/test_broker_contract_resolver.py
           test -f tests/test_broker_contract_readiness.py
+          test -f tests/test_market_readiness.py
           test -f tests/test_api_contracts.py
           test -f tests/test_websocket_contracts.py
           test -f tests/test_api_schema_contracts.py
@@ -56,6 +58,7 @@ jobs:
           grep -qi "Opportunity Layer" README.md
           grep -qi "Broker contract resolver" README.md
           grep -qi "Broker contract readiness" README.md
+          grep -qi "Quote freshness and liquidity gates" README.md
           grep -qi "Test strategy" README.md
           grep -qi "Failure modes" README.md
           grep -qi "Roadmap" README.md
@@ -70,8 +73,8 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r api/requirements.txt pytest httpx
 
-      - name: Run runtime, preflight, strategy, candidate-truth, opportunity-layer, broker-contract, API, WebSocket, and schema contract tests
-        run: pytest -q tests/test_runtime_contract.py tests/test_runtime_preflight.py tests/test_strategy_registry.py tests/test_candidate_truth.py tests/test_opportunity_layer.py tests/test_broker_contract_resolver.py tests/test_broker_contract_readiness.py tests/test_api_contracts.py tests/test_websocket_contracts.py tests/test_api_schema_contracts.py
+      - name: Run runtime, preflight, strategy, candidate-truth, opportunity-layer, broker-contract, market-readiness, API, WebSocket, and schema contract tests
+        run: pytest -q tests/test_runtime_contract.py tests/test_runtime_preflight.py tests/test_strategy_registry.py tests/test_candidate_truth.py tests/test_opportunity_layer.py tests/test_broker_contract_resolver.py tests/test_broker_contract_readiness.py tests/test_market_readiness.py tests/test_api_contracts.py tests/test_websocket_contracts.py tests/test_api_schema_contracts.py
 
       - name: Generate portfolio test report
         run: |
@@ -81,7 +84,7 @@ jobs:
 
           ## Scope
 
-          This CI gate validates runtime-root, runtime-preflight, strategy-contract, candidate-truth, opportunity-layer, broker-contract resolver/readiness, FastAPI, WebSocket, and schema contract tests.
+          This CI gate validates runtime-root, runtime-preflight, strategy-contract, candidate-truth, opportunity-layer, broker-contract resolver/readiness, market-readiness, FastAPI, WebSocket, and schema contract tests.
 
           ## Checks
 
@@ -90,13 +93,13 @@ jobs:
           - Strategy registry tests run.
           - Candidate Truth Layer tests run.
           - Opportunity Layer tests run.
-          - Broker contract resolver tests run for exact match, fallback, no-fallback, invalid request, and token coverage failure.
-          - Broker contract readiness tests run for exact, fallback, not found, missing request, coverage failure, and blocker preservation.
+          - Broker contract resolver/readiness tests run.
+          - Market readiness tests run for fresh quotes, stale quotes, stale depth, spread, slippage budget, missing quote, and batch evaluation.
           - FastAPI, WebSocket, and OpenAPI schema contract tests run.
 
           ## Current honest limitation
 
-          Broker contract readiness is now represented as evidence attached to candidate truth records. Quote freshness, liquidity, risk, and execution readiness are later PRs.
+          Market readiness evaluates quote/liquidity evidence only. Risk and full execution readiness are later PRs.
           REPORT
 
       - name: Upload portfolio report

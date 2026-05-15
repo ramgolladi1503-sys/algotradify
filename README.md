@@ -18,6 +18,7 @@ A trading signal is not automatically a tradable opportunity. Real-time trading 
 - Did candidates survive normalization, classification, ranking, selection, and emit?
 - Did broker contract resolution return exact, fallback, not found, coverage failed, or invalid request?
 - Is broker contract readiness resolved, fallback, blocked, missing request, or coverage failed?
+- Is the quote fresh, depth fresh, spread acceptable, and slippage budget respected?
 - Is Redis available?
 - Can API and WebSocket contracts be tested repeatedly?
 
@@ -36,9 +37,10 @@ flowchart LR
     E --> F[Opportunity Layer]
     F --> G[Broker Contract Resolver]
     G --> H[Broker Contract Readiness]
-    H --> I[React UI]
-    A --> J[Redis tradebot_events]
-    J --> C
+    H --> I[Quote Freshness and Liquidity Gates]
+    I --> J[React UI]
+    A --> K[Redis tradebot_events]
+    K --> C
 ```
 
 ---
@@ -211,20 +213,48 @@ Readiness statuses:
 - `BLOCKED_INVALID_REQUEST`
 - `BLOCKED_MISSING_REQUEST`
 
-Readiness includes:
+Readiness includes requested contract details, resolved token evidence, fallback distance, blockers, warnings, and the original Candidate Truth record.
 
-- requested symbol
-- requested expiry
-- requested strike
-- requested option type
-- resolved instrument token
-- exact/fallback/not-found status
-- fallback distance
-- blockers
-- warnings
-- original Candidate Truth record
+Important: broker contract readiness is evidence only. `RESOLVED_EXACT` or `RESOLVED_FALLBACK` still does **not** mean executable.
 
-Important: broker contract readiness is evidence only. `RESOLVED_EXACT` or `RESOLVED_FALLBACK` still does **not** mean executable. Quote freshness, liquidity, risk, and execution readiness come later.
+---
+
+## Quote freshness and liquidity gates
+
+Market readiness evaluates quote and liquidity evidence.
+
+Readiness statuses:
+
+- `READY`
+- `BLOCKED_STALE_QUOTE`
+- `BLOCKED_STALE_DEPTH`
+- `BLOCKED_SPREAD_TOO_WIDE`
+- `BLOCKED_SLIPPAGE_BUDGET`
+- `BLOCKED_MISSING_QUOTE`
+
+Evidence includes:
+
+- `ltp`
+- `bid`
+- `ask`
+- `quote_age_sec`
+- `depth_age_sec`
+- `source`
+- `spread`
+- `spread_pct`
+- configured quote/depth/spread/slippage thresholds
+
+Blockers include:
+
+- `MISSING_QUOTE`
+- `MISSING_LTP`
+- `MISSING_BID_ASK`
+- `STALE_OPTION_LTP`
+- `STALE_DEPTH`
+- `SPREAD_TOO_WIDE`
+- `SLIPPAGE_BUDGET_EXCEEDED`
+
+Important: fresh quote and acceptable liquidity still do **not** mean executable. Risk and full execution readiness come later.
 
 ---
 
@@ -280,6 +310,7 @@ Backend tests cover:
 - Opportunity Layer
 - broker contract resolver
 - broker contract readiness
+- quote freshness and liquidity gates
 - API contracts
 - WebSocket degraded Redis behavior
 - OpenAPI schema contracts
@@ -287,7 +318,7 @@ Backend tests cover:
 CI command:
 
 ```bash
-pytest -q tests/test_runtime_contract.py tests/test_runtime_preflight.py tests/test_strategy_registry.py tests/test_candidate_truth.py tests/test_opportunity_layer.py tests/test_broker_contract_resolver.py tests/test_broker_contract_readiness.py tests/test_api_contracts.py tests/test_websocket_contracts.py tests/test_api_schema_contracts.py
+pytest -q tests/test_runtime_contract.py tests/test_runtime_preflight.py tests/test_strategy_registry.py tests/test_candidate_truth.py tests/test_opportunity_layer.py tests/test_broker_contract_resolver.py tests/test_broker_contract_readiness.py tests/test_market_readiness.py tests/test_api_contracts.py tests/test_websocket_contracts.py tests/test_api_schema_contracts.py
 ```
 
 ---
@@ -306,6 +337,10 @@ pytest -q tests/test_runtime_contract.py tests/test_runtime_preflight.py tests/t
 - Missing option contract returns `OPTION_TOKEN_NOT_FOUND` instead of crashing.
 - Fallback contract usage is visible through `fallback_used=true` and `FALLBACK_CONTRACT_USED` warning.
 - Broker contract readiness preserves candidate blockers and exposes missing request/coverage/not-found states.
+- Stale option LTP is blocked.
+- Stale depth is blocked.
+- Wide spread is blocked.
+- Slippage budget breach is blocked.
 
 ---
 
@@ -320,10 +355,10 @@ Completed foundation:
 - Opportunity Layer
 - Broker contract resolver contract
 - Broker contract readiness
+- Quote freshness and liquidity gates
 
 Next work:
 
-- Quote freshness and liquidity gates
 - Execution readiness contract
 - Trade quality score
 - Top executable selector
@@ -335,4 +370,4 @@ Next work:
 
 ## Portfolio value
 
-This project demonstrates backend QA, API testing, WebSocket testing, runtime observability, candidate normalization, opportunity pipeline diagnostics, broker contract safety, graceful degradation, and full-stack monitoring for fintech-style real-time systems.
+This project demonstrates backend QA, API testing, WebSocket testing, runtime observability, candidate normalization, opportunity pipeline diagnostics, broker contract safety, market-data readiness, graceful degradation, and full-stack monitoring for fintech-style real-time systems.
