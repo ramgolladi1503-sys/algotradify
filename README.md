@@ -10,7 +10,7 @@ Algotradify connects a Tradebot-compatible runtime to a FastAPI backend and Reac
 
 ## Problem statement
 
-A trading signal is not automatically tradable. Algotradify explains candidate survival across strategy output, candidate truth, opportunity ranking, contract evidence, market evidence, risk evidence, execution readiness, and trade quality score.
+A trading signal is not automatically tradable. Algotradify explains candidate survival across strategy output, candidate truth, opportunity ranking, contract evidence, market evidence, risk evidence, execution readiness, trade quality score, and top executable selector.
 
 ---
 
@@ -26,7 +26,8 @@ flowchart LR
     F --> G[Quote Freshness and Liquidity Gates]
     G --> H[Unified Execution Readiness Contract]
     H --> I[Trade Quality Score]
-    I --> J[React UI]
+    I --> J[Top Executable Selector]
+    J --> K[React UI]
 ```
 
 ---
@@ -193,12 +194,7 @@ Scoring components:
 - liquidity/spread quality
 - risk status
 
-Penalties include:
-
-- warnings
-- broker fallback
-- market warnings
-- risk warnings
+Penalties include warnings, broker fallback, market warnings, and risk warnings.
 
 Endpoint:
 
@@ -207,6 +203,28 @@ curl http://localhost:8000/trade-quality
 ```
 
 Hard rule: trade quality ranking does not place orders and does not turn blocked candidates into executable trades.
+
+---
+
+## Top executable selector
+
+The top executable selector chooses the best candidate from trade quality ranking.
+
+Endpoint:
+
+```bash
+curl http://localhost:8000/top-executable
+curl 'http://localhost:8000/top-executable?min_quality_score=70'
+```
+
+Selection rules:
+
+- candidate must have `execution_allowed=true`
+- candidate must meet `min_quality_score`
+- highest quality score wins
+- rejected candidates keep `selector_rejection_reasons`
+
+Hard rule: top executable selection is still not an order. It does not call broker APIs and does not place trades.
 
 ---
 
@@ -222,6 +240,7 @@ GET /candidate-truth
 GET /opportunity-layer
 GET /execution-readiness
 GET /trade-quality
+GET /top-executable
 GET /strategies
 GET /strategies/draft-candidates
 GET /strategies/draft-candidates/truth
@@ -247,7 +266,7 @@ python main.py
 
 ## Test strategy
 
-CI runs runtime contract, preflight, strategy registry, candidate truth, opportunity layer, broker contract, market readiness, execution readiness, runtime evidence wiring, trade quality, API, WebSocket, and schema tests.
+CI runs runtime contract, preflight, strategy registry, candidate truth, opportunity layer, broker contract, market readiness, execution readiness, runtime evidence wiring, trade quality, top executable selector, API, WebSocket, and schema tests.
 
 ---
 
@@ -264,11 +283,12 @@ CI runs runtime contract, preflight, strategy registry, candidate truth, opportu
 - Missing risk readiness blocks readiness.
 - Runtime evidence wiring can allow readiness only when broker, market, and risk evidence are all present and valid.
 - Blocked candidates receive zero trade quality score.
+- Top executable selector rejects blocked or below-threshold candidates.
 
 ---
 
 ## Roadmap
 
-Completed foundation: runtime contract, preflight, strategy contract, Candidate Truth Layer, Opportunity Layer, broker contract resolver, broker contract readiness, quote/liquidity gates, execution readiness contract, execution readiness API, runtime evidence wiring, and trade quality score.
+Completed foundation: runtime contract, preflight, strategy contract, Candidate Truth Layer, Opportunity Layer, broker contract resolver, broker contract readiness, quote/liquidity gates, execution readiness contract, execution readiness API, runtime evidence wiring, trade quality score, and top executable selector.
 
-Next work: top executable selector, fill lifecycle sync, control tower UI, outcome logging, and replay.
+Next work: fill lifecycle sync, control tower UI, outcome logging, and replay.
