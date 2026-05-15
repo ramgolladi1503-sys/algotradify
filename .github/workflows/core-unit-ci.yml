@@ -1,0 +1,43 @@
+name: Core Unit CI
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  core-unit:
+    name: Runtime, strategy, candidate, opportunity, readiness, quality, and selector tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r api/requirements.txt pytest httpx
+
+      - name: Run core unit tests
+        run: |
+          pytest -q \
+            tests/test_runtime_contract.py \
+            tests/test_runtime_preflight.py \
+            tests/test_strategy_registry.py \
+            tests/test_candidate_truth.py \
+            tests/test_opportunity_layer.py \
+            tests/test_broker_contract_resolver.py \
+            tests/test_broker_contract_readiness.py \
+            tests/test_market_readiness.py \
+            tests/test_execution_readiness.py \
+            tests/test_execution_readiness_evidence_wiring.py \
+            tests/test_trade_quality.py \
+            tests/test_top_selector.py

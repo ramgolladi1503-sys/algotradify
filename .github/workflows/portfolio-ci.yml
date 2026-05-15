@@ -26,6 +26,13 @@ jobs:
           test -f docs/execution-safety-design.md
           test -f docs/dry-run-execution-adapter.md
           test -f docs/dry-run-api-mount.md
+          test -f docs/dry-run-control-tower-visibility.md
+          test -f docs/ci-test-suite-map.md
+          test -f .github/workflows/core-unit-ci.yml
+          test -f .github/workflows/lifecycle-safety-ci.yml
+          test -f .github/workflows/api-contract-ci.yml
+          test -f .github/workflows/frontend-contract-ci.yml
+          test -f .github/workflows/dry-run-execution-ci.yml
           test -f runtime_contract.py
           test -f scripts/preflight_runtime.py
           test -f strategies/base.py
