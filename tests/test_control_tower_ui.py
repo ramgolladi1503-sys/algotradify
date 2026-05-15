@@ -36,6 +36,7 @@ def test_control_tower_ui_renders_required_sections():
 
     required_sections = [
         "Algotradify Control Tower",
+        "Operator Views",
         "Frontend Filters",
         "Runtime",
         "Cycle Snapshot",
@@ -113,6 +114,32 @@ def test_control_tower_ui_exposes_frontend_filters_and_analytics():
     ]
 
     for term in required_analytics_terms:
+        assert term in source
+
+
+def test_control_tower_ui_persists_preferences_and_operator_views():
+    source = _frontend_source()
+
+    required_terms = [
+        "PERSISTED_PREFS_KEY",
+        "localStorage",
+        "loadPersistedPreferences",
+        "savePersistedPreferences",
+        "clearPersistedPreferences",
+        "OPERATOR_VIEWS",
+        "Default view",
+        "Blocked focus",
+        "Trade-ready focus",
+        "Replay focus",
+        "Lifecycle focus",
+        "Reset to default view",
+        "Persisted UI Preferences",
+        "operatorView",
+        "setOperatorView",
+        "resetToDefaultView",
+    ]
+
+    for term in required_terms:
         assert term in source
 
 
