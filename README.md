@@ -4,13 +4,13 @@
 
 **Runtime bridge, candidate pipeline, and live monitoring UI for trading systems.**
 
-Algotradify connects a Tradebot-compatible runtime to a FastAPI backend and React frontend so operators can monitor runtime health, opportunities, candidate truth, lifecycle evidence, and live events.
+Algotradify connects a Tradebot-compatible runtime to a FastAPI backend and React frontend so operators can monitor runtime health, opportunities, candidate truth, lifecycle evidence, outcome replay, and live events.
 
 ---
 
 ## Problem statement
 
-A trading signal is not automatically tradable. Algotradify explains candidate survival across strategy output, candidate truth, opportunity ranking, contract evidence, market evidence, risk evidence, execution readiness, trade quality score, top executable selector, fill lifecycle sync, and Control Tower UI.
+A trading signal is not automatically tradable. Algotradify explains candidate survival across strategy output, candidate truth, opportunity ranking, contract evidence, market evidence, risk evidence, execution readiness, trade quality score, top executable selector, fill lifecycle sync, outcome logging and replay, and Control Tower UI.
 
 ---
 
@@ -28,7 +28,8 @@ flowchart LR
     H --> I[Trade Quality Score]
     I --> J[Top Executable Selector]
     J --> K[Fill Lifecycle Sync]
-    K --> L[Control Tower UI]
+    K --> L[Outcome Logging and Replay]
+    L --> M[Control Tower UI]
 ```
 
 ---
@@ -275,9 +276,54 @@ Hard rule: fill lifecycle sync reads evidence only. It does not submit, modify, 
 
 ---
 
+## Outcome logging and replay
+
+Outcome replay normalizes selected, blocked, submitted, accepted, rejected, filled, exited, and closed evidence into an auditable candidate timeline.
+
+Endpoint:
+
+```bash
+curl http://localhost:8000/outcome-replay
+curl 'http://localhost:8000/outcome-replay?candidate_id=c1'
+```
+
+Supported outcome statuses:
+
+```text
+SELECTED
+BLOCKED
+SUBMITTED
+ACCEPTED
+REJECTED
+PARTIALLY_FILLED
+FILLED
+EXITED
+CLOSED
+UNKNOWN
+```
+
+Supported artifact filenames:
+
+```text
+outcome_replay_latest.json
+outcomes_latest.json
+trade_outcomes_latest.json
+selection_outcomes_latest.json
+outcome_replay.jsonl
+outcomes.jsonl
+trade_outcomes.jsonl
+selection_outcomes.jsonl
+```
+
+Files may live under `.runtime/` or `.runtime/logs/`. Payloads may be a list, a single event, or an object with `events`, `records`, `items`, `outcome_replay`, `outcomes`, `trade_outcomes`, or `selection_outcomes`.
+
+Hard rule: outcome replay reads evidence only. It does not submit orders, mutate broker state, or decide new trades.
+
+---
+
 ## Control Tower UI
 
-The Vite React UI now displays the full tradability pipeline instead of only runtime health and raw opportunities.
+The Vite React UI displays the full tradability pipeline instead of only runtime health and raw opportunities.
 
 UI sections:
 
@@ -326,6 +372,7 @@ GET /execution-readiness
 GET /trade-quality
 GET /top-executable
 GET /fill-lifecycle
+GET /outcome-replay
 GET /strategies
 GET /strategies/draft-candidates
 GET /strategies/draft-candidates/truth
@@ -351,7 +398,7 @@ python main.py
 
 ## Test strategy
 
-CI runs runtime contract, preflight, strategy registry, candidate truth, opportunity layer, broker contract, market readiness, execution readiness, runtime evidence wiring, trade quality, top executable selector, fill lifecycle sync, Control Tower UI, API, WebSocket, and schema tests.
+CI runs runtime contract, preflight, strategy registry, candidate truth, opportunity layer, broker contract, market readiness, execution readiness, runtime evidence wiring, trade quality, top executable selector, fill lifecycle sync, outcome logging and replay, Control Tower UI, API, WebSocket, and schema tests.
 
 ---
 
@@ -371,12 +418,14 @@ CI runs runtime contract, preflight, strategy registry, candidate truth, opportu
 - Top executable selector rejects blocked or below-threshold candidates.
 - Missing fill lifecycle evidence returns `NO_FILL_LIFECYCLE_EVENTS`.
 - Unknown lifecycle status is surfaced instead of hidden.
+- Missing outcome evidence returns `NO_OUTCOME_EVENTS`.
+- Unknown outcome status is surfaced instead of hidden.
 - Control Tower UI exposes blockers, warnings, readiness, quality, selection, and lifecycle evidence.
 
 ---
 
 ## Roadmap
 
-Completed foundation: runtime contract, preflight, strategy contract, Candidate Truth Layer, Opportunity Layer, broker contract resolver, broker contract readiness, quote/liquidity gates, execution readiness contract, execution readiness API, runtime evidence wiring, trade quality score, top executable selector, fill lifecycle sync, and Control Tower UI.
+Completed foundation: runtime contract, preflight, strategy contract, Candidate Truth Layer, Opportunity Layer, broker contract resolver, broker contract readiness, quote/liquidity gates, execution readiness contract, execution readiness API, runtime evidence wiring, trade quality score, top executable selector, fill lifecycle sync, outcome logging and replay, and Control Tower UI.
 
-Next work: outcome logging, replay, and richer frontend filtering.
+Next work: richer frontend filtering, replay drilldowns, and outcome analytics.
