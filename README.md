@@ -10,7 +10,7 @@ Algotradify connects a Tradebot-compatible runtime to a FastAPI backend and Reac
 
 ## Problem statement
 
-A trading signal is not automatically tradable. Algotradify explains candidate survival across strategy output, candidate truth, opportunity ranking, contract evidence, market evidence, risk evidence, execution readiness, trade quality score, top executable selector, fill lifecycle sync, outcome logging and replay, replay drilldowns and outcome analytics UI, richer frontend filtering and outcome analytics charts, and Control Tower UI.
+A trading signal is not automatically tradable. Algotradify explains candidate survival across strategy output, candidate truth, opportunity ranking, contract evidence, market evidence, risk evidence, execution readiness, trade quality score, top executable selector, fill lifecycle sync, outcome logging and replay, replay drilldowns and outcome analytics UI, richer frontend filtering and outcome analytics charts, persisted UI preferences and operator views, and Control Tower UI.
 
 ---
 
@@ -31,7 +31,8 @@ flowchart LR
     K --> L[Outcome Logging and Replay]
     L --> M[Replay Drilldowns and Outcome Analytics UI]
     M --> N[Richer Frontend Filtering and Outcome Analytics Charts]
-    N --> O[Control Tower UI]
+    N --> O[Persisted UI Preferences and Operator Views]
+    O --> P[Control Tower UI]
 ```
 
 ---
@@ -350,7 +351,7 @@ Hard rule: replay drilldowns are display-only. They do not trigger orders, mutat
 
 ## Richer frontend filtering and outcome analytics charts
 
-The Control Tower now includes operator-grade local filtering and simple chart summaries.
+The Control Tower includes operator-grade local filtering and simple chart summaries.
 
 Filters:
 
@@ -373,12 +374,40 @@ Hard rule: filters and charts are local UI controls only. They do not call broke
 
 ---
 
+## Persisted UI preferences and operator views
+
+The Control Tower saves local operator preferences in browser `localStorage` so a refresh does not wipe the operator setup.
+
+Persisted preferences:
+
+- filter state
+- replay candidate id
+- selected operator view
+
+Operator views:
+
+- Default view
+- Blocked focus
+- Trade-ready focus
+- Replay focus
+- Lifecycle focus
+
+Controls:
+
+- Reset filters
+- Reset to default view
+
+Hard rule: persisted preferences are browser-local UI settings only. They do not call broker APIs, submit orders, mutate backend/runtime state, or bypass readiness gates.
+
+---
+
 ## Control Tower UI
 
 The Vite React UI displays the full tradability pipeline instead of only runtime health and raw opportunities.
 
 UI sections:
 
+- Operator Views
 - Runtime
 - Cycle Snapshot
 - Tradability Summary
@@ -457,7 +486,7 @@ python main.py
 
 ## Test strategy
 
-CI runs runtime contract, preflight, strategy registry, candidate truth, opportunity layer, broker contract, market readiness, execution readiness, runtime evidence wiring, trade quality, top executable selector, fill lifecycle sync, outcome logging and replay, replay drilldowns and outcome analytics UI, richer frontend filtering and outcome analytics charts, Control Tower UI, API, WebSocket, and schema tests.
+CI runs runtime contract, preflight, strategy registry, candidate truth, opportunity layer, broker contract, market readiness, execution readiness, runtime evidence wiring, trade quality, top executable selector, fill lifecycle sync, outcome logging and replay, replay drilldowns and outcome analytics UI, richer frontend filtering and outcome analytics charts, persisted UI preferences and operator views, Control Tower UI, API, WebSocket, and schema tests.
 
 ---
 
@@ -481,11 +510,12 @@ CI runs runtime contract, preflight, strategy registry, candidate truth, opportu
 - Unknown outcome status is surfaced instead of hidden.
 - Control Tower UI exposes blockers, warnings, readiness, quality, selection, lifecycle, and outcome replay evidence.
 - Frontend filters reduce dashboard noise without changing backend state.
+- Persisted UI preferences survive refresh without changing backend/runtime state.
 
 ---
 
 ## Roadmap
 
-Completed foundation: runtime contract, preflight, strategy contract, Candidate Truth Layer, Opportunity Layer, broker contract resolver, broker contract readiness, quote/liquidity gates, execution readiness contract, execution readiness API, runtime evidence wiring, trade quality score, top executable selector, fill lifecycle sync, outcome logging and replay, replay drilldowns and outcome analytics UI, richer frontend filtering and outcome analytics charts, and Control Tower UI.
+Completed foundation: runtime contract, preflight, strategy contract, Candidate Truth Layer, Opportunity Layer, broker contract resolver, broker contract readiness, quote/liquidity gates, execution readiness contract, execution readiness API, runtime evidence wiring, trade quality score, top executable selector, fill lifecycle sync, outcome logging and replay, replay drilldowns and outcome analytics UI, richer frontend filtering and outcome analytics charts, persisted UI preferences and operator views, and Control Tower UI.
 
-Next work: persisted filters, deeper replay analytics, and optional chart library migration.
+Next work: deeper replay analytics, optional chart library migration, and production execution-safety design.
