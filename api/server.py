@@ -104,7 +104,8 @@ def _strategy_draft_payload(request: Request, symbol: str) -> list[dict]:
 
 def _normalize_opportunity(row: dict, bucket: str, index: int) -> dict:
     symbol = row.get("symbol") or row.get("underlying") or row.get("index_symbol")
-    strategy = row.get("strategy") or row.get("strategy_family")
+    strategy = row.get("strategy") or row.get("strategy_id") or row.get("strategy_family")
+    setup_family = row.get("setup_family") or row.get("strategy_family") or row.get("setup") or strategy
     candidate_id = row.get("trade_id") or row.get("advisory_id") or row.get("candidate_id") or f"{bucket}_{index}"
     score = row.get("final_score")
     if score is None:
@@ -115,6 +116,9 @@ def _normalize_opportunity(row: dict, bucket: str, index: int) -> dict:
         "candidate_id": str(candidate_id),
         "symbol": symbol,
         "strategy": strategy,
+        "strategy_id": strategy,
+        "strategy_family": setup_family,
+        "setup_family": setup_family,
         "permission": row.get("permission"),
         "final_action": row.get("final_action"),
         "status": row.get("status"),
