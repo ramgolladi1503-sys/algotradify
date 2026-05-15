@@ -144,6 +144,17 @@ class OpportunityLayerResponse(BaseModel):
     is_execution_decision: bool
 
 
+class ExecutionReadinessResponse(BaseModel):
+    candidate_id: str
+    execution_allowed: bool
+    status: str
+    blockers: list[str]
+    warnings: list[str]
+    evidence: dict[str, Any]
+    is_execution_readiness_record: bool
+    is_order: bool
+
+
 class RuntimeNoticePayload(BaseModel):
     source: str
     status: str
