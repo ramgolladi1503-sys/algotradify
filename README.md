@@ -19,6 +19,7 @@ A trading signal is not automatically a tradable opportunity. Real-time trading 
 - Did broker contract resolution return exact, fallback, not found, coverage failed, or invalid request?
 - Is broker contract readiness resolved, fallback, blocked, missing request, or coverage failed?
 - Is the quote fresh, depth fresh, spread acceptable, and slippage budget respected?
+- Did the unified execution readiness contract allow or block execution, and why?
 - Is Redis available?
 - Can API and WebSocket contracts be tested repeatedly?
 
@@ -38,9 +39,10 @@ flowchart LR
     F --> G[Broker Contract Resolver]
     G --> H[Broker Contract Readiness]
     H --> I[Quote Freshness and Liquidity Gates]
-    I --> J[React UI]
-    A --> K[Redis tradebot_events]
-    K --> C
+    I --> J[Unified Execution Readiness Contract]
+    J --> K[React UI]
+    A --> L[Redis tradebot_events]
+    L --> C
 ```
 
 ---
@@ -174,7 +176,7 @@ curl http://localhost:8000/opportunity-layer
 curl 'http://localhost:8000/strategies/draft-candidates/opportunity-layer?symbol=NIFTY&orb_retest_score=85&vwap_reclaim_score=92'
 ```
 
-Important: `selected` means top-ranked opportunity candidate. It does **not** mean broker-executable trade. Broker contract readiness, quote freshness, liquidity, risk, and execution readiness are later PRs.
+Important: `selected` means top-ranked opportunity candidate. It does **not** mean broker-executable trade.
 
 ---
 
@@ -232,29 +234,47 @@ Readiness statuses:
 - `BLOCKED_SLIPPAGE_BUDGET`
 - `BLOCKED_MISSING_QUOTE`
 
-Evidence includes:
+Evidence includes `ltp`, `bid`, `ask`, `quote_age_sec`, `depth_age_sec`, `source`, `spread`, `spread_pct`, and configured quote/depth/spread/slippage thresholds.
 
-- `ltp`
-- `bid`
-- `ask`
-- `quote_age_sec`
-- `depth_age_sec`
-- `source`
-- `spread`
-- `spread_pct`
-- configured quote/depth/spread/slippage thresholds
+Important: fresh quote and acceptable liquidity still do **not** mean executable.
 
-Blockers include:
+---
 
-- `MISSING_QUOTE`
-- `MISSING_LTP`
-- `MISSING_BID_ASK`
-- `STALE_OPTION_LTP`
-- `STALE_DEPTH`
-- `SPREAD_TOO_WIDE`
-- `SLIPPAGE_BUDGET_EXCEEDED`
+## Unified execution readiness contract
 
-Important: fresh quote and acceptable liquidity still do **not** mean executable. Risk and full execution readiness come later.
+Execution readiness is the first and only layer that can set:
+
+```json
+{
+  "execution_allowed": true
+}
+```
+
+It combines:
+
+- Candidate Truth
+- Opportunity Layer status
+- Broker Contract Readiness
+- Quote Freshness and Liquidity Gates
+- Risk readiness
+
+Execution readiness statuses:
+
+- `ALLOWED`
+- `BLOCKED_CANDIDATE_TRUTH`
+- `BLOCKED_OPPORTUNITY`
+- `BLOCKED_BROKER_CONTRACT`
+- `BLOCKED_MARKET_READINESS`
+- `BLOCKED_RISK`
+- `BLOCKED_INCOMPLETE_EVIDENCE`
+
+Hard rule:
+
+```text
+Missing risk readiness blocks execution by default.
+```
+
+A record with `execution_allowed=true` is still not an order. It is readiness evidence for later selector/execution layers.
 
 ---
 
@@ -311,6 +331,7 @@ Backend tests cover:
 - broker contract resolver
 - broker contract readiness
 - quote freshness and liquidity gates
+- unified execution readiness contract
 - API contracts
 - WebSocket degraded Redis behavior
 - OpenAPI schema contracts
@@ -318,7 +339,7 @@ Backend tests cover:
 CI command:
 
 ```bash
-pytest -q tests/test_runtime_contract.py tests/test_runtime_preflight.py tests/test_strategy_registry.py tests/test_candidate_truth.py tests/test_opportunity_layer.py tests/test_broker_contract_resolver.py tests/test_broker_contract_readiness.py tests/test_market_readiness.py tests/test_api_contracts.py tests/test_websocket_contracts.py tests/test_api_schema_contracts.py
+pytest -q tests/test_runtime_contract.py tests/test_runtime_preflight.py tests/test_strategy_registry.py tests/test_candidate_truth.py tests/test_opportunity_layer.py tests/test_broker_contract_resolver.py tests/test_broker_contract_readiness.py tests/test_market_readiness.py tests/test_execution_readiness.py tests/test_api_contracts.py tests/test_websocket_contracts.py tests/test_api_schema_contracts.py
 ```
 
 ---
@@ -341,6 +362,8 @@ pytest -q tests/test_runtime_contract.py tests/test_runtime_preflight.py tests/t
 - Stale depth is blocked.
 - Wide spread is blocked.
 - Slippage budget breach is blocked.
+- Missing execution-readiness evidence blocks execution.
+- Missing risk readiness blocks execution.
 
 ---
 
@@ -356,10 +379,11 @@ Completed foundation:
 - Broker contract resolver contract
 - Broker contract readiness
 - Quote freshness and liquidity gates
+- Unified execution readiness contract
 
 Next work:
 
-- Execution readiness contract
+- Execution readiness APIs
 - Trade quality score
 - Top executable selector
 - Fill lifecycle sync
@@ -370,4 +394,4 @@ Next work:
 
 ## Portfolio value
 
-This project demonstrates backend QA, API testing, WebSocket testing, runtime observability, candidate normalization, opportunity pipeline diagnostics, broker contract safety, market-data readiness, graceful degradation, and full-stack monitoring for fintech-style real-time systems.
+This project demonstrates backend QA, API testing, WebSocket testing, runtime observability, candidate normalization, opportunity pipeline diagnostics, broker contract safety, market-data readiness, execution-readiness gating, graceful degradation, and full-stack monitoring for fintech-style real-time systems.
