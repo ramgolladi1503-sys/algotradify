@@ -22,5 +22,5 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r api/requirements.txt pytest httpx
 
-      - name: Run approval audit tests
-        run: pytest -q tests/test_approval_audit.py tests/test_approval_audit_api.py
+      - name: Run approval audit and creation tests
+        run: pytest -q tests/test_approval_audit.py tests/test_approval_audit_api.py tests/test_approval_creation.py
