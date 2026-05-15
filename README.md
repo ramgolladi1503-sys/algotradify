@@ -10,7 +10,7 @@ Algotradify connects a Tradebot-compatible runtime to a FastAPI backend and Reac
 
 ## Problem statement
 
-A trading signal is not automatically tradable. Algotradify explains candidate survival across strategy output, candidate truth, opportunity ranking, contract evidence, market evidence, risk evidence, execution readiness, trade quality score, top executable selector, and fill lifecycle sync.
+A trading signal is not automatically tradable. Algotradify explains candidate survival across strategy output, candidate truth, opportunity ranking, contract evidence, market evidence, risk evidence, execution readiness, trade quality score, top executable selector, fill lifecycle sync, and Control Tower UI.
 
 ---
 
@@ -28,7 +28,7 @@ flowchart LR
     H --> I[Trade Quality Score]
     I --> J[Top Executable Selector]
     J --> K[Fill Lifecycle Sync]
-    K --> L[React UI]
+    K --> L[Control Tower UI]
 ```
 
 ---
@@ -275,6 +275,43 @@ Hard rule: fill lifecycle sync reads evidence only. It does not submit, modify, 
 
 ---
 
+## Control Tower UI
+
+The Vite React UI now displays the full tradability pipeline instead of only runtime health and raw opportunities.
+
+UI sections:
+
+- Runtime
+- Cycle Snapshot
+- Tradability Summary
+- Top Executable
+- Execution Readiness
+- Trade Quality
+- Candidate Truth
+- Opportunity Layer
+- Fill Lifecycle
+- Raw Runtime Opportunities
+- Live Event Feed
+
+The UI polls these endpoints:
+
+```text
+/runtime/health
+/runtime/preflight
+/runtime/snapshot
+/opportunities?limit=20
+/candidate-truth?limit=20
+/opportunity-layer?limit=20
+/execution-readiness?limit=20
+/trade-quality?limit=20
+/top-executable?limit=20
+/fill-lifecycle
+```
+
+Hard rule: Control Tower UI displays evidence only. It does not submit orders, call broker APIs, or bypass readiness gates.
+
+---
+
 ## Current API endpoints
 
 ```text
@@ -314,7 +351,7 @@ python main.py
 
 ## Test strategy
 
-CI runs runtime contract, preflight, strategy registry, candidate truth, opportunity layer, broker contract, market readiness, execution readiness, runtime evidence wiring, trade quality, top executable selector, fill lifecycle sync, API, WebSocket, and schema tests.
+CI runs runtime contract, preflight, strategy registry, candidate truth, opportunity layer, broker contract, market readiness, execution readiness, runtime evidence wiring, trade quality, top executable selector, fill lifecycle sync, Control Tower UI, API, WebSocket, and schema tests.
 
 ---
 
@@ -334,11 +371,12 @@ CI runs runtime contract, preflight, strategy registry, candidate truth, opportu
 - Top executable selector rejects blocked or below-threshold candidates.
 - Missing fill lifecycle evidence returns `NO_FILL_LIFECYCLE_EVENTS`.
 - Unknown lifecycle status is surfaced instead of hidden.
+- Control Tower UI exposes blockers, warnings, readiness, quality, selection, and lifecycle evidence.
 
 ---
 
 ## Roadmap
 
-Completed foundation: runtime contract, preflight, strategy contract, Candidate Truth Layer, Opportunity Layer, broker contract resolver, broker contract readiness, quote/liquidity gates, execution readiness contract, execution readiness API, runtime evidence wiring, trade quality score, top executable selector, and fill lifecycle sync.
+Completed foundation: runtime contract, preflight, strategy contract, Candidate Truth Layer, Opportunity Layer, broker contract resolver, broker contract readiness, quote/liquidity gates, execution readiness contract, execution readiness API, runtime evidence wiring, trade quality score, top executable selector, fill lifecycle sync, and Control Tower UI.
 
-Next work: control tower UI, outcome logging, and replay.
+Next work: outcome logging, replay, and richer frontend filtering.
