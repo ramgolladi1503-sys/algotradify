@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 from pathlib import Path
+from typing import Any
 
 from fastapi import FastAPI, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -231,6 +232,140 @@ def _opportunity_layer_payload(limit: int) -> dict:
     return run_opportunity_pipeline(rows, source="api.opportunities").to_dict()
 
 
+def _runtime_records_from_files(root: Path, filenames: list[str], collection_keys: tuple[str, ...]) -> list[dict[str, Any]]:
+    for filename in filenames:
+        for path in (root / filename, root / "logs" / filename):
+            payload = _load_json(path, None)
+            records = _extract_records(payload, collection_keys)
+            if records:
+                return records
+    return []
+
+
+def _extract_records(payload: Any, collection_keys: tuple[str, ...]) -> list[dict[str, Any]]:
+    if payload is None:
+        return []
+    if isinstance(payload, list):
+        return [row for row in payload if isinstance(row, dict)]
+    if not isinstance(payload, dict):
+        return []
+    for key in collection_keys:
+        value = payload.get(key)
+        if isinstance(value, list):
+            return [row for row in value if isinstance(row, dict)]
+    if any(key in payload for key in ("candidate_id", "symbol", "status", "readiness_status", "execution_allowed", "allowed")):
+        return [payload]
+    return []
+
+
+def _index_by_keys(records: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    index: dict[str, dict[str, Any]] = {}
+    for row in records:
+        for key in _evidence_keys(row):
+            index.setdefault(key, row)
+    return index
+
+
+def _evidence_keys(row: dict[str, Any]) -> list[str]:
+    keys: list[str] = []
+    for field in ("candidate_id", "symbol", "tradingsymbol", "instrument_token"):
+        value = row.get(field)
+        if value not in (None, ""):
+            keys.append(str(value).upper())
+    instrument = row.get("instrument")
+    if isinstance(instrument, dict):
+        for field in ("tradingsymbol", "instrument_token", "symbol"):
+            value = instrument.get(field)
+            if value not in (None, ""):
+                keys.append(str(value).upper())
+    resolution = row.get("resolution")
+    if isinstance(resolution, dict):
+        instrument = resolution.get("instrument")
+        if isinstance(instrument, dict):
+            for field in ("tradingsymbol", "instrument_token", "symbol"):
+                value = instrument.get(field)
+                if value not in (None, ""):
+                    keys.append(str(value).upper())
+    return list(dict.fromkeys(keys))
+
+
+def _runtime_evidence_indexes() -> dict[str, Any]:
+    root = _runtime_root()
+    broker_records = _runtime_records_from_files(
+        root,
+        [
+            "broker_contract_readiness_latest.json",
+            "contract_readiness_latest.json",
+            "broker_readiness_latest.json",
+        ],
+        ("broker_contract_readiness", "contract_readiness", "records", "items"),
+    )
+    market_records = _runtime_records_from_files(
+        root,
+        [
+            "market_readiness_latest.json",
+            "quote_liquidity_latest.json",
+            "quote_readiness_latest.json",
+        ],
+        ("market_readiness", "quote_liquidity", "records", "items"),
+    )
+    risk_records = _runtime_records_from_files(
+        root,
+        [
+            "risk_readiness_latest.json",
+            "risk_latest.json",
+        ],
+        ("risk_readiness", "risk", "records", "items"),
+    )
+    risk_global = risk_records[0] if len(risk_records) == 1 and not risk_records[0].get("candidate_id") else None
+    return {
+        "broker": _index_by_keys(broker_records),
+        "market": _index_by_keys(market_records),
+        "risk": _index_by_keys(risk_records),
+        "risk_global": risk_global,
+        "counts": {
+            "broker_records": len(broker_records),
+            "market_records": len(market_records),
+            "risk_records": len(risk_records),
+        },
+    }
+
+
+def _find_runtime_evidence(truth: dict[str, Any], opportunity: dict[str, Any] | None, indexes: dict[str, Any]) -> tuple[dict | None, dict | None, dict | None]:
+    keys = _candidate_evidence_keys(truth, opportunity)
+    broker = _first_index_hit(indexes["broker"], keys)
+    market_keys = list(keys)
+    if broker:
+        market_keys.extend(_evidence_keys(broker))
+    market = _first_index_hit(indexes["market"], market_keys)
+    risk = _first_index_hit(indexes["risk"], keys) or indexes.get("risk_global")
+    return broker, market, risk
+
+
+def _candidate_evidence_keys(truth: dict[str, Any], opportunity: dict[str, Any] | None) -> list[str]:
+    keys: list[str] = []
+    for payload in (truth, opportunity or {}, truth.get("raw") if isinstance(truth.get("raw"), dict) else {}):
+        for field in ("candidate_id", "symbol", "tradingsymbol", "instrument_token"):
+            value = payload.get(field)
+            if value not in (None, ""):
+                keys.append(str(value).upper())
+    normalized = truth.get("normalized")
+    if isinstance(normalized, dict):
+        for field in ("candidate_id", "symbol", "tradingsymbol", "instrument_token"):
+            value = normalized.get(field)
+            if value not in (None, ""):
+                keys.append(str(value).upper())
+    return list(dict.fromkeys(keys))
+
+
+def _first_index_hit(index: dict[str, dict[str, Any]], keys: list[str]) -> dict[str, Any] | None:
+    for key in keys:
+        row = index.get(str(key).upper())
+        if row is not None:
+            return row
+    return None
+
+
 def _execution_readiness_payload(limit: int) -> list[dict]:
     rows = _opportunities_payload(limit)
     truth_records = [record.to_dict() for record in normalize_candidates(rows, source="api.opportunities")]
@@ -244,16 +379,21 @@ def _execution_readiness_payload(limit: int) -> list[dict]:
         selected = opportunity_result["selected"]
         opportunities_by_id[selected["candidate_id"]] = selected
 
-    return [
-        build_execution_readiness(
+    evidence_indexes = _runtime_evidence_indexes()
+    readiness: list[dict] = []
+    for truth in truth_records:
+        opportunity = opportunities_by_id.get(truth["candidate_id"])
+        broker, market, risk = _find_runtime_evidence(truth, opportunity, evidence_indexes)
+        record = build_execution_readiness(
             candidate_truth=truth,
-            opportunity=opportunities_by_id.get(truth["candidate_id"]),
-            broker_contract=None,
-            market_readiness=None,
-            risk=None,
+            opportunity=opportunity,
+            broker_contract=broker,
+            market_readiness=market,
+            risk=risk,
         ).to_dict()
-        for truth in truth_records
-    ]
+        record["evidence"]["runtime_evidence_counts"] = evidence_indexes["counts"]
+        readiness.append(record)
+    return readiness
 
 
 def _strategy_execution_readiness_payload(request: Request, symbol: str) -> list[dict]:

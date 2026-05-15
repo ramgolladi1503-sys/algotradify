@@ -10,20 +10,7 @@ Algotradify connects a Tradebot-compatible runtime to a FastAPI backend and Reac
 
 ## Problem statement
 
-A trading signal is not automatically a tradable opportunity. Real-time trading systems fail when they cannot explain:
-
-- Is the runtime alive?
-- Is the runtime root valid?
-- Are candidates real, synthetic, fallback, advisory, malformed, or unknown?
-- Did candidates survive normalization, classification, ranking, selection, and emit?
-- Did broker contract resolution return exact, fallback, not found, coverage failed, or invalid request?
-- Is broker contract readiness resolved, fallback, blocked, missing request, or coverage failed?
-- Is the quote fresh, depth fresh, spread acceptable, and slippage budget respected?
-- Did the unified execution readiness contract allow or block execution, and why?
-- Is Redis available?
-- Can API and WebSocket contracts be tested repeatedly?
-
-Algotradify is being built as a tradability control tower, not just a table of signals.
+A trading signal is not automatically tradable. Algotradify explains candidate survival across strategy output, candidate truth, opportunity ranking, contract evidence, market evidence, risk evidence, and execution readiness.
 
 ---
 
@@ -31,25 +18,19 @@ Algotradify is being built as a tradability control tower, not just a table of s
 
 ```mermaid
 flowchart LR
-    A[Tradebot-Compatible Runtime] --> B[Runtime Artifacts]
-    B --> C[FastAPI Runtime Bridge]
-    C --> D[Strategy Contract]
-    D --> E[Candidate Truth Layer]
-    E --> F[Opportunity Layer]
-    F --> G[Broker Contract Resolver]
-    G --> H[Broker Contract Readiness]
-    H --> I[Quote Freshness and Liquidity Gates]
-    I --> J[Unified Execution Readiness Contract]
-    J --> K[React UI]
-    A --> L[Redis tradebot_events]
-    L --> C
+    A[Runtime Artifacts] --> B[FastAPI Runtime Bridge]
+    B --> C[Strategy Contract]
+    C --> D[Candidate Truth Layer]
+    D --> E[Opportunity Layer]
+    E --> F[Broker Contract Readiness]
+    F --> G[Quote Freshness and Liquidity Gates]
+    G --> H[Unified Execution Readiness Contract]
+    H --> I[React UI]
 ```
 
 ---
 
 ## Canonical runtime command
-
-Primary runtime command:
 
 ```bash
 python main.py
@@ -61,13 +42,11 @@ Compatibility wrapper:
 python -m runner.live_wrapper
 ```
 
-The wrapper delegates to `main.py`; it must not own separate runtime-root logic.
-
 ---
 
 ## Runtime root priority
 
-Both `main.py` and `api/server.py` use the same engine-root priority:
+Both `main.py` and `api/server.py` use the same priority:
 
 1. `ALGOTRADIFY_ENGINE_ROOT`
 2. `TRADEBOT_ROOT`
@@ -76,232 +55,128 @@ Both `main.py` and `api/server.py` use the same engine-root priority:
 5. `../tradebot`
 6. `~/tradebot`
 
-Runtime artifact root priority:
-
-1. `CORE_BOT_RUNTIME_ROOT`
-2. selected engine root `.runtime`
-3. selected engine root `runtime`
-4. `./core_bot/.runtime`
-5. `./core_bot/runtime`
-
 ---
 
 ## Runtime preflight
 
-Before PAPER or LIVE mode, run:
-
 ```bash
 python scripts/preflight_runtime.py
-```
-
-JSON mode:
-
-```bash
 python scripts/preflight_runtime.py --json
-```
-
-API endpoint:
-
-```bash
 curl http://localhost:8000/runtime/preflight
 ```
-
-Preflight returns `PASS`, `WARN`, or `FAIL` and checks runtime root, required files, runtime artifact root, writability, execution mode, and token expectation.
 
 ---
 
 ## Strategy contract
 
-Strategies emit **candidate drafts only**. They must not mark trades executable, resolve broker contracts, bypass readiness gates, or create orders.
-
-Endpoints:
+Strategies emit candidate drafts only. They do not create orders or bypass readiness gates.
 
 ```bash
 curl http://localhost:8000/strategies
 curl 'http://localhost:8000/strategies/draft-candidates?symbol=NIFTY&orb_retest_score=85'
 ```
 
-Candidate drafts are inputs for Candidate Truth and Opportunity Layer. They are not trades.
-
 ---
 
 ## Candidate Truth Layer
 
-The Candidate Truth Layer normalizes strategy drafts and runtime-shaped opportunity rows into strict truth records.
-
-Truth statuses:
-
-- `REAL`
-- `SYNTHETIC`
-- `FALLBACK`
-- `ADVISORY`
-- `MALFORMED`
-- `UNKNOWN`
-
-Endpoints:
+Candidate Truth normalizes strategy drafts and runtime rows into `REAL`, `SYNTHETIC`, `FALLBACK`, `ADVISORY`, `MALFORMED`, or `UNKNOWN` records.
 
 ```bash
 curl http://localhost:8000/candidate-truth
-curl 'http://localhost:8000/strategies/draft-candidates/truth?symbol=NIFTY&orb_retest_score=85'
 ```
-
-A `REAL` candidate is still not executable. It only means the candidate has usable identity/provenance and is not synthetic/fallback/advisory/malformed.
 
 ---
 
 ## Opportunity Layer
 
-The Opportunity Layer runs the candidate pipeline:
+Opportunity Layer tracks:
 
 ```text
 normalize -> classify -> rank -> select -> emit
 ```
 
-It tracks candidate survival counts:
-
-- `raw_count`
-- `truth_count`
-- `rankable_count`
-- `ranked_count`
-- `blocked_count`
-- `dropped_count`
-- `selected_count`
-
-It also emits diagnostics for blocker and drop reasons so pipeline collapse is visible instead of hidden behind vague messages like `raw_count=0`, `no_execution_candidates`, or `FINAL_EMIT_ABORT`.
-
-Endpoints:
+It reports raw, truth, rankable, ranked, blocked, dropped, and selected counts.
 
 ```bash
 curl http://localhost:8000/opportunity-layer
-curl 'http://localhost:8000/strategies/draft-candidates/opportunity-layer?symbol=NIFTY&orb_retest_score=85&vwap_reclaim_score=92'
 ```
-
-Important: `selected` means top-ranked opportunity candidate. It does **not** mean broker-executable trade.
 
 ---
 
 ## Broker contract resolver
 
-The broker contract resolver standardizes option contract lookup behavior.
+The resolver standardizes option contract lookup: `EXACT`, `FALLBACK`, `NOT_FOUND`, `COVERAGE_FAILED`, and `INVALID_REQUEST`.
 
-Statuses:
-
-- `EXACT`
-- `FALLBACK`
-- `NOT_FOUND`
-- `COVERAGE_FAILED`
-- `INVALID_REQUEST`
-
-Core rule:
-
-```text
-No exact match + no safe fallback = NOT_FOUND with OPTION_TOKEN_NOT_FOUND blocker.
-```
-
-It must never crash by reading from a missing fallback contract. It must never hide fallback usage. It must never mark the candidate executable.
+Core rule: no exact match plus no safe fallback returns `OPTION_TOKEN_NOT_FOUND`, not a crash.
 
 ---
 
 ## Broker contract readiness
 
-Broker contract readiness attaches resolver evidence to a candidate truth record.
-
-Readiness statuses:
-
-- `RESOLVED_EXACT`
-- `RESOLVED_FALLBACK`
-- `BLOCKED_NOT_FOUND`
-- `BLOCKED_COVERAGE_FAILED`
-- `BLOCKED_INVALID_REQUEST`
-- `BLOCKED_MISSING_REQUEST`
-
-Readiness includes requested contract details, resolved token evidence, fallback distance, blockers, warnings, and the original Candidate Truth record.
-
-Important: broker contract readiness is evidence only. `RESOLVED_EXACT` or `RESOLVED_FALLBACK` still does **not** mean executable.
+Broker contract readiness attaches contract evidence to a candidate truth record. `RESOLVED_EXACT` and `RESOLVED_FALLBACK` are evidence only, not order permission.
 
 ---
 
 ## Quote freshness and liquidity gates
 
-Market readiness evaluates quote and liquidity evidence.
-
-Readiness statuses:
-
-- `READY`
-- `BLOCKED_STALE_QUOTE`
-- `BLOCKED_STALE_DEPTH`
-- `BLOCKED_SPREAD_TOO_WIDE`
-- `BLOCKED_SLIPPAGE_BUDGET`
-- `BLOCKED_MISSING_QUOTE`
-
-Evidence includes `ltp`, `bid`, `ask`, `quote_age_sec`, `depth_age_sec`, `source`, `spread`, `spread_pct`, and configured quote/depth/spread/slippage thresholds.
-
-Important: fresh quote and acceptable liquidity still do **not** mean executable.
+Market readiness evaluates quote age, depth age, bid/ask spread, spread percentage, and slippage budget. Fresh market evidence still does not mean an order can be sent.
 
 ---
 
 ## Unified execution readiness contract
 
-Execution readiness is the first and only layer that can set:
+This is the only layer allowed to set:
 
 ```json
-{
-  "execution_allowed": true
-}
+{"execution_allowed": true}
 ```
 
-It combines:
-
-- Candidate Truth
-- Opportunity Layer status
-- Broker Contract Readiness
-- Quote Freshness and Liquidity Gates
-- Risk readiness
-
-Execution readiness statuses:
-
-- `ALLOWED`
-- `BLOCKED_CANDIDATE_TRUTH`
-- `BLOCKED_OPPORTUNITY`
-- `BLOCKED_BROKER_CONTRACT`
-- `BLOCKED_MARKET_READINESS`
-- `BLOCKED_RISK`
-- `BLOCKED_INCOMPLETE_EVIDENCE`
-
-Hard rule:
-
-```text
-Missing risk readiness blocks execution by default.
-```
-
-A record with `execution_allowed=true` is still not an order. It is readiness evidence for later selector/execution layers.
+It combines Candidate Truth, Opportunity Layer, Broker Contract Readiness, Quote Freshness and Liquidity Gates, and risk readiness. Missing risk readiness blocks by default.
 
 ---
 
 ## Execution readiness API
-
-Execution readiness is exposed through API as evidence only.
-
-Endpoints:
 
 ```bash
 curl http://localhost:8000/execution-readiness
 curl 'http://localhost:8000/strategies/draft-candidates/execution-readiness?symbol=NIFTY&orb_retest_score=85'
 ```
 
-Current behavior is intentionally conservative. If broker contract readiness, market readiness, or risk readiness evidence is not wired for a candidate, the API returns blocked incomplete evidence instead of manufacturing executable status.
+The API exposes evidence only. It does not call broker APIs and does not place orders.
 
-Example blockers:
+---
 
-- `MISSING_BROKER_CONTRACT_READINESS`
-- `MISSING_MARKET_READINESS`
-- `MISSING_RISK_READINESS`
+## Runtime evidence wiring
 
-Hard rule:
+`GET /execution-readiness` reads optional runtime JSON artifacts and wires them into readiness.
+
+Broker evidence filenames:
 
 ```text
-API exposure does not place orders and does not call broker APIs.
+broker_contract_readiness_latest.json
+contract_readiness_latest.json
+broker_readiness_latest.json
 ```
+
+Market evidence filenames:
+
+```text
+market_readiness_latest.json
+quote_liquidity_latest.json
+quote_readiness_latest.json
+```
+
+Risk evidence filenames:
+
+```text
+risk_readiness_latest.json
+risk_latest.json
+```
+
+Files may live under `.runtime/` or `.runtime/logs/`. Payloads may be a list, a single record, or an object with `records`, `items`, `broker_contract_readiness`, `market_readiness`, `quote_liquidity`, `risk_readiness`, or `risk`.
+
+Matching uses `candidate_id`, `symbol`, `tradingsymbol`, or `instrument_token`. Missing evidence stays blocked.
 
 ---
 
@@ -328,18 +203,10 @@ WS  /ws
 
 ## Run locally
 
-Install dependencies:
-
 ```bash
 pip install -r api/requirements.txt
 npm --prefix frontend install
-```
-
-Run services:
-
-```bash
 python scripts/preflight_runtime.py
-redis-server
 python -m uvicorn api.server:app --host 0.0.0.0 --port 8000
 npm --prefix frontend run dev -- --host 0.0.0.0 --port 3000
 python main.py
@@ -349,28 +216,7 @@ python main.py
 
 ## Test strategy
 
-Backend tests cover:
-
-- runtime-root contract
-- runtime preflight
-- strategy registry
-- strategy candidate drafts
-- Candidate Truth Layer
-- Opportunity Layer
-- broker contract resolver
-- broker contract readiness
-- quote freshness and liquidity gates
-- unified execution readiness contract
-- execution readiness API
-- API contracts
-- WebSocket degraded Redis behavior
-- OpenAPI schema contracts
-
-CI command:
-
-```bash
-pytest -q tests/test_runtime_contract.py tests/test_runtime_preflight.py tests/test_strategy_registry.py tests/test_candidate_truth.py tests/test_opportunity_layer.py tests/test_broker_contract_resolver.py tests/test_broker_contract_readiness.py tests/test_market_readiness.py tests/test_execution_readiness.py tests/test_execution_readiness_api.py tests/test_api_contracts.py tests/test_websocket_contracts.py tests/test_api_schema_contracts.py
-```
+CI runs runtime contract, preflight, strategy registry, candidate truth, opportunity layer, broker contract, market readiness, execution readiness, runtime evidence wiring, API, WebSocket, and schema tests.
 
 ---
 
@@ -378,51 +224,19 @@ pytest -q tests/test_runtime_contract.py tests/test_runtime_preflight.py tests/t
 
 - Missing runtime root gives explicit failure.
 - Invalid execution mode fails preflight.
-- Missing PAPER/LIVE token candidate fails preflight.
-- Redis unavailable degrades WebSocket instead of crashing.
-- Strategy output cannot claim executable status.
-- Candidate Truth output cannot claim executable status.
-- Synthetic/fallback/advisory/malformed candidates are visible instead of hidden.
-- Opportunity Layer exposes raw, blocked, dropped, ranked, and selected counts.
-- Selected opportunity is not treated as executable.
-- Missing option contract returns `OPTION_TOKEN_NOT_FOUND` instead of crashing.
-- Fallback contract usage is visible through `fallback_used=true` and `FALLBACK_CONTRACT_USED` warning.
-- Broker contract readiness preserves candidate blockers and exposes missing request/coverage/not-found states.
-- Stale option LTP is blocked.
-- Stale depth is blocked.
-- Wide spread is blocked.
-- Slippage budget breach is blocked.
-- Missing execution-readiness evidence blocks execution.
-- Missing risk readiness blocks execution.
-- Execution readiness API returns blocked incomplete evidence when downstream evidence is missing.
+- Redis unavailable degrades WebSocket behavior.
+- Strategy output cannot claim order permission.
+- Candidate Truth output cannot claim order permission.
+- Missing option contract returns `OPTION_TOKEN_NOT_FOUND`.
+- Fallback usage remains visible.
+- Stale quote, stale depth, wide spread, and slippage budget breach are blocked.
+- Missing risk readiness blocks readiness.
+- Runtime evidence wiring can allow readiness only when broker, market, and risk evidence are all present and valid.
 
 ---
 
 ## Roadmap
 
-Completed foundation:
+Completed foundation: runtime contract, preflight, strategy contract, Candidate Truth Layer, Opportunity Layer, broker contract resolver, broker contract readiness, quote/liquidity gates, execution readiness contract, execution readiness API, and runtime evidence wiring.
 
-- Runtime contract stabilization
-- Runtime preflight
-- Strategy contract and registry
-- Candidate Truth Layer
-- Opportunity Layer
-- Broker contract resolver contract
-- Broker contract readiness
-- Quote freshness and liquidity gates
-- Unified execution readiness contract
-- Execution readiness API
-
-Next work:
-
-- Trade quality score
-- Top executable selector
-- Fill lifecycle sync
-- Control tower UI
-- Outcome logging and replay
-
----
-
-## Portfolio value
-
-This project demonstrates backend QA, API testing, WebSocket testing, runtime observability, candidate normalization, opportunity pipeline diagnostics, broker contract safety, market-data readiness, execution-readiness gating, graceful degradation, and full-stack monitoring for fintech-style real-time systems.
+Next work: trade quality score, top executable selector, fill lifecycle sync, control tower UI, outcome logging, and replay.
