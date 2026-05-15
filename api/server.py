@@ -24,6 +24,7 @@ from api.schemas import (
     TopExecutableSelectionResponse,
     TradeQualityResponse,
 )
+from approval_audit import normalize_approval_audit
 from candidate_truth import normalize_candidates
 from execution_readiness import build_execution_readiness
 from execution_safety import ExecutionMode, ExecutionSafetyPolicy, evaluate_execution_safety
@@ -270,35 +271,17 @@ def _extract_records(payload: Any, collection_keys: tuple[str, ...]) -> list[dic
         value = payload.get(key)
         if isinstance(value, list):
             return [row for row in value if isinstance(row, dict)]
-    if any(key in payload for key in ("candidate_id", "symbol", "status", "readiness_status", "execution_allowed", "allowed", "order_id", "broker_order_id", "outcome_status")):
+    if any(key in payload for key in ("candidate_id", "symbol", "status", "readiness_status", "execution_allowed", "allowed", "order_id", "broker_order_id", "outcome_status", "approval_id", "approval_status")):
         return [payload]
     return []
 
 
 def _fill_lifecycle_records() -> list[dict[str, Any]]:
     root = _runtime_root()
-    json_records = _runtime_records_from_files(
-        root,
-        [
-            "fill_lifecycle_latest.json",
-            "order_lifecycle_latest.json",
-            "fills_latest.json",
-            "orders_latest.json",
-        ],
-        ("fill_lifecycle", "order_lifecycle", "fills", "orders", "events", "records", "items"),
-    )
+    json_records = _runtime_records_from_files(root, ["fill_lifecycle_latest.json", "order_lifecycle_latest.json", "fills_latest.json", "orders_latest.json"], ("fill_lifecycle", "order_lifecycle", "fills", "orders", "events", "records", "items"))
     if json_records:
         return json_records
-    return _runtime_jsonl_records_from_files(
-        root,
-        [
-            "fill_lifecycle.jsonl",
-            "order_lifecycle.jsonl",
-            "fills.jsonl",
-            "orders.jsonl",
-        ],
-        limit=500,
-    )
+    return _runtime_jsonl_records_from_files(root, ["fill_lifecycle.jsonl", "order_lifecycle.jsonl", "fills.jsonl", "orders.jsonl"], limit=500)
 
 
 def _fill_lifecycle_payload(candidate_id: str | None = None) -> dict:
@@ -307,32 +290,44 @@ def _fill_lifecycle_payload(candidate_id: str | None = None) -> dict:
 
 def _outcome_replay_records() -> list[dict[str, Any]]:
     root = _runtime_root()
+    json_records = _runtime_records_from_files(root, ["outcome_replay_latest.json", "outcomes_latest.json", "trade_outcomes_latest.json", "selection_outcomes_latest.json"], ("outcome_replay", "outcomes", "trade_outcomes", "selection_outcomes", "events", "records", "items"))
+    if json_records:
+        return json_records
+    return _runtime_jsonl_records_from_files(root, ["outcome_replay.jsonl", "outcomes.jsonl", "trade_outcomes.jsonl", "selection_outcomes.jsonl"], limit=1000)
+
+
+def _outcome_replay_payload(candidate_id: str | None = None) -> dict:
+    return normalize_outcome_replay(_outcome_replay_records(), candidate_id=candidate_id).to_dict()
+
+
+def _approval_audit_records() -> list[dict[str, Any]]:
+    root = _runtime_root()
     json_records = _runtime_records_from_files(
         root,
         [
-            "outcome_replay_latest.json",
-            "outcomes_latest.json",
-            "trade_outcomes_latest.json",
-            "selection_outcomes_latest.json",
+            "approval_audit_latest.json",
+            "approval_audit_events_latest.json",
+            "approvals_latest.json",
+            "manual_approvals_latest.json",
         ],
-        ("outcome_replay", "outcomes", "trade_outcomes", "selection_outcomes", "events", "records", "items"),
+        ("approval_audit", "approval_audit_events", "approvals", "manual_approvals", "events", "records", "items"),
     )
     if json_records:
         return json_records
     return _runtime_jsonl_records_from_files(
         root,
         [
-            "outcome_replay.jsonl",
-            "outcomes.jsonl",
-            "trade_outcomes.jsonl",
-            "selection_outcomes.jsonl",
+            "approval_audit.jsonl",
+            "approval_audit_events.jsonl",
+            "approvals.jsonl",
+            "manual_approvals.jsonl",
         ],
         limit=1000,
     )
 
 
-def _outcome_replay_payload(candidate_id: str | None = None) -> dict:
-    return normalize_outcome_replay(_outcome_replay_records(), candidate_id=candidate_id).to_dict()
+def _approval_audit_payload(candidate_id: str | None = None, now_epoch: float | None = None) -> dict:
+    return normalize_approval_audit(_approval_audit_records(), candidate_id=candidate_id, now_epoch=now_epoch).to_dict(now_epoch=now_epoch)
 
 
 def _index_by_keys(records: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
@@ -368,44 +363,11 @@ def _evidence_keys(row: dict[str, Any]) -> list[str]:
 
 def _runtime_evidence_indexes() -> dict[str, Any]:
     root = _runtime_root()
-    broker_records = _runtime_records_from_files(
-        root,
-        [
-            "broker_contract_readiness_latest.json",
-            "contract_readiness_latest.json",
-            "broker_readiness_latest.json",
-        ],
-        ("broker_contract_readiness", "contract_readiness", "records", "items"),
-    )
-    market_records = _runtime_records_from_files(
-        root,
-        [
-            "market_readiness_latest.json",
-            "quote_liquidity_latest.json",
-            "quote_readiness_latest.json",
-        ],
-        ("market_readiness", "quote_liquidity", "records", "items"),
-    )
-    risk_records = _runtime_records_from_files(
-        root,
-        [
-            "risk_readiness_latest.json",
-            "risk_latest.json",
-        ],
-        ("risk_readiness", "risk", "records", "items"),
-    )
+    broker_records = _runtime_records_from_files(root, ["broker_contract_readiness_latest.json", "contract_readiness_latest.json", "broker_readiness_latest.json"], ("broker_contract_readiness", "contract_readiness", "records", "items"))
+    market_records = _runtime_records_from_files(root, ["market_readiness_latest.json", "quote_liquidity_latest.json", "quote_readiness_latest.json"], ("market_readiness", "quote_liquidity", "records", "items"))
+    risk_records = _runtime_records_from_files(root, ["risk_readiness_latest.json", "risk_latest.json"], ("risk_readiness", "risk", "records", "items"))
     risk_global = risk_records[0] if len(risk_records) == 1 and not risk_records[0].get("candidate_id") else None
-    return {
-        "broker": _index_by_keys(broker_records),
-        "market": _index_by_keys(market_records),
-        "risk": _index_by_keys(risk_records),
-        "risk_global": risk_global,
-        "counts": {
-            "broker_records": len(broker_records),
-            "market_records": len(market_records),
-            "risk_records": len(risk_records),
-        },
-    }
+    return {"broker": _index_by_keys(broker_records), "market": _index_by_keys(market_records), "risk": _index_by_keys(risk_records), "risk_global": risk_global, "counts": {"broker_records": len(broker_records), "market_records": len(market_records), "risk_records": len(risk_records)}}
 
 
 def _find_runtime_evidence(truth: dict[str, Any], opportunity: dict[str, Any] | None, indexes: dict[str, Any]) -> tuple[dict | None, dict | None, dict | None]:
@@ -447,27 +409,16 @@ def _execution_readiness_payload(limit: int) -> list[dict]:
     rows = _opportunities_payload(limit)
     truth_records = [record.to_dict() for record in normalize_candidates(rows, source="api.opportunities")]
     opportunity_result = run_opportunity_pipeline(rows, source="api.opportunities").to_dict()
-    opportunities_by_id = {
-        row["candidate_id"]: row
-        for section in ("ranked", "blocked", "dropped")
-        for row in opportunity_result.get(section, [])
-    }
+    opportunities_by_id = {row["candidate_id"]: row for section in ("ranked", "blocked", "dropped") for row in opportunity_result.get(section, [])}
     if opportunity_result.get("selected"):
         selected = opportunity_result["selected"]
         opportunities_by_id[selected["candidate_id"]] = selected
-
     evidence_indexes = _runtime_evidence_indexes()
     readiness: list[dict] = []
     for truth in truth_records:
         opportunity = opportunities_by_id.get(truth["candidate_id"])
         broker, market, risk = _find_runtime_evidence(truth, opportunity, evidence_indexes)
-        record = build_execution_readiness(
-            candidate_truth=truth,
-            opportunity=opportunity,
-            broker_contract=broker,
-            market_readiness=market,
-            risk=risk,
-        ).to_dict()
+        record = build_execution_readiness(candidate_truth=truth, opportunity=opportunity, broker_contract=broker, market_readiness=market, risk=risk).to_dict()
         record["evidence"]["runtime_evidence_counts"] = evidence_indexes["counts"]
         readiness.append(record)
     return readiness
@@ -539,11 +490,7 @@ def _matching_readiness(top_executable: dict[str, Any], readiness: list[dict[str
 def _execution_safety_payload(request: Request, limit: int, min_quality_score: float) -> dict:
     top_executable = _top_executable_payload(limit=limit, min_quality_score=min_quality_score)
     readiness = _execution_readiness_payload(limit=limit)
-    decision = evaluate_execution_safety(
-        _execution_safety_policy_from_request(request),
-        top_executable=top_executable,
-        execution_readiness=_matching_readiness(top_executable, readiness),
-    ).to_dict()
+    decision = evaluate_execution_safety(_execution_safety_policy_from_request(request), top_executable=top_executable, execution_readiness=_matching_readiness(top_executable, readiness)).to_dict()
     decision["top_executable"] = top_executable
     decision["readiness_records_checked"] = len(readiness)
     decision["safety_visibility_only"] = True
@@ -554,25 +501,11 @@ def _strategy_execution_readiness_payload(request: Request, symbol: str) -> list
     drafts = _strategy_draft_payload(request, symbol)
     truth_records = [record.to_dict() for record in normalize_candidates(drafts, source="api.strategy_draft_preview")]
     opportunity_result = run_opportunity_pipeline(drafts, source="api.strategy_draft_preview").to_dict()
-    opportunities_by_id = {
-        row["candidate_id"]: row
-        for section in ("ranked", "blocked", "dropped")
-        for row in opportunity_result.get(section, [])
-    }
+    opportunities_by_id = {row["candidate_id"]: row for section in ("ranked", "blocked", "dropped") for row in opportunity_result.get(section, [])}
     if opportunity_result.get("selected"):
         selected = opportunity_result["selected"]
         opportunities_by_id[selected["candidate_id"]] = selected
-
-    return [
-        build_execution_readiness(
-            candidate_truth=truth,
-            opportunity=opportunities_by_id.get(truth["candidate_id"]),
-            broker_contract=None,
-            market_readiness=None,
-            risk=None,
-        ).to_dict()
-        for truth in truth_records
-    ]
+    return [build_execution_readiness(candidate_truth=truth, opportunity=opportunities_by_id.get(truth["candidate_id"]), broker_contract=None, market_readiness=None, risk=None).to_dict() for truth in truth_records]
 
 
 def _runtime_snapshot_payload() -> dict:
@@ -584,18 +517,7 @@ def _runtime_snapshot_payload() -> dict:
     if not top:
         top = _load_json(root / "logs" / "top_opportunities_latest.json", {})
     executable, advisory = _split_top_opportunities(top)
-    return {
-        "runtime_root": str(root),
-        "tradebot_root": str(_tradebot_root()),
-        "cycle_stage": cycle.get("cycle_stage") if isinstance(cycle, dict) else None,
-        "market_mode": cycle.get("market_mode") if isinstance(cycle, dict) else None,
-        "cycle_ok": cycle.get("cycle_ok") if isinstance(cycle, dict) else None,
-        "top_executable_count": len(executable),
-        "top_advisory_count": len(advisory),
-        "primary_blocker": cycle.get("primary_blocker") if isinstance(cycle, dict) else None,
-        "reason": cycle.get("reason") if isinstance(cycle, dict) else None,
-        "ts_epoch": cycle.get("ts_epoch") if isinstance(cycle, dict) else None,
-    }
+    return {"runtime_root": str(root), "tradebot_root": str(_tradebot_root()), "cycle_stage": cycle.get("cycle_stage") if isinstance(cycle, dict) else None, "market_mode": cycle.get("market_mode") if isinstance(cycle, dict) else None, "cycle_ok": cycle.get("cycle_ok") if isinstance(cycle, dict) else None, "top_executable_count": len(executable), "top_advisory_count": len(advisory), "primary_blocker": cycle.get("primary_blocker") if isinstance(cycle, dict) else None, "reason": cycle.get("reason") if isinstance(cycle, dict) else None, "ts_epoch": cycle.get("ts_epoch") if isinstance(cycle, dict) else None}
 
 
 def _runtime_preflight_payload() -> dict:
@@ -603,24 +525,11 @@ def _runtime_preflight_payload() -> dict:
 
 
 app = FastAPI()
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
-    allow_credentials=False,
-    allow_methods=["GET", "OPTIONS"],
-    allow_headers=["*"],
-)
+app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"], allow_credentials=False, allow_methods=["GET", "OPTIONS"], allow_headers=["*"])
 
 
 def _build_redis_client():
-    return redis.Redis(
-        host=os.getenv("REDIS_HOST", "localhost"),
-        port=int(os.getenv("REDIS_PORT", "6379")),
-        decode_responses=True,
-        socket_connect_timeout=0.2,
-        socket_timeout=0.2,
-        health_check_interval=15,
-    )
+    return redis.Redis(host=os.getenv("REDIS_HOST", "localhost"), port=int(os.getenv("REDIS_PORT", "6379")), decode_responses=True, socket_connect_timeout=0.2, socket_timeout=0.2, health_check_interval=15)
 
 
 def _open_tradebot_pubsub():
@@ -684,20 +593,18 @@ def trade_quality(limit: int = Query(default=25, ge=1, le=200)):
 
 
 @app.get("/top-executable", response_model=TopExecutableSelectionResponse)
-def top_executable(
-    limit: int = Query(default=25, ge=1, le=200),
-    min_quality_score: float = Query(default=50.0, ge=0.0, le=100.0),
-):
+def top_executable(limit: int = Query(default=25, ge=1, le=200), min_quality_score: float = Query(default=50.0, ge=0.0, le=100.0)):
     return _top_executable_payload(limit=limit, min_quality_score=min_quality_score)
 
 
 @app.get("/execution-safety")
-def execution_safety(
-    request: Request,
-    limit: int = Query(default=25, ge=1, le=200),
-    min_quality_score: float = Query(default=50.0, ge=0.0, le=100.0),
-):
+def execution_safety(request: Request, limit: int = Query(default=25, ge=1, le=200), min_quality_score: float = Query(default=50.0, ge=0.0, le=100.0)):
     return _execution_safety_payload(request=request, limit=limit, min_quality_score=min_quality_score)
+
+
+@app.get("/approval-audit")
+def approval_audit(candidate_id: str | None = Query(default=None), now_epoch: float | None = Query(default=None)):
+    return _approval_audit_payload(candidate_id=candidate_id, now_epoch=now_epoch)
 
 
 @app.get("/fill-lifecycle", response_model=FillLifecycleStateResponse)
@@ -717,12 +624,6 @@ def strategies():
 
 @app.get("/strategies/draft-candidates", response_model=list[StrategyCandidateDraftResponse])
 def draft_candidates(request: Request, symbol: str = Query(..., min_length=1)):
-    """Generate strategy candidate drafts from supplied score features.
-
-    Query params other than `symbol` are treated as feature values. This is a
-    contract preview endpoint for PR 3; real runtime strategy wiring belongs in
-    later candidate truth/opportunity-layer PRs.
-    """
     return _strategy_draft_payload(request, symbol)
 
 
@@ -750,7 +651,6 @@ async def ws(ws: WebSocket):
     last_snapshot = ""
     next_snapshot_at = 0.0
     redis_warning_sent = False
-
     try:
         while True:
             if pubsub is not None:
@@ -764,23 +664,12 @@ async def ws(ws: WebSocket):
                         pass
                     pubsub = None
                     msg = None
-
                 if msg and msg.get("type") == "message":
                     await ws.send_text(msg.get("data", ""))
-
             now = asyncio.get_running_loop().time()
             if redis_boot_error and not redis_warning_sent:
-                warning = {
-                    "type": "runtime_notice",
-                    "payload": {
-                        "source": "redis",
-                        "status": "degraded",
-                        "reason": redis_boot_error,
-                    },
-                }
-                await ws.send_text(json.dumps(warning, separators=(",", ":")))
+                await ws.send_text(json.dumps({"type": "runtime_notice", "payload": {"source": "redis", "status": "degraded", "reason": redis_boot_error}}, separators=(",", ":")))
                 redis_warning_sent = True
-
             if now >= next_snapshot_at:
                 snapshot = _runtime_snapshot_event()
                 encoded = json.dumps(snapshot, separators=(",", ":"))
@@ -788,7 +677,6 @@ async def ws(ws: WebSocket):
                     await ws.send_text(encoded)
                     last_snapshot = encoded
                 next_snapshot_at = now + 2.0
-
             await asyncio.sleep(0.1)
     except WebSocketDisconnect:
         pass
