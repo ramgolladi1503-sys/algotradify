@@ -9,7 +9,7 @@ on:
 
 jobs:
   portfolio-quality-gate:
-    name: Documentation, runtime, preflight, strategy, candidate-truth, opportunity-layer, broker-contract, market-readiness, execution-readiness, evidence-wiring, trade-quality, top-selector, fill-lifecycle, API, WebSocket, schema, and portfolio quality gate
+    name: Documentation, runtime, preflight, strategy, candidate-truth, opportunity-layer, broker-contract, market-readiness, execution-readiness, evidence-wiring, trade-quality, top-selector, fill-lifecycle, control-tower-ui, API, WebSocket, schema, and portfolio quality gate
     runs-on: ubuntu-latest
 
     steps:
@@ -36,6 +36,7 @@ jobs:
           test -f trade_quality/scoring.py
           test -f top_selector/selector.py
           test -f fill_lifecycle/lifecycle.py
+          test -f frontend/main.jsx
           test -f api/schemas.py
           test -f tests/test_runtime_contract.py
           test -f tests/test_runtime_preflight.py
@@ -54,6 +55,7 @@ jobs:
           test -f tests/test_top_selector_api.py
           test -f tests/test_fill_lifecycle.py
           test -f tests/test_fill_lifecycle_api.py
+          test -f tests/test_control_tower_ui.py
           test -f tests/test_api_contracts.py
           test -f tests/test_websocket_contracts.py
           test -f tests/test_api_schema_contracts.py
@@ -78,6 +80,7 @@ jobs:
           grep -qi "Trade quality score" README.md
           grep -qi "Top executable selector" README.md
           grep -qi "Fill lifecycle sync" README.md
+          grep -qi "Control Tower UI" README.md
           grep -qi "Test strategy" README.md
           grep -qi "Failure modes" README.md
           grep -qi "Roadmap" README.md
@@ -92,8 +95,8 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r api/requirements.txt pytest httpx
 
-      - name: Run runtime, preflight, strategy, candidate-truth, opportunity-layer, broker-contract, market-readiness, execution-readiness, evidence-wiring, trade-quality, top-selector, fill-lifecycle, API, WebSocket, and schema contract tests
-        run: pytest -q tests/test_runtime_contract.py tests/test_runtime_preflight.py tests/test_strategy_registry.py tests/test_candidate_truth.py tests/test_opportunity_layer.py tests/test_broker_contract_resolver.py tests/test_broker_contract_readiness.py tests/test_market_readiness.py tests/test_execution_readiness.py tests/test_execution_readiness_api.py tests/test_execution_readiness_evidence_wiring.py tests/test_trade_quality.py tests/test_trade_quality_api.py tests/test_top_selector.py tests/test_top_selector_api.py tests/test_fill_lifecycle.py tests/test_fill_lifecycle_api.py tests/test_api_contracts.py tests/test_websocket_contracts.py tests/test_api_schema_contracts.py
+      - name: Run runtime, preflight, strategy, candidate-truth, opportunity-layer, broker-contract, market-readiness, execution-readiness, evidence-wiring, trade-quality, top-selector, fill-lifecycle, control-tower-ui, API, WebSocket, and schema contract tests
+        run: pytest -q tests/test_runtime_contract.py tests/test_runtime_preflight.py tests/test_strategy_registry.py tests/test_candidate_truth.py tests/test_opportunity_layer.py tests/test_broker_contract_resolver.py tests/test_broker_contract_readiness.py tests/test_market_readiness.py tests/test_execution_readiness.py tests/test_execution_readiness_api.py tests/test_execution_readiness_evidence_wiring.py tests/test_trade_quality.py tests/test_trade_quality_api.py tests/test_top_selector.py tests/test_top_selector_api.py tests/test_fill_lifecycle.py tests/test_fill_lifecycle_api.py tests/test_control_tower_ui.py tests/test_api_contracts.py tests/test_websocket_contracts.py tests/test_api_schema_contracts.py
 
       - name: Generate portfolio test report
         run: |
@@ -103,7 +106,7 @@ jobs:
 
           ## Scope
 
-          This CI gate validates runtime-root, runtime-preflight, strategy-contract, candidate-truth, opportunity-layer, broker-contract resolver/readiness, market-readiness, execution-readiness, runtime evidence wiring, trade-quality, top-selector, fill-lifecycle, FastAPI, WebSocket, and schema contract tests.
+          This CI gate validates runtime-root, runtime-preflight, strategy-contract, candidate-truth, opportunity-layer, broker-contract resolver/readiness, market-readiness, execution-readiness, runtime evidence wiring, trade-quality, top-selector, fill-lifecycle, control-tower UI, FastAPI, WebSocket, and schema contract tests.
 
           ## Checks
 
@@ -119,11 +122,12 @@ jobs:
           - Trade quality tests prove blocked candidates score zero and allowed candidates are ranked without creating orders.
           - Top executable selector tests prove only execution-allowed quality candidates can be selected, without creating orders.
           - Fill lifecycle tests prove order/fill evidence can be normalized without submitting orders.
+          - Control Tower UI contract tests prove the UI exposes the full tradability pipeline.
           - FastAPI, WebSocket, and OpenAPI schema contract tests run.
 
           ## Current honest limitation
 
-          Fill lifecycle sync reads local order/fill evidence only. It does not place orders or call broker APIs.
+          Control Tower UI displays tradability evidence only. It does not trigger orders.
           REPORT
 
       - name: Upload portfolio report
