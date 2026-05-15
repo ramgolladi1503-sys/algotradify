@@ -120,6 +120,7 @@ def test_trade_quality_rank_orders_by_quality_score():
 def test_trade_quality_uses_default_components_when_optional_evidence_values_missing():
     payload = _execution_ready()
     payload["evidence"]["candidate_truth"] = {"candidate_id": "c1", "truth_status": "REAL"}
+    payload["evidence"]["opportunity"] = {"candidate_id": "c1", "opportunity_status": "SELECTED"}
     payload["evidence"]["market_readiness"] = {"candidate_id": "c1", "status": "READY"}
 
     result = score_trade_quality(payload)
