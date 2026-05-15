@@ -9,7 +9,7 @@ on:
 
 jobs:
   portfolio-quality-gate:
-    name: Documentation, runtime, preflight, strategy, candidate-truth, opportunity-layer, broker-contract, market-readiness, execution-readiness, evidence-wiring, API, WebSocket, schema, and portfolio quality gate
+    name: Documentation, runtime, preflight, strategy, candidate-truth, opportunity-layer, broker-contract, market-readiness, execution-readiness, evidence-wiring, trade-quality, API, WebSocket, schema, and portfolio quality gate
     runs-on: ubuntu-latest
 
     steps:
@@ -33,6 +33,7 @@ jobs:
           test -f broker_contract/readiness.py
           test -f market_readiness/quote_liquidity.py
           test -f execution_readiness/contract.py
+          test -f trade_quality/scoring.py
           test -f api/schemas.py
           test -f tests/test_runtime_contract.py
           test -f tests/test_runtime_preflight.py
@@ -45,6 +46,8 @@ jobs:
           test -f tests/test_execution_readiness.py
           test -f tests/test_execution_readiness_api.py
           test -f tests/test_execution_readiness_evidence_wiring.py
+          test -f tests/test_trade_quality.py
+          test -f tests/test_trade_quality_api.py
           test -f tests/test_api_contracts.py
           test -f tests/test_websocket_contracts.py
           test -f tests/test_api_schema_contracts.py
@@ -66,6 +69,7 @@ jobs:
           grep -qi "Unified execution readiness contract" README.md
           grep -qi "Execution readiness API" README.md
           grep -qi "Runtime evidence wiring" README.md
+          grep -qi "Trade quality score" README.md
           grep -qi "Test strategy" README.md
           grep -qi "Failure modes" README.md
           grep -qi "Roadmap" README.md
@@ -80,8 +84,8 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r api/requirements.txt pytest httpx
 
-      - name: Run runtime, preflight, strategy, candidate-truth, opportunity-layer, broker-contract, market-readiness, execution-readiness, evidence-wiring, API, WebSocket, and schema contract tests
-        run: pytest -q tests/test_runtime_contract.py tests/test_runtime_preflight.py tests/test_strategy_registry.py tests/test_candidate_truth.py tests/test_opportunity_layer.py tests/test_broker_contract_resolver.py tests/test_broker_contract_readiness.py tests/test_market_readiness.py tests/test_execution_readiness.py tests/test_execution_readiness_api.py tests/test_execution_readiness_evidence_wiring.py tests/test_api_contracts.py tests/test_websocket_contracts.py tests/test_api_schema_contracts.py
+      - name: Run runtime, preflight, strategy, candidate-truth, opportunity-layer, broker-contract, market-readiness, execution-readiness, evidence-wiring, trade-quality, API, WebSocket, and schema contract tests
+        run: pytest -q tests/test_runtime_contract.py tests/test_runtime_preflight.py tests/test_strategy_registry.py tests/test_candidate_truth.py tests/test_opportunity_layer.py tests/test_broker_contract_resolver.py tests/test_broker_contract_readiness.py tests/test_market_readiness.py tests/test_execution_readiness.py tests/test_execution_readiness_api.py tests/test_execution_readiness_evidence_wiring.py tests/test_trade_quality.py tests/test_trade_quality_api.py tests/test_api_contracts.py tests/test_websocket_contracts.py tests/test_api_schema_contracts.py
 
       - name: Generate portfolio test report
         run: |
@@ -91,7 +95,7 @@ jobs:
 
           ## Scope
 
-          This CI gate validates runtime-root, runtime-preflight, strategy-contract, candidate-truth, opportunity-layer, broker-contract resolver/readiness, market-readiness, execution-readiness, runtime evidence wiring, FastAPI, WebSocket, and schema contract tests.
+          This CI gate validates runtime-root, runtime-preflight, strategy-contract, candidate-truth, opportunity-layer, broker-contract resolver/readiness, market-readiness, execution-readiness, runtime evidence wiring, trade-quality, FastAPI, WebSocket, and schema contract tests.
 
           ## Checks
 
@@ -103,13 +107,13 @@ jobs:
           - Broker contract resolver/readiness tests run.
           - Market readiness tests run.
           - Execution readiness tests prove only the unified contract can set `execution_allowed=true` and missing risk blocks by default.
-          - Execution readiness API tests prove endpoints expose blocked readiness evidence without placing orders.
           - Runtime evidence wiring tests prove broker/market/risk artifacts can unlock readiness only when all evidence is present and valid.
+          - Trade quality tests prove blocked candidates score zero and allowed candidates are ranked without creating orders.
           - FastAPI, WebSocket, and OpenAPI schema contract tests run.
 
           ## Current honest limitation
 
-          Runtime evidence wiring reads local JSON artifacts only. It does not call broker APIs and does not place orders.
+          Trade quality ranks execution-readiness evidence only. It does not place orders.
           REPORT
 
       - name: Upload portfolio report

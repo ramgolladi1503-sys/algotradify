@@ -10,7 +10,7 @@ Algotradify connects a Tradebot-compatible runtime to a FastAPI backend and Reac
 
 ## Problem statement
 
-A trading signal is not automatically tradable. Algotradify explains candidate survival across strategy output, candidate truth, opportunity ranking, contract evidence, market evidence, risk evidence, and execution readiness.
+A trading signal is not automatically tradable. Algotradify explains candidate survival across strategy output, candidate truth, opportunity ranking, contract evidence, market evidence, risk evidence, execution readiness, and trade quality score.
 
 ---
 
@@ -25,7 +25,8 @@ flowchart LR
     E --> F[Broker Contract Readiness]
     F --> G[Quote Freshness and Liquidity Gates]
     G --> H[Unified Execution Readiness Contract]
-    H --> I[React UI]
+    H --> I[Trade Quality Score]
+    I --> J[React UI]
 ```
 
 ---
@@ -180,6 +181,35 @@ Matching uses `candidate_id`, `symbol`, `tradingsymbol`, or `instrument_token`. 
 
 ---
 
+## Trade quality score
+
+Trade quality ranks execution-readiness records. Blocked candidates receive `quality_score=0` and `BLOCKED_NOT_EXECUTION_READY`.
+
+Scoring components:
+
+- candidate confidence
+- broker contract exact/fallback evidence
+- quote freshness
+- liquidity/spread quality
+- risk status
+
+Penalties include:
+
+- warnings
+- broker fallback
+- market warnings
+- risk warnings
+
+Endpoint:
+
+```bash
+curl http://localhost:8000/trade-quality
+```
+
+Hard rule: trade quality ranking does not place orders and does not turn blocked candidates into executable trades.
+
+---
+
 ## Current API endpoints
 
 ```text
@@ -191,6 +221,7 @@ GET /opportunities
 GET /candidate-truth
 GET /opportunity-layer
 GET /execution-readiness
+GET /trade-quality
 GET /strategies
 GET /strategies/draft-candidates
 GET /strategies/draft-candidates/truth
@@ -216,7 +247,7 @@ python main.py
 
 ## Test strategy
 
-CI runs runtime contract, preflight, strategy registry, candidate truth, opportunity layer, broker contract, market readiness, execution readiness, runtime evidence wiring, API, WebSocket, and schema tests.
+CI runs runtime contract, preflight, strategy registry, candidate truth, opportunity layer, broker contract, market readiness, execution readiness, runtime evidence wiring, trade quality, API, WebSocket, and schema tests.
 
 ---
 
@@ -232,11 +263,12 @@ CI runs runtime contract, preflight, strategy registry, candidate truth, opportu
 - Stale quote, stale depth, wide spread, and slippage budget breach are blocked.
 - Missing risk readiness blocks readiness.
 - Runtime evidence wiring can allow readiness only when broker, market, and risk evidence are all present and valid.
+- Blocked candidates receive zero trade quality score.
 
 ---
 
 ## Roadmap
 
-Completed foundation: runtime contract, preflight, strategy contract, Candidate Truth Layer, Opportunity Layer, broker contract resolver, broker contract readiness, quote/liquidity gates, execution readiness contract, execution readiness API, and runtime evidence wiring.
+Completed foundation: runtime contract, preflight, strategy contract, Candidate Truth Layer, Opportunity Layer, broker contract resolver, broker contract readiness, quote/liquidity gates, execution readiness contract, execution readiness API, runtime evidence wiring, and trade quality score.
 
-Next work: trade quality score, top executable selector, fill lifecycle sync, control tower UI, outcome logging, and replay.
+Next work: top executable selector, fill lifecycle sync, control tower UI, outcome logging, and replay.

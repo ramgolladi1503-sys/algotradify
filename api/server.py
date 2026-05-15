@@ -20,6 +20,7 @@ from api.schemas import (
     RuntimeSnapshotResponse,
     StrategyCandidateDraftResponse,
     StrategyInfoResponse,
+    TradeQualityResponse,
 )
 from candidate_truth import normalize_candidates
 from execution_readiness import build_execution_readiness
@@ -31,6 +32,7 @@ from runtime_contract import (
     runtime_artifact_root,
 )
 from strategies import StrategyContext, build_default_strategy_registry
+from trade_quality import rank_trade_quality
 
 
 def _repo_root() -> Path:
@@ -396,6 +398,11 @@ def _execution_readiness_payload(limit: int) -> list[dict]:
     return readiness
 
 
+def _trade_quality_payload(limit: int) -> list[dict]:
+    readiness = _execution_readiness_payload(limit)
+    return [row.to_dict() for row in rank_trade_quality(readiness)]
+
+
 def _strategy_execution_readiness_payload(request: Request, symbol: str) -> list[dict]:
     drafts = _strategy_draft_payload(request, symbol)
     truth_records = [record.to_dict() for record in normalize_candidates(drafts, source="api.strategy_draft_preview")]
@@ -522,6 +529,11 @@ def opportunity_layer(limit: int = Query(default=25, ge=1, le=200)):
 @app.get("/execution-readiness", response_model=list[ExecutionReadinessResponse])
 def execution_readiness(limit: int = Query(default=25, ge=1, le=200)):
     return _execution_readiness_payload(limit)
+
+
+@app.get("/trade-quality", response_model=list[TradeQualityResponse])
+def trade_quality(limit: int = Query(default=25, ge=1, le=200)):
+    return _trade_quality_payload(limit)
 
 
 @app.get("/strategies", response_model=list[StrategyInfoResponse])

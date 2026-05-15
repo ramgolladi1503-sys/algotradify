@@ -155,6 +155,19 @@ class ExecutionReadinessResponse(BaseModel):
     is_order: bool
 
 
+class TradeQualityResponse(BaseModel):
+    candidate_id: str
+    quality_score: float | int
+    status: str
+    rank: int | None = None
+    components: dict[str, float]
+    penalties: dict[str, float]
+    blockers: list[str]
+    warnings: list[str]
+    execution_readiness: dict[str, Any]
+    is_order: bool
+
+
 class RuntimeNoticePayload(BaseModel):
     source: str
     status: str
