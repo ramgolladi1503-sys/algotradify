@@ -12,6 +12,7 @@ from redis.exceptions import RedisError
 from api.schemas import (
     CandidateTruthRecordResponse,
     ExecutionReadinessResponse,
+    FillLifecycleStateResponse,
     HealthResponse,
     OpportunityLayerResponse,
     OpportunityResponse,
@@ -25,6 +26,7 @@ from api.schemas import (
 )
 from candidate_truth import normalize_candidates
 from execution_readiness import build_execution_readiness
+from fill_lifecycle import normalize_fill_lifecycle
 from opportunity_layer import run_opportunity_pipeline
 from runtime_contract import (
     candidate_runtime_roots,
@@ -246,6 +248,15 @@ def _runtime_records_from_files(root: Path, filenames: list[str], collection_key
     return []
 
 
+def _runtime_jsonl_records_from_files(root: Path, filenames: list[str], limit: int = 500) -> list[dict[str, Any]]:
+    for filename in filenames:
+        for path in (root / filename, root / "logs" / filename):
+            records = _tail_jsonl(path, limit=limit)
+            if records:
+                return records
+    return []
+
+
 def _extract_records(payload: Any, collection_keys: tuple[str, ...]) -> list[dict[str, Any]]:
     if payload is None:
         return []
@@ -257,9 +268,39 @@ def _extract_records(payload: Any, collection_keys: tuple[str, ...]) -> list[dic
         value = payload.get(key)
         if isinstance(value, list):
             return [row for row in value if isinstance(row, dict)]
-    if any(key in payload for key in ("candidate_id", "symbol", "status", "readiness_status", "execution_allowed", "allowed")):
+    if any(key in payload for key in ("candidate_id", "symbol", "status", "readiness_status", "execution_allowed", "allowed", "order_id", "broker_order_id")):
         return [payload]
     return []
+
+
+def _fill_lifecycle_records() -> list[dict[str, Any]]:
+    root = _runtime_root()
+    json_records = _runtime_records_from_files(
+        root,
+        [
+            "fill_lifecycle_latest.json",
+            "order_lifecycle_latest.json",
+            "fills_latest.json",
+            "orders_latest.json",
+        ],
+        ("fill_lifecycle", "order_lifecycle", "fills", "orders", "events", "records", "items"),
+    )
+    if json_records:
+        return json_records
+    return _runtime_jsonl_records_from_files(
+        root,
+        [
+            "fill_lifecycle.jsonl",
+            "order_lifecycle.jsonl",
+            "fills.jsonl",
+            "orders.jsonl",
+        ],
+        limit=500,
+    )
+
+
+def _fill_lifecycle_payload(candidate_id: str | None = None) -> dict:
+    return normalize_fill_lifecycle(_fill_lifecycle_records(), candidate_id=candidate_id).to_dict()
 
 
 def _index_by_keys(records: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
@@ -549,6 +590,11 @@ def top_executable(
     min_quality_score: float = Query(default=50.0, ge=0.0, le=100.0),
 ):
     return _top_executable_payload(limit=limit, min_quality_score=min_quality_score)
+
+
+@app.get("/fill-lifecycle", response_model=FillLifecycleStateResponse)
+def fill_lifecycle(candidate_id: str | None = Query(default=None)):
+    return _fill_lifecycle_payload(candidate_id=candidate_id)
 
 
 @app.get("/strategies", response_model=list[StrategyInfoResponse])

@@ -178,6 +178,18 @@ class TopExecutableSelectionResponse(BaseModel):
     is_selector_decision: bool
 
 
+class FillLifecycleStateResponse(BaseModel):
+    candidate_id: str
+    current_status: str
+    terminal: bool
+    filled_quantity: float | int | None = None
+    average_price: float | int | None = None
+    events: list[dict[str, Any]]
+    blockers: list[str]
+    warnings: list[str]
+    is_order_submission: bool
+
+
 class RuntimeNoticePayload(BaseModel):
     source: str
     status: str
