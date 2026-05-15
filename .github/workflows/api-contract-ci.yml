@@ -1,0 +1,40 @@
+name: API Contract CI
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  api-contract:
+    name: FastAPI, schema, websocket, and API endpoint tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r api/requirements.txt pytest httpx
+
+      - name: Run API contract tests
+        run: |
+          pytest -q \
+            tests/test_execution_readiness_api.py \
+            tests/test_trade_quality_api.py \
+            tests/test_top_selector_api.py \
+            tests/test_fill_lifecycle_api.py \
+            tests/test_outcome_replay_api.py \
+            tests/test_execution_safety_api.py \
+            tests/test_api_contracts.py \
+            tests/test_websocket_contracts.py \
+            tests/test_api_schema_contracts.py
