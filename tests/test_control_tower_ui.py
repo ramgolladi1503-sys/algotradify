@@ -36,10 +36,15 @@ def test_control_tower_ui_renders_required_sections():
 
     required_sections = [
         "Algotradify Control Tower",
+        "Frontend Filters",
         "Runtime",
         "Cycle Snapshot",
         "Tradability Summary",
         "Top Executable",
+        "Readiness Breakdown Chart",
+        "Outcome Counts Chart",
+        "Quality Score Distribution Chart",
+        "Candidate Truth Breakdown Chart",
         "Outcome Replay Drilldown",
         "Execution Readiness",
         "Trade Quality",
@@ -79,6 +84,36 @@ def test_control_tower_ui_exposes_outcome_replay_filter_counts_and_timeline():
     assert "best_quality_score" in source
     assert "outcome blockers" in source
     assert "no outcome replay events yet" in source
+
+
+def test_control_tower_ui_exposes_frontend_filters_and_analytics():
+    source = _frontend_source()
+
+    required_filter_terms = [
+        "candidate search/filter",
+        "status filter",
+        "blocked-only view",
+        "selected-only view",
+        "allowed-only view",
+        "rejected-only view",
+        "quality score threshold filter",
+        "Reset filters",
+        "applyFilters",
+        "BarChart",
+    ]
+
+    for term in required_filter_terms:
+        assert term in source
+
+    required_analytics_terms = [
+        "readinessBreakdown",
+        "qualityDistribution",
+        "outcomeCounts",
+        "truthBreakdown",
+    ]
+
+    for term in required_analytics_terms:
+        assert term in source
 
 
 def test_control_tower_ui_keeps_websocket_event_feed():
