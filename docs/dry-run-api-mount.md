@@ -1,12 +1,18 @@
 # Dry-Run API Mount
 
-PR 25 mounts the PR 24 dry-run evidence route through a dedicated FastAPI entrypoint:
+PR 25 introduced a mounted FastAPI entrypoint:
 
 ```text
 api.server_with_dry_run:app
 ```
 
-This entrypoint imports the existing `api.server.app`, installs the dry-run route, and preserves the existing server behavior.
+PR 26 adds direct package-level mounting so importing the normal server module also exposes the route:
+
+```text
+api.server:app
+```
+
+The route installer is idempotent, so the transitional `api.server_with_dry_run:app` entrypoint remains safe and does not double-register the endpoint.
 
 ## Endpoint
 
@@ -42,6 +48,8 @@ The endpoint consumes the existing server helpers for:
 - `dry_run_lifecycle.jsonl`
 - `outcome_replay.jsonl`
 
+The frontend must not call `append=true`; append is reserved for explicit backend/operator workflows.
+
 ## Safety flags
 
 All responses preserve:
@@ -62,14 +70,18 @@ Created intent payloads also expose:
 }
 ```
 
-## Why this entrypoint exists
+## Mount implementation
 
-Direct connector writes to the large `api/server.py` file were unreliable. This entrypoint makes the route runnable and testable without replacing the main server file.
+Direct replacement of the large `api/server.py` file was unreliable through the connector. PR 26 therefore mounts the dry-run route from `api/__init__.py` when the `api` package is imported. Tests prove the route is available from `api.server.app`.
 
-A later cleanup PR can move the mount call directly into `api/server.py` when editing locally.
+A later local-edit cleanup can move the mount call directly into `api/server.py` if desired.
+
+## Control Tower status
+
+Control Tower visibility is still a follow-up. The frontend file is a large single-file React app, and replacing it through the connector is high-risk. The UI follow-up should add a read-only “Dry-Run Execution Adapter” card that calls `/dry-run-execution?limit=20` with default `append=false` only.
 
 ## Test command
 
 ```bash
-pytest -q tests/test_dry_run_execution_adapter.py tests/test_dry_run_execution_api.py tests/test_dry_run_execution_api_mount.py
+pytest -q tests/test_dry_run_execution_adapter.py tests/test_dry_run_execution_api.py tests/test_dry_run_execution_api_mount.py tests/test_dry_run_execution_api_direct_mount.py
 ```

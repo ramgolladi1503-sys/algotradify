@@ -55,6 +55,9 @@ def install_dry_run_execution_route(
     approval_provider: Callable[[str | None, float | None], dict[str, Any]],
     readiness_matcher: Callable[[dict[str, Any], list[dict[str, Any]]], dict[str, Any] | None],
 ) -> None:
+    if any(getattr(route, "path", None) == "/dry-run-execution" for route in app.routes):
+        return
+
     @app.get("/dry-run-execution")
     def dry_run_execution(
         request: Request,
