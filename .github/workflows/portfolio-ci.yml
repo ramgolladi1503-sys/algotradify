@@ -43,6 +43,7 @@ jobs:
           test -f tests/test_broker_contract_readiness.py
           test -f tests/test_market_readiness.py
           test -f tests/test_execution_readiness.py
+          test -f tests/test_execution_readiness_api.py
           test -f tests/test_api_contracts.py
           test -f tests/test_websocket_contracts.py
           test -f tests/test_api_schema_contracts.py
@@ -62,6 +63,7 @@ jobs:
           grep -qi "Broker contract readiness" README.md
           grep -qi "Quote freshness and liquidity gates" README.md
           grep -qi "Unified execution readiness contract" README.md
+          grep -qi "Execution readiness API" README.md
           grep -qi "Test strategy" README.md
           grep -qi "Failure modes" README.md
           grep -qi "Roadmap" README.md
@@ -77,7 +79,7 @@ jobs:
           python -m pip install -r api/requirements.txt pytest httpx
 
       - name: Run runtime, preflight, strategy, candidate-truth, opportunity-layer, broker-contract, market-readiness, execution-readiness, API, WebSocket, and schema contract tests
-        run: pytest -q tests/test_runtime_contract.py tests/test_runtime_preflight.py tests/test_strategy_registry.py tests/test_candidate_truth.py tests/test_opportunity_layer.py tests/test_broker_contract_resolver.py tests/test_broker_contract_readiness.py tests/test_market_readiness.py tests/test_execution_readiness.py tests/test_api_contracts.py tests/test_websocket_contracts.py tests/test_api_schema_contracts.py
+        run: pytest -q tests/test_runtime_contract.py tests/test_runtime_preflight.py tests/test_strategy_registry.py tests/test_candidate_truth.py tests/test_opportunity_layer.py tests/test_broker_contract_resolver.py tests/test_broker_contract_readiness.py tests/test_market_readiness.py tests/test_execution_readiness.py tests/test_execution_readiness_api.py tests/test_api_contracts.py tests/test_websocket_contracts.py tests/test_api_schema_contracts.py
 
       - name: Generate portfolio test report
         run: |
@@ -99,11 +101,12 @@ jobs:
           - Broker contract resolver/readiness tests run.
           - Market readiness tests run.
           - Execution readiness tests prove only the unified contract can set `execution_allowed=true` and missing risk blocks by default.
+          - Execution readiness API tests prove endpoints expose blocked readiness evidence without placing orders.
           - FastAPI, WebSocket, and OpenAPI schema contract tests run.
 
           ## Current honest limitation
 
-          Unified execution readiness is defined and test-covered. It still does not place orders and risk logic remains placeholder-backed until the dedicated risk/execution PRs.
+          Unified execution readiness is exposed through API, but runtime broker/market/risk artifacts are still not wired. API defaults to blocked incomplete evidence rather than manufacturing executability.
           REPORT
 
       - name: Upload portfolio report
