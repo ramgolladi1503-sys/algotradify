@@ -6,7 +6,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from api.dry_run_execution_route import install_dry_run_execution_route
+from api.dry_run_execution_route import build_dry_run_export_bundle, install_dry_run_execution_route
 
 
 def _top(candidate_id="c1"):
@@ -153,3 +153,59 @@ def test_dry_run_execution_route_always_exposes_safe_flags(tmp_path):
     assert payload["dry_run_only"] is True
     assert payload["is_order_action"] is False
     assert payload["broker_api_called"] is False
+
+
+def test_dry_run_export_bundle_shape_from_payload(tmp_path):
+    client = _client(tmp_path)
+    payload = client.get("/dry-run-execution?now_epoch=100").json()
+
+    bundle = build_dry_run_export_bundle(payload)
+
+    assert bundle["bundle_type"] == "DRY_RUN_EVIDENCE_BUNDLE"
+    assert bundle["schema_version"] == "1.0"
+    assert bundle["status"] == "BUNDLE_READY"
+    assert bundle["candidate_id"] == "c1"
+    assert bundle["dry_run_only"] is True
+    assert bundle["is_order_action"] is False
+    assert bundle["broker_api_called"] is False
+    assert bundle["real_order_id"] is None
+    assert bundle["selected_candidate_snapshot"]["status"] == "SELECTED"
+    assert bundle["execution_safety_snapshot"]["status"] == "PERMITTED"
+    assert bundle["approval_snapshot"]["current_status"] == "APPROVED"
+    assert bundle["readiness_snapshot"]["execution_allowed"] is True
+    assert bundle["outcome_event"]["evidence"]["dry_run_only"] is True
+    assert bundle["export_preview_only"] is True
+
+
+def test_dry_run_execution_export_endpoint_returns_bundle_and_writes_no_files(tmp_path):
+    client = _client(tmp_path)
+
+    response = client.get("/dry-run-execution/export?now_epoch=100")
+
+    assert response.status_code == 200
+    bundle = response.json()
+    assert bundle["bundle_type"] == "DRY_RUN_EVIDENCE_BUNDLE"
+    assert bundle["status"] == "BUNDLE_READY"
+    assert bundle["dry_run_only"] is True
+    assert bundle["is_order_action"] is False
+    assert bundle["broker_api_called"] is False
+    assert bundle["real_order_id"] is None
+    assert bundle["export_preview_only"] is True
+    assert not (tmp_path / "logs" / "dry_run_order_intents.jsonl").exists()
+    assert not (tmp_path / "logs" / "dry_run_lifecycle.jsonl").exists()
+    assert not (tmp_path / "logs" / "outcome_replay.jsonl").exists()
+
+
+def test_dry_run_execution_export_endpoint_blocks_safely_when_evidence_missing(tmp_path):
+    client = _client(tmp_path, top={"status": "NONE"}, safety=_safety(False), approval={})
+
+    response = client.get("/dry-run-execution/export")
+
+    assert response.status_code == 200
+    bundle = response.json()
+    assert bundle["bundle_type"] == "DRY_RUN_EVIDENCE_BUNDLE"
+    assert bundle["status"] == "BUNDLE_BLOCKED"
+    assert bundle["dry_run_only"] is True
+    assert bundle["is_order_action"] is False
+    assert bundle["broker_api_called"] is False
+    assert "NO_TOP_EXECUTABLE_SELECTED" in bundle["blockers"]

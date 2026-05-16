@@ -191,7 +191,34 @@ def test_dry_run_execution_direct_app_append_true_writes_jsonl(tmp_path, monkeyp
     assert (runtime_root / "logs" / "outcome_replay.jsonl").exists()
 
 
+def test_dry_run_execution_export_exists_on_direct_app_and_writes_nothing(tmp_path, monkeypatch):
+    import api.server as server
+
+    runtime_root = _seed_runtime(tmp_path)
+    monkeypatch.setattr(server, "_runtime_root", lambda: runtime_root)
+    client = TestClient(app)
+
+    response = client.get(
+        "/dry-run-execution/export?now_epoch=150&dry_run_required=false&approval_id=approval-1234&operator_id=op1&broker_confirmation_id=b1&warnings_acknowledged=true"
+    )
+
+    assert response.status_code == 200
+    bundle = response.json()
+    assert bundle["bundle_type"] == "DRY_RUN_EVIDENCE_BUNDLE"
+    assert bundle["status"] == "BUNDLE_READY"
+    assert bundle["candidate_id"] == "c1"
+    assert bundle["dry_run_only"] is True
+    assert bundle["is_order_action"] is False
+    assert bundle["broker_api_called"] is False
+    assert bundle["real_order_id"] is None
+    assert bundle["export_preview_only"] is True
+    assert not (runtime_root / "logs" / "dry_run_order_intents.jsonl").exists()
+    assert not (runtime_root / "logs" / "dry_run_lifecycle.jsonl").exists()
+    assert not (runtime_root / "logs" / "outcome_replay.jsonl").exists()
+
+
 def test_dry_run_route_is_not_registered_twice():
     route_paths = [getattr(route, "path", None) for route in app.routes]
 
     assert route_paths.count("/dry-run-execution") == 1
+    assert route_paths.count("/dry-run-execution/export") == 1
