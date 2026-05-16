@@ -1,0 +1,161 @@
+{
+  "approval_evidence": {
+    "schema_id": "approval_evidence",
+    "evidence_type": "APPROVAL_EVIDENCE",
+    "schema_version": "1.0",
+    "compatible_schema_versions": [
+      "1.0"
+    ],
+    "required_keys": [
+      "approval_id",
+      "blockers",
+      "candidate_id",
+      "current_status",
+      "events",
+      "is_order_action",
+      "operator_id"
+    ],
+    "safe_flags": {
+      "is_order_action": false
+    },
+    "description": "Operator approval evidence consumed by the dry-run adapter."
+  },
+  "dry_run_execution_payload": {
+    "schema_id": "dry_run_execution_payload",
+    "evidence_type": "DRY_RUN_EXECUTION_PAYLOAD",
+    "schema_version": "1.0",
+    "compatible_schema_versions": [
+      "1.0"
+    ],
+    "required_keys": [
+      "blockers",
+      "broker_api_called",
+      "candidate_id",
+      "created",
+      "dry_run_only",
+      "intent",
+      "is_order_action",
+      "lifecycle_event",
+      "outcome_event",
+      "real_order_id",
+      "warnings"
+    ],
+    "safe_flags": {
+      "dry_run_only": true,
+      "is_order_action": false,
+      "broker_api_called": false,
+      "real_order_id": null
+    },
+    "description": "Dry-run adapter response before export bundle wrapping."
+  },
+  "dry_run_export_bundle": {
+    "schema_id": "dry_run_export_bundle",
+    "evidence_type": "DRY_RUN_EVIDENCE_BUNDLE",
+    "schema_version": "1.0",
+    "compatible_schema_versions": [
+      "1.0"
+    ],
+    "required_keys": [
+      "approval_snapshot",
+      "blockers",
+      "broker_api_called",
+      "bundle_type",
+      "candidate_id",
+      "created",
+      "dry_run_intent",
+      "dry_run_only",
+      "dry_run_order_id",
+      "execution_safety_snapshot",
+      "export_preview_only",
+      "is_order_action",
+      "lifecycle_event",
+      "outcome_event",
+      "readiness_snapshot",
+      "real_order_id",
+      "schema_version",
+      "selected_candidate_snapshot",
+      "status",
+      "warnings"
+    ],
+    "safe_flags": {
+      "dry_run_only": true,
+      "is_order_action": false,
+      "broker_api_called": false,
+      "real_order_id": null,
+      "export_preview_only": true
+    },
+    "description": "Read-only dry-run evidence export bundle consumed by Control Tower export preview."
+  },
+  "execution_safety_decision": {
+    "schema_id": "execution_safety_decision",
+    "evidence_type": "EXECUTION_SAFETY_DECISION",
+    "schema_version": "1.0",
+    "compatible_schema_versions": [
+      "1.0"
+    ],
+    "required_keys": [
+      "blockers",
+      "execution_permitted",
+      "is_order_action",
+      "safety_visibility_only",
+      "status",
+      "warnings"
+    ],
+    "safe_flags": {
+      "is_order_action": false,
+      "safety_visibility_only": true
+    },
+    "description": "Execution safety gate decision used before dry-run intent creation."
+  },
+  "lifecycle_event": {
+    "schema_id": "lifecycle_event",
+    "evidence_type": "DRY_RUN_LIFECYCLE_EVENT",
+    "schema_version": "1.0",
+    "compatible_schema_versions": [
+      "1.0"
+    ],
+    "required_keys": [
+      "broker_api_called",
+      "dry_run_only",
+      "real_order_id",
+      "status"
+    ],
+    "safe_flags": {
+      "dry_run_only": true,
+      "broker_api_called": false,
+      "real_order_id": null
+    },
+    "description": "Dry-run lifecycle evidence event emitted after intent creation."
+  },
+  "outcome_replay_event": {
+    "schema_id": "outcome_replay_event",
+    "evidence_type": "OUTCOME_REPLAY_EVENT",
+    "schema_version": "1.0",
+    "compatible_schema_versions": [
+      "1.0"
+    ],
+    "required_keys": [
+      "evidence",
+      "real_order_id",
+      "status"
+    ],
+    "safe_flags": {
+      "real_order_id": null
+    },
+    "description": "Outcome replay event used by replay drilldowns and analytics."
+  },
+  "readiness_snapshot": {
+    "schema_id": "readiness_snapshot",
+    "evidence_type": "READINESS_SNAPSHOT",
+    "schema_version": "1.0",
+    "compatible_schema_versions": [
+      "1.0"
+    ],
+    "required_keys": [
+      "candidate_id",
+      "execution_allowed"
+    ],
+    "safe_flags": {},
+    "description": "Matched execution-readiness snapshot for the selected candidate."
+  }
+}
