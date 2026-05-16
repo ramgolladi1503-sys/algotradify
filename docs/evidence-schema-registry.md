@@ -2,6 +2,8 @@
 
 PR 37 introduces a central evidence schema registry.
 
+PR 38 adds snapshot-style contract tests for the registry output.
+
 The registry lives at:
 
 ```text
@@ -54,6 +56,44 @@ dry_run_export_schema_contract()
 
 The test suite verifies this so the registry cannot drift from the actual export bundle contract.
 
+## Snapshot contract rule
+
+The golden registry snapshot lives at:
+
+```text
+tests/fixtures/evidence_schema_registry_snapshot.json
+```
+
+The snapshot freezes:
+
+- schema IDs
+- evidence types
+- schema versions
+- compatible schema versions
+- required keys
+- safe flags
+- descriptions
+
+Do not update the snapshot just because a test failed.
+
+Update the snapshot only when the schema change is intentional and the PR explains whether it is compatible or breaking.
+
+Compatible snapshot updates may include:
+
+- adding a new schema entry
+- adding optional nested evidence support while preserving existing required keys
+- improving a description without weakening safety semantics
+
+Breaking snapshot updates include:
+
+- removing or renaming schema IDs
+- removing or renaming required keys
+- changing safe flags
+- changing schema versions
+- weakening no-order/no-broker guarantees
+
+Breaking updates require explicit migration notes and tests.
+
 ## Safety boundary
 
 Evidence schemas may document safe flags such as:
@@ -102,4 +142,6 @@ They verify:
 - schema versions remain stable
 - dry-run export registry contract matches the route contract
 - safe flags preserve no-order boundaries
+- registry snapshot matches `tests/fixtures/evidence_schema_registry_snapshot.json`
+- snapshot ordering is deterministic
 - unknown schema IDs fail clearly
