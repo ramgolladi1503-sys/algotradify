@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import {
   BarChart,
   Card,
+  Chips,
   DryRunEvidenceExportPreviewCard,
   DryRunExecutionAdapterCard,
   EvidenceHealthPanel,
@@ -60,6 +61,14 @@ function buildReplayQueryString(replayQuery = DEFAULT_REPLAY_QUERY) {
   const query = params.toString();
   return query ? `?${query}` : '';
 }
+function replayCandidateKey(row) { return String(row?.candidate_id || row?.trade_id || 'unknown'); }
+function replayStatus(row) { return String(row?.outcome_status || row?.status || row?.event || row?.current_status || 'UNKNOWN').toUpperCase(); }
+function replayStrategy(row) { const evidence = row?.evidence && typeof row.evidence === 'object' ? row.evidence : {}; const selected = row?.selected && typeof row.selected === 'object' ? row.selected : {}; return row?.strategy || row?.strategy_id || row?.strategy_family || row?.setup_family || evidence.strategy_family || evidence.strategy || selected.strategy_family || selected.strategy || 'UNKNOWN'; }
+function replayTimestampNumber(row) { const raw = row?.ts_epoch ?? row?.timestamp ?? row?.time ?? row?.created_at; const parsed = Number(raw); return Number.isFinite(parsed) ? parsed : null; }
+function replayQualityScore(row) { const parsed = Number(row?.quality_score ?? row?.trade_quality_score ?? row?.score); return Number.isFinite(parsed) ? parsed : null; }
+function replayDistribution(values) { const counts = new Map(); values.forEach((value) => counts.set(value, (counts.get(value) || 0) + 1)); return Array.from(counts.entries()).sort((a, b) => b[1] - a[1]).map(([label, value]) => `${label}: ${value}`); }
+function replayAnalyticsSummary(events) { const rows = arr(events); const timestamps = rows.map(replayTimestampNumber).filter((value) => value !== null); const scores = rows.map(replayQualityScore).filter((value) => value !== null); return { candidateCount: new Set(rows.map(replayCandidateKey)).size, eventCount: rows.length, statusDistribution: replayDistribution(rows.map(replayStatus)), strategyDistribution: replayDistribution(rows.map(replayStrategy)), timeWindowMin: timestamps.length ? Math.min(...timestamps) : null, timeWindowMax: timestamps.length ? Math.max(...timestamps) : null, bestQualityScore: scores.length ? Math.max(...scores) : null, worstQualityScore: scores.length ? Math.min(...scores) : null }; }
+function ReplayAnalyticsSummaryPanel({ events }) { const summary = replayAnalyticsSummary(events); return <Card title='Replay Analytics Summary Panel' right={<Pill value='READ_ONLY_ANALYTICS' />}><p style={muted}>Read-only replay analytics derived from the active filtered replay result set.</p><div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 8 }}><Metric label='candidate_count' value={summary.candidateCount} /><Metric label='event_count' value={summary.eventCount} /><Metric label='time_window_min' value={summary.timeWindowMin} /><Metric label='time_window_max' value={summary.timeWindowMax} /><Metric label='best_quality_score' value={summary.bestQualityScore} /><Metric label='worst_quality_score' value={summary.worstQualityScore} /></div><div>status distribution</div><Chips items={summary.statusDistribution} /><div>strategy distribution</div><Chips items={summary.strategyDistribution} /></Card>; }
 
 function App() {
   const initialPrefs = loadPersistedPreferences();
@@ -91,6 +100,7 @@ function App() {
     <DryRunEvidenceExportPreviewCard dryRunExport={state.dryRunExport} />
     <EvidenceHealthPanel evidenceHealth={state.evidenceHealth} />
     <BarChart title='Readiness Breakdown Chart' data={analytics.readinessBreakdown} /><BarChart title='Outcome Counts Chart' data={analytics.outcomeCounts} /><BarChart title='Quality Score Distribution Chart' data={analytics.qualityDistribution} /><BarChart title='Candidate Truth Breakdown Chart' data={analytics.truthBreakdown} />
+    <ReplayAnalyticsSummaryPanel events={filtered.outcomeEvents} />
     <OutcomeReplayDrilldownCard outcomeReplay={state.outcomeReplay} replayQuery={replayQuery} updateReplayQuery={updateReplayQuery} fetchControlTower={fetchControlTower} resetReplayQuery={resetReplayQuery} filteredOutcomeEvents={filtered.outcomeEvents} />
     <Card title='Execution Readiness'><Table rows={filtered.executionReadiness} empty='no readiness records match filters' /></Card><Card title='Trade Quality'><Table rows={filtered.tradeQuality} empty='no quality records match filters' /></Card><Card title='Top Executable Rejections'><div>selector_rejection_reasons</div><Table rows={filtered.topRejected} empty='no selector rejections match filters' /></Card><Card title='Candidate Truth'><Table rows={filtered.candidateTruth} empty='no candidate truth records match filters' /></Card><Card title='Opportunity Layer'><Table rows={applyFilters(state.opportunityLayer?.ranked || [], filters)} empty='no ranked opportunity candidates match filters' /></Card><Card title='Fill Lifecycle'><div>is_order_submission: {show(state.fillLifecycle?.is_order_submission)}</div><Table rows={arr(state.fillLifecycle?.events)} empty='no fill lifecycle evidence matches filters' /></Card><Card title='Raw Runtime Opportunities'><Table rows={filtered.opportunities} empty='no runtime opportunities match filters' /></Card>
     <Card title='Live Event Feed'>{events.length ? events.map((e, i) => <pre key={i}>{JSON.stringify(e.payload)}</pre>) : <div>no websocket events yet</div>}</Card>
