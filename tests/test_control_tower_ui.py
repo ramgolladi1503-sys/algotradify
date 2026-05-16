@@ -89,6 +89,7 @@ def test_control_tower_ui_renders_required_sections():
         "Candidate Truth Breakdown Chart",
         "Replay Timeline UI",
         "Replay Result Drilldown",
+        "Replay Analytics Summary Panel",
         "Execution Readiness",
         "Trade Quality",
         "Candidate Truth",
@@ -398,6 +399,35 @@ def test_control_tower_replay_result_drilldown_shows_fields_and_empty_state():
 
     assert "append=true" not in source
     for forbidden in ["Submit Order", "Modify Order", "Cancel Order", "Exit Order", "Approve Order", "Execute Order", "Place Order"]:
+        assert forbidden not in source
+
+
+def test_control_tower_replay_analytics_summary_panel():
+    source = _frontend_source()
+
+    required_terms = [
+        "Replay Analytics Summary Panel",
+        "ReplayAnalyticsSummaryPanel",
+        "replayAnalyticsSummary",
+        "replayDistribution",
+        "replayQualityScore",
+        "candidate_count",
+        "event_count",
+        "time_window_min",
+        "time_window_max",
+        "best_quality_score",
+        "worst_quality_score",
+        "status distribution",
+        "strategy distribution",
+        "READ_ONLY_ANALYTICS",
+        "Read-only replay analytics derived from the active filtered replay result set.",
+    ]
+
+    for term in required_terms:
+        assert term in source
+
+    assert "append=true" not in source
+    for forbidden in ["Submit Order", "Modify Order", "Cancel Order", "Exit Order", "Approve Order", "Execute Order", "Place Order", "broker.place", "kite.place_order"]:
         assert forbidden not in source
 
 
