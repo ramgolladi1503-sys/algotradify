@@ -90,6 +90,7 @@ def test_control_tower_ui_renders_required_sections():
         "Replay Timeline UI",
         "Replay Result Drilldown",
         "Replay Analytics Summary Panel",
+        "Replay Export Snapshot Panel",
         "Execution Readiness",
         "Trade Quality",
         "Candidate Truth",
@@ -421,6 +422,33 @@ def test_control_tower_replay_analytics_summary_panel():
         "strategy distribution",
         "READ_ONLY_ANALYTICS",
         "Read-only replay analytics derived from the active filtered replay result set.",
+    ]
+
+    for term in required_terms:
+        assert term in source
+
+    assert "append=true" not in source
+    for forbidden in ["Submit Order", "Modify Order", "Cancel Order", "Exit Order", "Approve Order", "Execute Order", "Place Order", "broker.place", "kite.place_order"]:
+        assert forbidden not in source
+
+
+def test_control_tower_replay_export_snapshot_panel():
+    source = _frontend_source()
+
+    required_terms = [
+        "Replay Export Snapshot Panel",
+        "ReplayExportSnapshotPanel",
+        "buildReplayExportSnapshot",
+        "replaySnapshotGroups",
+        "snapshot_type",
+        "control_tower_replay_export_snapshot",
+        "COPYABLE_READ_ONLY_JSON",
+        "Copyable JSON snapshot of the filtered replay view.",
+        "query_metadata",
+        "analytics_summary",
+        "grouped_timeline",
+        "frontend_filtered_replay_view",
+        "textarea readOnly",
     ]
 
     for term in required_terms:
