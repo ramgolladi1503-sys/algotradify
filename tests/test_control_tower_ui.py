@@ -87,7 +87,7 @@ def test_control_tower_ui_renders_required_sections():
         "Outcome Counts Chart",
         "Quality Score Distribution Chart",
         "Candidate Truth Breakdown Chart",
-        "Outcome Replay Drilldown",
+        "Replay Timeline UI",
         "Execution Readiness",
         "Trade Quality",
         "Candidate Truth",
@@ -285,16 +285,73 @@ def test_control_tower_ui_exposes_dry_run_evidence_drilldown_and_operator_explan
 def test_control_tower_ui_exposes_outcome_replay_filter_counts_and_timeline():
     source = _frontend_source()
 
-    assert "replayCandidateId" in source
-    assert "candidate_id filter" in source
-    assert "Replay" in source
-    assert "selected_count" in source
-    assert "blocked_count" in source
-    assert "filled_count" in source
-    assert "rejected_count" in source
-    assert "best_quality_score" in source
-    assert "outcome blockers" in source
-    assert "no outcome replay events yet" in source
+    required_terms = [
+        "replayQuery",
+        "DEFAULT_REPLAY_QUERY",
+        "candidate_id filter",
+        "status filter",
+        "strategy filter",
+        "ts_from_epoch time range filter",
+        "ts_to_epoch time range filter",
+        "Apply replay query filters",
+        "Reset replay query filters",
+        "selected_count",
+        "blocked_count",
+        "filled_count",
+        "rejected_count",
+        "best_quality_score",
+        "outcome blockers",
+        "Replay timeline events",
+        "no outcome replay events yet",
+    ]
+
+    for term in required_terms:
+        assert term in source
+
+
+def test_control_tower_replay_timeline_ui_builds_backend_query_contract():
+    source = _frontend_source()
+
+    required_terms = [
+        "buildReplayQueryString",
+        "new URLSearchParams",
+        "candidate_id",
+        "status",
+        "strategy",
+        "ts_from_epoch",
+        "ts_to_epoch",
+        "replayQueryString",
+        "`/outcome-replay${replayQueryString}`",
+    ]
+
+    for term in required_terms:
+        assert term in source
+
+    assert "replayCandidateId" not in source
+    assert "append=true" not in source
+
+
+def test_control_tower_replay_timeline_ui_exposes_query_metadata_and_safe_flags():
+    source = _frontend_source()
+
+    required_terms = [
+        "ReplayTimelineMetadata",
+        "replayQueryMetadata",
+        "Replay query metadata",
+        "source_count",
+        "result_count",
+        "read_only",
+        "is_order_action",
+        "Replay query is read-only and is_order_action=false",
+        "Replay metadata is not safe. Do not use this result for execution.",
+        "READ_ONLY_REPLAY_TIMELINE",
+    ]
+
+    for term in required_terms:
+        assert term in source
+
+    for forbidden in ["Submit Order", "Modify Order", "Cancel Order", "Exit Order", "Approve Order", "Execute Order", "Place Order", "broker.place", "kite.place_order"]:
+        assert forbidden not in source
 
 
 def test_control_tower_ui_exposes_frontend_filters_and_analytics():

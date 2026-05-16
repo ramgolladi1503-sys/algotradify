@@ -3,9 +3,11 @@ import React from 'react';
 const card = { background: '#121c34', border: '1px solid #24314f', borderRadius: 12, padding: 14, marginBottom: 14 };
 const muted = { color: '#99a7c7' };
 const flagGrid = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 8, margin: '10px 0' };
+const formGrid = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 10, margin: '10px 0' };
 const subtlePanel = { border: '1px solid #334155', borderRadius: 10, padding: 10, background: '#0b1220', margin: '10px 0' };
 const warningPanel = { border: '1px solid #7f1d1d', borderRadius: 10, padding: 10, background: '#3f1d1d', margin: '10px 0', color: '#fecaca' };
 const safePanel = { border: '1px solid #14532d', borderRadius: 10, padding: 10, background: '#052e16', margin: '10px 0' };
+const fieldStyle = { width: '100%', boxSizing: 'border-box', borderRadius: 8, border: '1px solid #334155', background: '#0b1220', color: '#e8eefc', padding: 8 };
 
 export function arr(v) { return Array.isArray(v) ? v : []; }
 export function show(v) { if (v === null || v === undefined || v === '') return '-'; if (typeof v === 'object') return JSON.stringify(v); return String(v); }
@@ -98,6 +100,19 @@ function evidenceHealthRows(evidenceHealth) {
   return Object.entries(results).map(([schemaId, result]) => ({ schemaId, result }));
 }
 
+function replayQueryMetadata(outcomeReplay) {
+  return outcomeReplay?.query || {};
+}
+
+function ReplayQueryField({ label, value, onChange, placeholder }) {
+  return <label><div style={{ ...muted, fontSize: 12 }}>{label}</div><input style={fieldStyle} placeholder={placeholder} value={value || ''} onChange={(e) => onChange(e.target.value)} /></label>;
+}
+
+function ReplayTimelineMetadata({ query }) {
+  const unsafe = query.read_only !== true || query.is_order_action !== false;
+  return <div style={unsafe ? warningPanel : safePanel}><strong>Replay query metadata</strong><div style={flagGrid}><Metric label='source_count' value={query.source_count} /><Metric label='result_count' value={query.result_count} /><Metric label='read_only' value={query.read_only} danger={query.read_only !== true} /><Metric label='is_order_action' value={query.is_order_action} danger={query.is_order_action !== false} /></div>{unsafe ? <div>Replay metadata is not safe. Do not use this result for execution.</div> : <div>Replay query is read-only and is_order_action=false.</div>}</div>;
+}
+
 export function ExecutionSafetyCard({ executionSafety }) {
   return <Card title='Execution Safety'><Metric label='execution_permitted' value={executionSafety?.execution_permitted} /><Metric label='requires_manual_approval' value={executionSafety?.requires_manual_approval} /><Metric label='readiness_records_checked' value={executionSafety?.readiness_records_checked} /><Metric label='safety_visibility_only' value={executionSafety?.safety_visibility_only} /><div>safety blockers</div><Chips items={executionSafety?.blockers} /><div>safety warnings</div><Chips items={executionSafety?.warnings} /><div>is_order_action: {show(executionSafety?.is_order_action)}</div></Card>;
 }
@@ -123,6 +138,8 @@ export function EvidenceHealthPanel({ evidenceHealth }) {
   return <Card title='Evidence Health Panel' right={<Pill value={evidenceHealth?.status || 'NO_EVIDENCE_HEALTH'} />}><p>Read-only integrity view from /evidence-health?limit=20. This panel validates evidence shape and safe flags only; it exposes no execution controls.</p><div style={flagGrid}><Metric label='evidence_health_only' value={evidenceHealth?.evidence_health_only} danger={evidenceHealth?.evidence_health_only !== true} /><Metric label='dry_run_only' value={evidenceHealth?.dry_run_only} danger={evidenceHealth?.dry_run_only !== true} /><Metric label='is_order_action' value={evidenceHealth?.is_order_action} danger={evidenceHealth?.is_order_action !== false} /><Metric label='broker_api_called' value={evidenceHealth?.broker_api_called} danger={evidenceHealth?.broker_api_called !== false} /><Metric label='real_order_id' value={evidenceHealth?.real_order_id} danger={evidenceHealth?.real_order_id !== null && evidenceHealth?.real_order_id !== undefined} /><Metric label='schema_count' value={evidenceHealth?.schema_count} /><Metric label='valid_count' value={evidenceHealth?.valid_count} /><Metric label='invalid_count' value={evidenceHealth?.invalid_count} danger={(evidenceHealth?.invalid_count || 0) > 0} /><Metric label='missing_key_count' value={evidenceHealth?.missing_key_count} danger={(evidenceHealth?.missing_key_count || 0) > 0} /><Metric label='safe_flag_violation_count' value={evidenceHealth?.safe_flag_violation_count} danger={(evidenceHealth?.safe_flag_violation_count || 0) > 0} /><Metric label='warning_count' value={evidenceHealth?.warning_count} danger={(evidenceHealth?.warning_count || 0) > 0} /></div>{!rows.length ? <div style={subtlePanel}><strong>No evidence health returned yet</strong><div style={muted}>The panel is waiting for read-only integrity results.</div></div> : null}{rows.map(({ schemaId, result }) => <details key={schemaId} style={result.valid ? safePanel : warningPanel}><summary>{schemaId}: {result.valid ? 'valid' : 'invalid'}</summary><div>missing_keys</div><Chips items={result.missing_keys} /><div>safe_flag_violations</div><Chips items={(result.safe_flag_violations || []).map((row) => `${row.key}: expected ${show(row.expected)}, actual ${show(row.actual)}`)} /><div>warnings</div><Chips items={result.warnings} /></details>)}</Card>;
 }
 
-export function OutcomeReplayDrilldownCard({ outcomeReplay, replayCandidateId, setReplayCandidateId, fetchControlTower, filteredOutcomeEvents }) {
-  return <Card title='Outcome Replay Drilldown'><input placeholder='candidate_id filter' value={replayCandidateId} onChange={(e) => setReplayCandidateId(e.target.value)} /><button onClick={() => fetchControlTower(replayCandidateId)}>Replay</button><Metric label='selected_count' value={outcomeReplay?.selected_count} /><Metric label='blocked_count' value={outcomeReplay?.blocked_count} /><Metric label='filled_count' value={outcomeReplay?.filled_count} /><Metric label='rejected_count' value={outcomeReplay?.rejected_count} /><Metric label='best_quality_score' value={outcomeReplay?.best_quality_score} /><div>outcome blockers</div><Chips items={outcomeReplay?.blockers} /><Table rows={filteredOutcomeEvents} empty='no outcome replay events yet' /></Card>;
+export function OutcomeReplayDrilldownCard({ outcomeReplay, replayQuery, updateReplayQuery, fetchControlTower, resetReplayQuery, filteredOutcomeEvents }) {
+  const q = replayQuery || {};
+  const metadata = replayQueryMetadata(outcomeReplay);
+  return <Card title='Replay Timeline UI' right={<Pill value='READ_ONLY_REPLAY_TIMELINE' />}><p>Read-only replay timeline from /outcome-replay. Filters are query-only and expose no broker calls, no real orders, no submit/modify/cancel/exit controls, and no frontend append mode.</p><div style={formGrid}><ReplayQueryField label='candidate_id filter' placeholder='candidate id' value={q.candidateId} onChange={(v) => updateReplayQuery({ candidateId: v })} /><ReplayQueryField label='status filter' placeholder='FILLED or FILLED,REJECTED' value={q.status} onChange={(v) => updateReplayQuery({ status: v })} /><ReplayQueryField label='strategy filter' placeholder='strategy id/family' value={q.strategy} onChange={(v) => updateReplayQuery({ strategy: v })} /><ReplayQueryField label='ts_from_epoch time range filter' placeholder='epoch start' value={q.tsFromEpoch} onChange={(v) => updateReplayQuery({ tsFromEpoch: v })} /><ReplayQueryField label='ts_to_epoch time range filter' placeholder='epoch end' value={q.tsToEpoch} onChange={(v) => updateReplayQuery({ tsToEpoch: v })} /></div><button onClick={() => fetchControlTower(q)}>Apply replay query filters</button><button onClick={resetReplayQuery}>Reset replay query filters</button><ReplayTimelineMetadata query={metadata} /><div style={flagGrid}><Metric label='selected_count' value={outcomeReplay?.selected_count} /><Metric label='blocked_count' value={outcomeReplay?.blocked_count} /><Metric label='filled_count' value={outcomeReplay?.filled_count} /><Metric label='rejected_count' value={outcomeReplay?.rejected_count} /><Metric label='best_quality_score' value={outcomeReplay?.best_quality_score} /></div><div>outcome blockers</div><Chips items={outcomeReplay?.blockers} /><h4>Replay timeline events</h4><Table rows={filteredOutcomeEvents} empty='no outcome replay events yet' /></Card>;
 }
