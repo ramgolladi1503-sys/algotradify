@@ -1,5 +1,18 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import {
+  BarChart,
+  Card,
+  DryRunEvidenceExportPreviewCard,
+  DryRunExecutionAdapterCard,
+  ExecutionSafetyCard,
+  Metric,
+  OutcomeReplayDrilldownCard,
+  Pill,
+  Table,
+  arr,
+  show,
+} from './controlTowerCards.jsx';
 
 const ENV = import.meta.env || {};
 const API_BASE = ENV.VITE_API_BASE_URL || ENV.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
@@ -14,10 +27,8 @@ const OPERATOR_VIEWS = {
   lifecycle: { label: 'Lifecycle focus', filters: DEFAULT_FILTERS },
 };
 const DEFAULT_PREFS = { filters: DEFAULT_FILTERS, replayCandidateId: '', operatorView: 'default' };
-const card = { background: '#121c34', border: '1px solid #24314f', borderRadius: 12, padding: 14, marginBottom: 14 };
 const muted = { color: '#99a7c7' };
-function arr(v) { return Array.isArray(v) ? v : []; }
-function show(v) { if (v === null || v === undefined || v === '') return '-'; if (typeof v === 'object') return JSON.stringify(v); return String(v); }
+
 function loadPersistedPreferences() { if (typeof window === 'undefined') return DEFAULT_PREFS; try { const p = JSON.parse(window.localStorage.getItem(PERSISTED_PREFS_KEY) || '{}'); return { filters: { ...DEFAULT_FILTERS, ...(p.filters || {}) }, replayCandidateId: String(p.replayCandidateId || ''), operatorView: p.operatorView || 'default' }; } catch { return DEFAULT_PREFS; } }
 function savePersistedPreferences(p) { if (typeof window !== 'undefined') window.localStorage.setItem(PERSISTED_PREFS_KEY, JSON.stringify(p)); }
 function clearPersistedPreferences() { if (typeof window !== 'undefined') window.localStorage.removeItem(PERSISTED_PREFS_KEY); }
@@ -27,17 +38,6 @@ function isSelected(row) { return statusText(row).includes('SELECT') || row?.sel
 function isAllowed(row) { return row?.execution_allowed === true || row?.execution_permitted === true || ['ALLOWED', 'QUALIFIED', 'PERMITTED'].includes(statusText(row)); }
 function applyFilters(rows, filters) { const q = filters.query.trim().toLowerCase(); return arr(rows).filter((r) => (!q || JSON.stringify(r).toLowerCase().includes(q)) && (filters.status !== 'blocked' || isBlocked(r)) && (filters.status !== 'selected' || isSelected(r)) && (filters.status !== 'allowed' || isAllowed(r)) && (filters.status !== 'rejected' || statusText(r).includes('REJECT'))); }
 function buttonStyle(active = false) { return { background: active ? '#2563eb' : '#334155', color: 'white', border: 0, borderRadius: 8, padding: '9px 12px', fontWeight: 800 }; }
-function Pill({ value }) { return <span style={{ background: String(value).includes('BLOCK') || String(value).includes('UNSAFE') ? '#421c24' : '#123c2c', borderRadius: 999, padding: '3px 8px', fontWeight: 800 }}>{show(value)}</span>; }
-function Card({ title, children, right }) { return <section style={card}><div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}><h3 style={{ margin: 0 }}>{title}</h3>{right}</div>{children}</section>; }
-function Metric({ label, value, danger = false }) { return <div style={{ minWidth: 130, margin: 6, color: danger ? '#fecaca' : 'inherit' }}><div style={{ ...muted, fontSize: 12 }}>{label}</div><strong>{show(value)}</strong></div>; }
-function Chips({ items }) { const values = arr(items); return values.length ? <div>{values.map((x, i) => <span key={i} style={{ border: '1px solid #334155', borderRadius: 999, padding: '3px 8px', marginRight: 6 }}>{show(x)}</span>)}</div> : <span style={muted}>none</span>; }
-function JsonBlock({ title, value }) { return <details style={{ border: '1px solid #334155', borderRadius: 10, padding: 10, background: '#0b1220' }}><summary>{title}</summary><pre>{JSON.stringify(value || {}, null, 2)}</pre></details>; }
-function CompactSnapshot(props) { return <JsonBlock {...props} />; }
-function Table({ rows, empty }) { return arr(rows).length ? <pre>{JSON.stringify(rows.slice(0, 10), null, 2)}</pre> : <div style={muted}>{empty}</div>; }
-function BarChart({ title, data = [] }) { return <Card title={title}>{data.length ? data.map((r) => <div key={r.label}>{r.label}: {r.value}</div>) : <div style={muted}>no analytics yet</div>}</Card>; }
-function dryRunExplanation(dryRun) { if (!dryRun) return 'Dry-run evidence unavailable.'; if (dryRun.created) return 'Dry-run intent is created from the selected candidate, execution safety decision, approval evidence, and readiness snapshot. This is still local simulation evidence only.'; const blockers = arr(dryRun.blockers); if (blockers.length) return `Dry-run is blocked because: ${blockers.join(', ')}. Resolve the upstream evidence before moving forward.`; return 'Dry-run is not created yet. Check top executable, safety, approval, and readiness evidence.'; }
-function exportBundles(v) { if (!v) return []; if (Array.isArray(v)) return v; if (Array.isArray(v.bundles)) return v.bundles; if (Array.isArray(v.items)) return v.items; return typeof v === 'object' ? [v] : []; }
-function exportFlagWarnings(bundle) { const w = []; if (bundle.dry_run_only !== true) w.push('dry_run_only is not true'); if (bundle.is_order_action !== false) w.push('is_order_action is not false'); if (bundle.broker_api_called !== false) w.push('broker_api_called is not false'); if (bundle.real_order_id !== null && bundle.real_order_id !== undefined) w.push('real_order_id is not null'); if (bundle.export_preview_only !== true) w.push('export_preview_only is not true'); return w; }
 
 function App() {
   const initialPrefs = loadPersistedPreferences();
@@ -55,14 +55,6 @@ function App() {
   function applyOperatorView(k) { setOperatorView(k); setFilters({ ...(OPERATOR_VIEWS[k] || OPERATOR_VIEWS.default).filters }); }
 
   const selected = state.topExecutable?.selected;
-  const dryRun = state.dryRunExecution || {};
-  const dryRunIntent = dryRun.intent || {};
-  const selectedCandidateSnapshot = dryRunIntent.top_executable_snapshot || dryRun.top_executable_snapshot || state.topExecutable || {};
-  const executionSafetySnapshot = dryRunIntent.execution_safety_snapshot || dryRun.execution_safety_snapshot || state.executionSafety || {};
-  const approvalSnapshot = dryRunIntent.approval_snapshot || dryRun.approval_snapshot || {};
-  const readinessSnapshot = dryRunIntent.readiness_snapshot || dryRun.readiness_snapshot || {};
-  const outcomeEvent = dryRun.outcome_event || {};
-  const exportPreviewBundles = exportBundles(state.dryRunExport);
   const filtered = useMemo(() => ({ opportunities: applyFilters(state.opportunities, filters), candidateTruth: applyFilters(state.candidateTruth, filters), executionReadiness: applyFilters(state.executionReadiness, filters), tradeQuality: applyFilters(state.tradeQuality, filters), topRejected: applyFilters(state.topExecutable?.rejected || [], filters), outcomeEvents: applyFilters(arr(state.outcomeReplay?.events), filters) }), [state, filters]);
   const analytics = { readinessBreakdown: [], qualityDistribution: [], outcomeCounts: [], truthBreakdown: [] };
 
@@ -70,11 +62,11 @@ function App() {
     <Card title='Operator Views'>{Object.entries(OPERATOR_VIEWS).map(([k, v]) => <button key={k} onClick={() => applyOperatorView(k)} style={buttonStyle(operatorView === k)}>{v.label}</button>)} <button onClick={resetToDefaultView}>Reset to default view</button><span> Persisted UI Preferences</span></Card>
     <Card title='Frontend Filters'><span>candidate search/filter</span><input value={filters.query} onChange={(e) => setFilters((p) => ({ ...p, query: e.target.value }))} /><span>status filter</span><select value={filters.status} onChange={(e) => setFilters((p) => ({ ...p, status: e.target.value }))}><option value='blocked'>blocked-only view</option><option value='selected'>selected-only view</option><option value='allowed'>allowed-only view</option><option value='rejected'>rejected-only view</option></select><span>quality score threshold filter</span><button onClick={() => setFilters(DEFAULT_FILTERS)}>Reset filters</button></Card>
     <Card title='Runtime'><Metric label='health' value={state.health?.status} /><Metric label='preflight' value={state.preflight?.status} /></Card><Card title='Cycle Snapshot'><Metric label='stage' value={state.snapshot?.cycle_stage} /></Card><Card title='Tradability Summary'><Metric label='real candidates' value={filtered.candidateTruth.length} /></Card><Card title='Top Executable' right={<Pill value={state.topExecutable?.status} />}><Metric label='selected candidate' value={selected?.candidate_id} /><Metric label='quality_score' value={selected?.quality_score} /><div>is_order: {show(state.topExecutable?.is_order)}</div></Card>
-    <Card title='Execution Safety'><Metric label='execution_permitted' value={state.executionSafety?.execution_permitted} /><Metric label='requires_manual_approval' value={state.executionSafety?.requires_manual_approval} /><Metric label='readiness_records_checked' value={state.executionSafety?.readiness_records_checked} /><Metric label='safety_visibility_only' value={state.executionSafety?.safety_visibility_only} /><div>safety blockers</div><Chips items={state.executionSafety?.blockers} /><div>safety warnings</div><Chips items={state.executionSafety?.warnings} /><div>is_order_action: {show(state.executionSafety?.is_order_action)}</div></Card>
-    <Card title='Dry-Run Execution Adapter'><Metric label='dry_run_only' value={dryRun.dry_run_only} /><Metric label='is_order_action' value={dryRun.is_order_action} /><Metric label='broker_api_called' value={dryRun.broker_api_called} /><Metric label='dry_run_order_id' value={dryRunIntent.dry_run_order_id} /><Metric label='real_order_id' value={dryRunIntent.real_order_id} /><div>dry-run blockers</div><Chips items={dryRun.blockers} /><div>dry-run warnings</div><Chips items={dryRun.warnings} /><strong>Dry-run operator explanation</strong><p>{dryRunExplanation(dryRun)}</p><JsonBlock title='selected candidate snapshot' value={selectedCandidateSnapshot} /><JsonBlock title='execution safety snapshot' value={executionSafetySnapshot} /><JsonBlock title='approval snapshot' value={approvalSnapshot} /><JsonBlock title='readiness snapshot' value={readinessSnapshot} /><JsonBlock title='outcome event' value={outcomeEvent} /><div>Preview Dry Run uses /dry-run-execution?limit=20 only. Control Tower never calls append from the frontend.</div></Card>
-    <Card title='Dry-Run Evidence Export Preview' right={<Pill value={exportPreviewBundles[0]?.status || 'NO_EXPORT_BUNDLE'} />}><p>Read-only preview from /dry-run-execution/export?limit=20. No execution controls, no broker calls, and no server-side file append is requested.</p>{exportPreviewBundles.map((bundle, i) => { const unsafe = exportFlagWarnings(bundle); return <div key={i}><Pill value={unsafe.length ? 'UNSAFE_FLAG_WARNING' : bundle.status} /><Metric label='bundle_type' value={bundle.bundle_type} /><Metric label='status' value={bundle.status} /><Metric label='candidate_id' value={bundle.candidate_id} /><Metric label='dry_run_order_id' value={bundle.dry_run_order_id} /><Metric label='dry_run_only' value={bundle.dry_run_only} danger={bundle.dry_run_only !== true} /><Metric label='is_order_action' value={bundle.is_order_action} danger={bundle.is_order_action !== false} /><Metric label='broker_api_called' value={bundle.broker_api_called} danger={bundle.broker_api_called !== false} /><Metric label='real_order_id' value={bundle.real_order_id} danger={bundle.real_order_id !== null && bundle.real_order_id !== undefined} /><Metric label='export_preview_only' value={bundle.export_preview_only} danger={bundle.export_preview_only !== true} /><div>blockers</div><Chips items={bundle.blockers} /><div>warnings</div><Chips items={bundle.warnings} /><CompactSnapshot title='selected snapshot' value={bundle.selected_candidate_snapshot} /><CompactSnapshot title='safety snapshot' value={bundle.execution_safety_snapshot} /><CompactSnapshot title='approval snapshot' value={bundle.approval_snapshot} /><CompactSnapshot title='readiness snapshot' value={bundle.readiness_snapshot} /></div>; })}</Card>
+    <ExecutionSafetyCard executionSafety={state.executionSafety} />
+    <DryRunExecutionAdapterCard dryRunExecution={state.dryRunExecution} topExecutable={state.topExecutable} executionSafety={state.executionSafety} />
+    <DryRunEvidenceExportPreviewCard dryRunExport={state.dryRunExport} />
     <BarChart title='Readiness Breakdown Chart' data={analytics.readinessBreakdown} /><BarChart title='Outcome Counts Chart' data={analytics.outcomeCounts} /><BarChart title='Quality Score Distribution Chart' data={analytics.qualityDistribution} /><BarChart title='Candidate Truth Breakdown Chart' data={analytics.truthBreakdown} />
-    <Card title='Outcome Replay Drilldown'><input placeholder='candidate_id filter' value={replayCandidateId} onChange={(e) => setReplayCandidateId(e.target.value)} /><button onClick={() => fetchControlTower(replayCandidateId)}>Replay</button><Metric label='selected_count' value={state.outcomeReplay?.selected_count} /><Metric label='blocked_count' value={state.outcomeReplay?.blocked_count} /><Metric label='filled_count' value={state.outcomeReplay?.filled_count} /><Metric label='rejected_count' value={state.outcomeReplay?.rejected_count} /><Metric label='best_quality_score' value={state.outcomeReplay?.best_quality_score} /><div>outcome blockers</div><Chips items={state.outcomeReplay?.blockers} /><Table rows={filtered.outcomeEvents} empty='no outcome replay events yet' /></Card>
+    <OutcomeReplayDrilldownCard outcomeReplay={state.outcomeReplay} replayCandidateId={replayCandidateId} setReplayCandidateId={setReplayCandidateId} fetchControlTower={fetchControlTower} filteredOutcomeEvents={filtered.outcomeEvents} />
     <Card title='Execution Readiness'><Table rows={filtered.executionReadiness} empty='no readiness records match filters' /></Card><Card title='Trade Quality'><Table rows={filtered.tradeQuality} empty='no quality records match filters' /></Card><Card title='Top Executable Rejections'><div>selector_rejection_reasons</div><Table rows={filtered.topRejected} empty='no selector rejections match filters' /></Card><Card title='Candidate Truth'><Table rows={filtered.candidateTruth} empty='no candidate truth records match filters' /></Card><Card title='Opportunity Layer'><Table rows={applyFilters(state.opportunityLayer?.ranked || [], filters)} empty='no ranked opportunity candidates match filters' /></Card><Card title='Fill Lifecycle'><div>is_order_submission: {show(state.fillLifecycle?.is_order_submission)}</div><Table rows={arr(state.fillLifecycle?.events)} empty='no fill lifecycle evidence matches filters' /></Card><Card title='Raw Runtime Opportunities'><Table rows={filtered.opportunities} empty='no runtime opportunities match filters' /></Card>
     <Card title='Live Event Feed'>{events.length ? events.map((e, i) => <pre key={i}>{JSON.stringify(e.payload)}</pre>) : <div>no websocket events yet</div>}</Card>
   </div>;
