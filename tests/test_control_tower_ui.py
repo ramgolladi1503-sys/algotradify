@@ -196,6 +196,34 @@ def test_control_tower_ui_exposes_export_preview_without_order_controls():
     assert "append=true" not in source
 
 
+def test_control_tower_export_preview_ux_hardening():
+    source = _frontend_source()
+
+    required_terms = [
+        "exportPreviewStatus",
+        "FlagCheckMetric",
+        "ExportBundleState",
+        "ExportFlagChecks",
+        "Expected safe flags",
+        "safe expected flag",
+        "unsafe flag mismatch",
+        "Why this bundle is safe",
+        "No export bundle returned yet",
+        "Export bundle blocked",
+        "Snapshot drilldowns",
+        "SAFE_EXPORT_FLAGS",
+        "EXPORT_BUNDLE_BLOCKED",
+        "NO_EXPORT_BUNDLE",
+        "This card stays read-only and exposes no order controls",
+        "This bundle is safe because dry_run_only is true",
+    ]
+
+    for term in required_terms:
+        assert term in source
+
+    assert "append=true" not in source
+
+
 def test_control_tower_ui_exposes_dry_run_evidence_drilldown_and_operator_explanation():
     source = _frontend_source()
 
