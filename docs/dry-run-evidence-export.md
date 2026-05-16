@@ -4,6 +4,8 @@ PR 31 adds a read-only dry-run evidence bundle endpoint.
 
 PR 32 adds a read-only Control Tower preview for that bundle.
 
+PR 36 adds explicit schema-version and compatibility guards for the export bundle contract.
+
 ## Endpoint
 
 ```text
@@ -42,6 +44,58 @@ The response includes:
 - `lifecycle_event`
 - `outcome_event`
 - `export_preview_only`
+
+## Schema versioning and compatibility
+
+Current schema version:
+
+```text
+1.0
+```
+
+Current bundle type:
+
+```text
+DRY_RUN_EVIDENCE_BUNDLE
+```
+
+The route exposes these values through code-level constants:
+
+- `DRY_RUN_EXPORT_BUNDLE_TYPE`
+- `DRY_RUN_EXPORT_SCHEMA_VERSION`
+- `DRY_RUN_EXPORT_COMPATIBLE_SCHEMA_VERSIONS`
+- `DRY_RUN_EXPORT_REQUIRED_KEYS`
+- `DRY_RUN_EXPORT_SAFE_FLAGS`
+
+The compatibility contract is available through:
+
+```text
+dry_run_export_schema_contract()
+```
+
+Compatible changes under schema `1.0`:
+
+- adding optional nested fields inside existing snapshot objects
+- adding new warning or blocker values
+- adding non-breaking values inside `dry_run_intent`, `lifecycle_event`, or `outcome_event`
+- improving descriptions, docs, or UI rendering without changing top-level keys
+
+Breaking changes require a new schema version:
+
+- removing or renaming any top-level key
+- changing any safe flag semantics
+- changing `bundle_type`
+- changing `status` meanings for ready or blocked bundles
+- changing snapshot field names at the top level
+- allowing export preview to append files or perform order actions
+
+The current compatible schema versions list is:
+
+```text
+1.0
+```
+
+Until a deliberate migration exists, tests must reject accidental schema drift.
 
 ## Control Tower Export Preview
 
@@ -118,10 +172,14 @@ The endpoint always returns:
 Tests verify:
 
 - bundle shape
+- schema version remains `1.0`
+- bundle type remains `DRY_RUN_EVIDENCE_BUNDLE`
 - ready bundle for valid evidence
 - blocked bundle for missing evidence
 - direct app route mount
 - no JSONL files are written by export preview
+- schema contract constants match actual bundle output
+- safe flags remain enforced by the route and bundle builder
 - Control Tower fetches `/dry-run-execution/export?limit=20`
 - Control Tower does not request `append=true`
 - Control Tower exposes no submit/modify/cancel/exit execution controls for the export preview

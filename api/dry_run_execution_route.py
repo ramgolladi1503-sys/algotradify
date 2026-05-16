@@ -8,20 +8,66 @@ from fastapi import FastAPI, Query, Request
 from dry_run_execution import append_dry_run_execution, build_dry_run_execution
 
 
+DRY_RUN_EXPORT_BUNDLE_TYPE = "DRY_RUN_EVIDENCE_BUNDLE"
+DRY_RUN_EXPORT_SCHEMA_VERSION = "1.0"
+DRY_RUN_EXPORT_COMPATIBLE_SCHEMA_VERSIONS = (DRY_RUN_EXPORT_SCHEMA_VERSION,)
+DRY_RUN_EXPORT_REQUIRED_KEYS = frozenset(
+    {
+        "bundle_type",
+        "schema_version",
+        "created",
+        "candidate_id",
+        "dry_run_order_id",
+        "dry_run_only",
+        "is_order_action",
+        "broker_api_called",
+        "real_order_id",
+        "status",
+        "blockers",
+        "warnings",
+        "selected_candidate_snapshot",
+        "execution_safety_snapshot",
+        "approval_snapshot",
+        "readiness_snapshot",
+        "dry_run_intent",
+        "lifecycle_event",
+        "outcome_event",
+        "export_preview_only",
+    }
+)
+DRY_RUN_EXPORT_SAFE_FLAGS = {
+    "dry_run_only": True,
+    "is_order_action": False,
+    "broker_api_called": False,
+    "real_order_id": None,
+    "export_preview_only": True,
+}
+
+
+def dry_run_export_schema_contract() -> dict[str, Any]:
+    return {
+        "bundle_type": DRY_RUN_EXPORT_BUNDLE_TYPE,
+        "schema_version": DRY_RUN_EXPORT_SCHEMA_VERSION,
+        "compatible_schema_versions": list(DRY_RUN_EXPORT_COMPATIBLE_SCHEMA_VERSIONS),
+        "required_keys": sorted(DRY_RUN_EXPORT_REQUIRED_KEYS),
+        "safe_flags": dict(DRY_RUN_EXPORT_SAFE_FLAGS),
+    }
+
+
 def build_dry_run_export_bundle(payload: dict[str, Any]) -> dict[str, Any]:
     intent = payload.get("intent") if isinstance(payload.get("intent"), dict) else {}
     lifecycle = payload.get("lifecycle_event") if isinstance(payload.get("lifecycle_event"), dict) else {}
     outcome = payload.get("outcome_event") if isinstance(payload.get("outcome_event"), dict) else {}
     bundle = {
-        "bundle_type": "DRY_RUN_EVIDENCE_BUNDLE",
-        "schema_version": "1.0",
+        "bundle_type": DRY_RUN_EXPORT_BUNDLE_TYPE,
+        "schema_version": DRY_RUN_EXPORT_SCHEMA_VERSION,
         "created": payload.get("created") is True,
         "candidate_id": payload.get("candidate_id") or intent.get("candidate_id"),
         "dry_run_order_id": intent.get("dry_run_order_id"),
-        "dry_run_only": True,
-        "is_order_action": False,
-        "broker_api_called": False,
-        "real_order_id": None,
+        "dry_run_only": DRY_RUN_EXPORT_SAFE_FLAGS["dry_run_only"],
+        "is_order_action": DRY_RUN_EXPORT_SAFE_FLAGS["is_order_action"],
+        "broker_api_called": DRY_RUN_EXPORT_SAFE_FLAGS["broker_api_called"],
+        "real_order_id": DRY_RUN_EXPORT_SAFE_FLAGS["real_order_id"],
         "status": "BUNDLE_READY" if payload.get("created") is True else "BUNDLE_BLOCKED",
         "blockers": list(payload.get("blockers") or []),
         "warnings": list(payload.get("warnings") or []),
@@ -32,7 +78,7 @@ def build_dry_run_export_bundle(payload: dict[str, Any]) -> dict[str, Any]:
         "dry_run_intent": intent,
         "lifecycle_event": lifecycle,
         "outcome_event": outcome,
-        "export_preview_only": True,
+        "export_preview_only": DRY_RUN_EXPORT_SAFE_FLAGS["export_preview_only"],
     }
     return bundle
 
