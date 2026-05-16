@@ -29,6 +29,7 @@ jobs:
           test -f docs/dry-run-control-tower-visibility.md
           test -f docs/replay-query-api.md
           test -f docs/replay-timeline-ui.md
+          test -f docs/replay-result-drilldown-ux.md
           test -f docs/ci-test-suite-map.md
           test -f .github/workflows/core-unit-ci.yml
           test -f .github/workflows/lifecycle-safety-ci.yml
