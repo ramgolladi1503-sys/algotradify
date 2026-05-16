@@ -1,0 +1,83 @@
+{
+  "fixture_id": "multi_candidate_mixed_status",
+  "description": "Multiple candidates with filled, rejected, blocked, and nested strategy-family evidence.",
+  "outcome_replay": [
+    {
+      "candidate_id": "c1",
+      "status": "SELECTED",
+      "strategy": "orb_retest",
+      "ts_epoch": 10,
+      "quality_score": 80
+    },
+    {
+      "candidate_id": "c1",
+      "status": "FILLED",
+      "strategy": "orb_retest",
+      "ts_epoch": 20,
+      "quality_score": 91
+    },
+    {
+      "candidate_id": "c2",
+      "status": "ORDER_REJECTED",
+      "strategy": "vwap_pullback",
+      "ts_epoch": 30,
+      "quality_score": 55
+    },
+    {
+      "candidate_id": "c3",
+      "status": "NO_ELIGIBLE_CANDIDATES",
+      "evidence": {"strategy_family": "zero_hero"},
+      "ts_epoch": 40
+    },
+    {
+      "trade_id": "t4",
+      "event": "PARTIALLY_FILLED",
+      "selected": {"strategy_family": "breakout_scalp"},
+      "ts_epoch": 50,
+      "score": 67
+    }
+  ],
+  "expected": {
+    "source_count": 5,
+    "candidate_count": 4,
+    "status_counts": {
+      "SELECTED": 1,
+      "FILLED": 1,
+      "REJECTED": 1,
+      "BLOCKED": 1,
+      "PARTIALLY_FILLED": 1
+    },
+    "strategy_counts": {
+      "orb_retest": 2,
+      "vwap_pullback": 1,
+      "zero_hero": 1,
+      "breakout_scalp": 1
+    },
+    "query_cases": [
+      {
+        "name": "multi_status",
+        "filters": {"status": "filled,rejected"},
+        "result_count": 2,
+        "candidate_ids": ["c1", "c2"]
+      },
+      {
+        "name": "nested_strategy_family",
+        "filters": {"strategy": "zero_hero"},
+        "result_count": 1,
+        "candidate_ids": ["c3"]
+      },
+      {
+        "name": "trade_id_candidate_fallback",
+        "filters": {"candidate_id": "t4"},
+        "result_count": 1,
+        "candidate_ids": ["t4"]
+      },
+      {
+        "name": "no_match_empty_result",
+        "filters": {"status": "filled", "strategy": "zero_hero"},
+        "result_count": 0,
+        "candidate_ids": []
+      }
+    ]
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "fixture_id": "empty_replay",
+  "description": "No replay events returned from the evidence layer.",
+  "outcome_replay": [],
+  "expected": {
+    "source_count": 0,
+    "candidate_count": 0,
+    "status_counts": {},
+    "strategy_counts": {},
+    "query_cases": [
+      {
+        "name": "all_events",
+        "filters": {},
+        "result_count": 0,
+        "candidate_ids": []
+      }
+    ]
+  }
+}
