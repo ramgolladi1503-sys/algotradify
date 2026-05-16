@@ -3,11 +3,43 @@ from __future__ import annotations
 from pathlib import Path
 
 
-FRONTEND_MAIN = Path(__file__).resolve().parents[1] / "frontend" / "main.jsx"
+FRONTEND_DIR = Path(__file__).resolve().parents[1] / "frontend"
+FRONTEND_MAIN = FRONTEND_DIR / "main.jsx"
+CONTROL_TOWER_CARDS = FRONTEND_DIR / "controlTowerCards.jsx"
 
 
 def _frontend_source() -> str:
+    return "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in [FRONTEND_MAIN, CONTROL_TOWER_CARDS]
+    )
+
+
+def _frontend_main_source() -> str:
     return FRONTEND_MAIN.read_text(encoding="utf-8")
+
+
+def _cards_source() -> str:
+    return CONTROL_TOWER_CARDS.read_text(encoding="utf-8")
+
+
+def test_control_tower_ui_component_split_exists():
+    main_source = _frontend_main_source()
+    cards_source = _cards_source()
+
+    required_component_exports = [
+        "ExecutionSafetyCard",
+        "DryRunExecutionAdapterCard",
+        "DryRunEvidenceExportPreviewCard",
+        "OutcomeReplayDrilldownCard",
+        "BarChart",
+        "Table",
+    ]
+
+    assert "from './controlTowerCards.jsx'" in main_source
+    for component in required_component_exports:
+        assert component in main_source
+        assert f"function {component}" in cards_source or f"export function {component}" in cards_source
 
 
 def test_control_tower_ui_calls_all_tradability_endpoints():
