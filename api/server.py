@@ -30,7 +30,7 @@ from execution_readiness import build_execution_readiness
 from execution_safety import ExecutionMode, ExecutionSafetyPolicy, evaluate_execution_safety
 from fill_lifecycle import normalize_fill_lifecycle
 from opportunity_layer import run_opportunity_pipeline
-from outcome_replay import normalize_outcome_replay
+from outcome_replay import filter_outcome_replay_records, normalize_outcome_replay, replay_query_metadata
 from runtime_contract import (
     candidate_runtime_roots,
     is_tradebot_compatible_root,
@@ -296,8 +296,33 @@ def _outcome_replay_records() -> list[dict[str, Any]]:
     return _runtime_jsonl_records_from_files(root, ["outcome_replay.jsonl", "outcomes.jsonl", "trade_outcomes.jsonl", "selection_outcomes.jsonl"], limit=1000)
 
 
-def _outcome_replay_payload(candidate_id: str | None = None) -> dict:
-    return normalize_outcome_replay(_outcome_replay_records(), candidate_id=candidate_id).to_dict()
+def _outcome_replay_payload(
+    candidate_id: str | None = None,
+    status: str | None = None,
+    strategy: str | None = None,
+    ts_from_epoch: float | None = None,
+    ts_to_epoch: float | None = None,
+) -> dict:
+    records = _outcome_replay_records()
+    filtered = filter_outcome_replay_records(
+        records,
+        candidate_id=candidate_id,
+        status=status,
+        strategy=strategy,
+        ts_from_epoch=ts_from_epoch,
+        ts_to_epoch=ts_to_epoch,
+    )
+    payload = normalize_outcome_replay(filtered, candidate_id=candidate_id).to_dict()
+    payload["query"] = replay_query_metadata(
+        candidate_id=candidate_id,
+        status=status,
+        strategy=strategy,
+        ts_from_epoch=ts_from_epoch,
+        ts_to_epoch=ts_to_epoch,
+        source_count=len(records),
+        result_count=len(filtered),
+    )
+    return payload
 
 
 def _approval_audit_records() -> list[dict[str, Any]]:
@@ -613,8 +638,20 @@ def fill_lifecycle(candidate_id: str | None = Query(default=None)):
 
 
 @app.get("/outcome-replay")
-def outcome_replay(candidate_id: str | None = Query(default=None)):
-    return _outcome_replay_payload(candidate_id=candidate_id)
+def outcome_replay(
+    candidate_id: str | None = Query(default=None),
+    status: str | None = Query(default=None),
+    strategy: str | None = Query(default=None),
+    ts_from_epoch: float | None = Query(default=None),
+    ts_to_epoch: float | None = Query(default=None),
+):
+    return _outcome_replay_payload(
+        candidate_id=candidate_id,
+        status=status,
+        strategy=strategy,
+        ts_from_epoch=ts_from_epoch,
+        ts_to_epoch=ts_to_epoch,
+    )
 
 
 @app.get("/strategies", response_model=list[StrategyInfoResponse])
