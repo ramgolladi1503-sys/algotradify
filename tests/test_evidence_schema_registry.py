@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import pytest
 
 from api.dry_run_execution_route import dry_run_export_schema_contract
@@ -12,6 +15,8 @@ from api.evidence_schema_registry import (
 )
 
 
+SNAPSHOT_PATH = Path(__file__).resolve().parent / "fixtures" / "evidence_schema_registry_snapshot.json"
+
 EXPECTED_SCHEMA_IDS = {
     "dry_run_export_bundle",
     "dry_run_execution_payload",
@@ -21,6 +26,10 @@ EXPECTED_SCHEMA_IDS = {
     "lifecycle_event",
     "outcome_replay_event",
 }
+
+
+def _registry_snapshot_fixture() -> dict:
+    return json.loads(SNAPSHOT_PATH.read_text(encoding="utf-8"))
 
 
 def test_evidence_schema_registry_exposes_expected_schema_ids():
@@ -41,6 +50,18 @@ def test_evidence_schema_registry_contracts_are_stable_and_discoverable():
         assert contract["required_keys"]
         assert isinstance(contract["safe_flags"], dict)
         assert contract["description"]
+
+
+def test_evidence_schema_registry_snapshot_matches_fixture():
+    assert evidence_schema_registry_snapshot() == _registry_snapshot_fixture()
+
+
+def test_evidence_schema_registry_snapshot_order_is_deterministic():
+    snapshot = evidence_schema_registry_snapshot()
+
+    assert list(snapshot) == sorted(snapshot)
+    for contract in snapshot.values():
+        assert contract["required_keys"] == sorted(contract["required_keys"])
 
 
 def test_dry_run_export_bundle_registry_matches_route_contract():
