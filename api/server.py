@@ -687,3 +687,17 @@ async def ws(ws: WebSocket):
             except Exception:
                 pass
             pubsub.close()
+
+
+from api.dry_run_execution_route import install_dry_run_execution_route
+
+
+install_dry_run_execution_route(
+    app,
+    runtime_root_provider=lambda: _runtime_root(),
+    top_executable_provider=lambda limit, min_quality_score: _top_executable_payload(limit, min_quality_score),
+    readiness_provider=lambda limit: _execution_readiness_payload(limit),
+    safety_provider=lambda request, limit, min_quality_score: _execution_safety_payload(request, limit, min_quality_score),
+    approval_provider=lambda candidate_id, now_epoch: _approval_audit_payload(candidate_id=candidate_id, now_epoch=now_epoch),
+    readiness_matcher=_matching_readiness,
+)

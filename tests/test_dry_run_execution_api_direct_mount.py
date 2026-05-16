@@ -217,8 +217,33 @@ def test_dry_run_execution_export_exists_on_direct_app_and_writes_nothing(tmp_pa
     assert not (runtime_root / "logs" / "outcome_replay.jsonl").exists()
 
 
+def test_evidence_health_exists_on_direct_app_and_writes_nothing(tmp_path, monkeypatch):
+    import api.server as server
+
+    runtime_root = _seed_runtime(tmp_path)
+    monkeypatch.setattr(server, "_runtime_root", lambda: runtime_root)
+    client = TestClient(app)
+
+    response = client.get(
+        "/evidence-health?limit=20&now_epoch=150&dry_run_required=false&approval_id=approval-1234&operator_id=op1&broker_confirmation_id=b1&warnings_acknowledged=true"
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["evidence_health_only"] is True
+    assert payload["dry_run_only"] is True
+    assert payload["is_order_action"] is False
+    assert payload["broker_api_called"] is False
+    assert payload["real_order_id"] is None
+    assert "dry_run_export_bundle" in payload["results"]
+    assert not (runtime_root / "logs" / "dry_run_order_intents.jsonl").exists()
+    assert not (runtime_root / "logs" / "dry_run_lifecycle.jsonl").exists()
+    assert not (runtime_root / "logs" / "outcome_replay.jsonl").exists()
+
+
 def test_dry_run_route_is_not_registered_twice():
     route_paths = [getattr(route, "path", None) for route in app.routes]
 
     assert route_paths.count("/dry-run-execution") == 1
     assert route_paths.count("/dry-run-execution/export") == 1
+    assert route_paths.count("/evidence-health") == 1
