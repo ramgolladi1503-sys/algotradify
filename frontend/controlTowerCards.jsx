@@ -110,7 +110,67 @@ function ReplayQueryField({ label, value, onChange, placeholder }) {
 
 function ReplayTimelineMetadata({ query }) {
   const unsafe = query.read_only !== true || query.is_order_action !== false;
-  return <div style={unsafe ? warningPanel : safePanel}><strong>Replay query metadata</strong><div style={flagGrid}><Metric label='source_count' value={query.source_count} /><Metric label='result_count' value={query.result_count} /><Metric label='read_only' value={query.read_only} danger={query.read_only !== true} /><Metric label='is_order_action' value={query.is_order_action} danger={query.is_order_action !== false} /></div>{unsafe ? <div>Replay metadata is not safe. Do not use this result for execution.</div> : <div>Replay query is read-only and is_order_action=false.</div>}</div>;
+  return <div style={unsafe ? warningPanel : safePanel}><strong>Replay query metadata</strong><div style={flagGrid}><Metric label='source_count' value={query.source_count} /><Metric label='result_count' value={query.result_count} /><Metric label='read_only' value={query.read_only} danger={query.read_only !== true} /><Metric label='is_order_action' value={query.is_order_action} danger={query.is_order_action !== false} /></div>{unsafe ? <div>Replay metadata is outside the safe read boundary.</div> : <div>Replay query is read-only and is_order_action=false.</div>}</div>;
+}
+
+function replayEventCandidateId(row) {
+  return String(row?.candidate_id || row?.trade_id || 'unknown');
+}
+
+function replayEventStatus(row) {
+  return String(row?.outcome_status || row?.status || row?.event || row?.current_status || 'UNKNOWN').toUpperCase();
+}
+
+function replayEventStrategy(row) {
+  const evidence = row?.evidence && typeof row.evidence === 'object' ? row.evidence : {};
+  const selected = row?.selected && typeof row.selected === 'object' ? row.selected : {};
+  return row?.strategy || row?.strategy_id || row?.strategy_family || row?.setup_family || evidence.strategy_family || evidence.strategy || selected.strategy_family || selected.strategy || '-';
+}
+
+function replayEventTimestamp(row) {
+  return row?.ts_epoch ?? row?.timestamp ?? row?.time ?? row?.created_at ?? '-';
+}
+
+function replayTimestampNumber(row) {
+  const value = replayEventTimestamp(row);
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : Number.MAX_SAFE_INTEGER;
+}
+
+function replayTimelineEvents(events) {
+  return [...arr(events)].sort((a, b) => replayTimestampNumber(a) - replayTimestampNumber(b));
+}
+
+function replayStatusTransitionChain(events) {
+  const statuses = replayTimelineEvents(events).map(replayEventStatus).filter(Boolean);
+  return statuses.length ? statuses.join(' -> ') : 'NO_STATUS_CHAIN';
+}
+
+function groupReplayEventsByCandidate(events) {
+  const groups = new Map();
+  replayTimelineEvents(events).forEach((event) => {
+    const candidateId = replayEventCandidateId(event);
+    const existing = groups.get(candidateId) || [];
+    existing.push(event);
+    groups.set(candidateId, existing);
+  });
+  return Array.from(groups.entries()).map(([candidateId, items]) => ({ candidateId, events: replayTimelineEvents(items), transitionChain: replayStatusTransitionChain(items) }));
+}
+
+function ReplayEmptyState({ replayQuery }) {
+  const activeFilters = Object.entries(replayQuery || {}).filter(([, value]) => String(value || '').trim()).map(([key]) => key);
+  return <div style={subtlePanel}><strong>No replay results match the active filters</strong><div style={muted}>Check candidate_id, status, strategy, and time range filters. This read-only empty state does not change runtime state.</div><div>active replay filters</div><Chips items={activeFilters} /></div>;
+}
+
+function ReplayResultDrilldownGroup({ group }) {
+  const first = group.events[0] || {};
+  const last = group.events[group.events.length - 1] || {};
+  return <details style={subtlePanel} open><summary><strong>candidate_id: {group.candidateId}</strong> <Pill value={replayEventStatus(last)} /></summary><div style={flagGrid}><Metric label='event_count' value={group.events.length} /><Metric label='strategy' value={replayEventStrategy(first)} /><Metric label='first_timestamp' value={replayEventTimestamp(first)} /><Metric label='last_timestamp' value={replayEventTimestamp(last)} /></div><div>status transition chain</div><Chips items={[group.transitionChain]} /><h5>timeline order</h5>{group.events.map((event, i) => <div key={`${group.candidateId}-${i}`} style={subtlePanel}><div><strong>#{i + 1}</strong> status={replayEventStatus(event)}</div><div>strategy={show(replayEventStrategy(event))}</div><div>timestamp={show(replayEventTimestamp(event))}</div><JsonBlock title='event evidence' value={event} /></div>)}</details>;
+}
+
+function ReplayResultDrilldown({ events, replayQuery }) {
+  const groups = groupReplayEventsByCandidate(events);
+  return <div style={subtlePanel}><h4>Replay Result Drilldown</h4><p style={muted}>Grouped by candidate_id, ordered by timestamp, with status transition chains for filtered replay results.</p>{groups.length ? groups.map((group) => <ReplayResultDrilldownGroup key={group.candidateId} group={group} />) : <ReplayEmptyState replayQuery={replayQuery} />}</div>;
 }
 
 export function ExecutionSafetyCard({ executionSafety }) {
@@ -141,5 +201,5 @@ export function EvidenceHealthPanel({ evidenceHealth }) {
 export function OutcomeReplayDrilldownCard({ outcomeReplay, replayQuery, updateReplayQuery, fetchControlTower, resetReplayQuery, filteredOutcomeEvents }) {
   const q = replayQuery || {};
   const metadata = replayQueryMetadata(outcomeReplay);
-  return <Card title='Replay Timeline UI' right={<Pill value='READ_ONLY_REPLAY_TIMELINE' />}><p>Read-only replay timeline from /outcome-replay. Filters are query-only and expose no broker calls, no real orders, no submit/modify/cancel/exit controls, and no frontend append mode.</p><div style={formGrid}><ReplayQueryField label='candidate_id filter' placeholder='candidate id' value={q.candidateId} onChange={(v) => updateReplayQuery({ candidateId: v })} /><ReplayQueryField label='status filter' placeholder='FILLED or FILLED,REJECTED' value={q.status} onChange={(v) => updateReplayQuery({ status: v })} /><ReplayQueryField label='strategy filter' placeholder='strategy id/family' value={q.strategy} onChange={(v) => updateReplayQuery({ strategy: v })} /><ReplayQueryField label='ts_from_epoch time range filter' placeholder='epoch start' value={q.tsFromEpoch} onChange={(v) => updateReplayQuery({ tsFromEpoch: v })} /><ReplayQueryField label='ts_to_epoch time range filter' placeholder='epoch end' value={q.tsToEpoch} onChange={(v) => updateReplayQuery({ tsToEpoch: v })} /></div><button onClick={() => fetchControlTower(q)}>Apply replay query filters</button><button onClick={resetReplayQuery}>Reset replay query filters</button><ReplayTimelineMetadata query={metadata} /><div style={flagGrid}><Metric label='selected_count' value={outcomeReplay?.selected_count} /><Metric label='blocked_count' value={outcomeReplay?.blocked_count} /><Metric label='filled_count' value={outcomeReplay?.filled_count} /><Metric label='rejected_count' value={outcomeReplay?.rejected_count} /><Metric label='best_quality_score' value={outcomeReplay?.best_quality_score} /></div><div>outcome blockers</div><Chips items={outcomeReplay?.blockers} /><h4>Replay timeline events</h4><Table rows={filteredOutcomeEvents} empty='no outcome replay events yet' /></Card>;
+  return <Card title='Replay Timeline UI' right={<Pill value='READ_ONLY_REPLAY_TIMELINE' />}><p>Read-only replay timeline from /outcome-replay. Filters are query-only and expose no broker calls, no real orders, no submit/modify/cancel/exit controls, and no frontend append mode.</p><div style={formGrid}><ReplayQueryField label='candidate_id filter' placeholder='candidate id' value={q.candidateId} onChange={(v) => updateReplayQuery({ candidateId: v })} /><ReplayQueryField label='status filter' placeholder='FILLED or FILLED,REJECTED' value={q.status} onChange={(v) => updateReplayQuery({ status: v })} /><ReplayQueryField label='strategy filter' placeholder='strategy id/family' value={q.strategy} onChange={(v) => updateReplayQuery({ strategy: v })} /><ReplayQueryField label='ts_from_epoch time range filter' placeholder='epoch start' value={q.tsFromEpoch} onChange={(v) => updateReplayQuery({ tsFromEpoch: v })} /><ReplayQueryField label='ts_to_epoch time range filter' placeholder='epoch end' value={q.tsToEpoch} onChange={(v) => updateReplayQuery({ tsToEpoch: v })} /></div><button onClick={() => fetchControlTower(q)}>Apply replay query filters</button><button onClick={resetReplayQuery}>Reset replay query filters</button><ReplayTimelineMetadata query={metadata} /><div style={flagGrid}><Metric label='selected_count' value={outcomeReplay?.selected_count} /><Metric label='blocked_count' value={outcomeReplay?.blocked_count} /><Metric label='filled_count' value={outcomeReplay?.filled_count} /><Metric label='rejected_count' value={outcomeReplay?.rejected_count} /><Metric label='best_quality_score' value={outcomeReplay?.best_quality_score} /></div><div>outcome blockers</div><Chips items={outcomeReplay?.blockers} /><ReplayResultDrilldown events={filteredOutcomeEvents} replayQuery={q} /><h4>Replay timeline events</h4><Table rows={replayTimelineEvents(filteredOutcomeEvents)} empty='no outcome replay events yet' /></Card>;
 }

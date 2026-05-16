@@ -88,6 +88,7 @@ def test_control_tower_ui_renders_required_sections():
         "Quality Score Distribution Chart",
         "Candidate Truth Breakdown Chart",
         "Replay Timeline UI",
+        "Replay Result Drilldown",
         "Execution Readiness",
         "Trade Quality",
         "Candidate Truth",
@@ -343,7 +344,7 @@ def test_control_tower_replay_timeline_ui_exposes_query_metadata_and_safe_flags(
         "read_only",
         "is_order_action",
         "Replay query is read-only and is_order_action=false",
-        "Replay metadata is not safe. Do not use this result for execution.",
+        "Replay metadata is outside the safe read boundary.",
         "READ_ONLY_REPLAY_TIMELINE",
     ]
 
@@ -351,6 +352,52 @@ def test_control_tower_replay_timeline_ui_exposes_query_metadata_and_safe_flags(
         assert term in source
 
     for forbidden in ["Submit Order", "Modify Order", "Cancel Order", "Exit Order", "Approve Order", "Execute Order", "Place Order", "broker.place", "kite.place_order"]:
+        assert forbidden not in source
+
+
+def test_control_tower_replay_result_drilldown_groups_events_and_status_chain():
+    source = _frontend_source()
+
+    required_terms = [
+        "Replay Result Drilldown",
+        "ReplayResultDrilldown",
+        "ReplayResultDrilldownGroup",
+        "groupReplayEventsByCandidate",
+        "replayTimelineEvents",
+        "replayStatusTransitionChain",
+        "Grouped by candidate_id",
+        "ordered by timestamp",
+        "status transition chain",
+        "timeline order",
+        "event_count",
+        "first_timestamp",
+        "last_timestamp",
+        "event evidence",
+    ]
+
+    for term in required_terms:
+        assert term in source
+
+
+def test_control_tower_replay_result_drilldown_shows_fields_and_empty_state():
+    source = _frontend_source()
+
+    required_terms = [
+        "replayEventCandidateId",
+        "replayEventStatus",
+        "replayEventStrategy",
+        "replayEventTimestamp",
+        "No replay results match the active filters",
+        "Check candidate_id, status, strategy, and time range filters",
+        "active replay filters",
+        "ReplayEmptyState",
+    ]
+
+    for term in required_terms:
+        assert term in source
+
+    assert "append=true" not in source
+    for forbidden in ["Submit Order", "Modify Order", "Cancel Order", "Exit Order", "Approve Order", "Execute Order", "Place Order"]:
         assert forbidden not in source
 
 
