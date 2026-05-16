@@ -694,7 +694,7 @@ from api.dry_run_execution_route import install_dry_run_execution_route
 
 install_dry_run_execution_route(
     app,
-    runtime_root_provider=_runtime_root,
+    runtime_root_provider=lambda: _runtime_root(),
     top_executable_provider=lambda limit, min_quality_score: _top_executable_payload(limit, min_quality_score),
     readiness_provider=lambda limit: _execution_readiness_payload(limit),
     safety_provider=lambda request, limit, min_quality_score: _execution_safety_payload(request, limit, min_quality_score),
