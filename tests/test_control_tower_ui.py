@@ -25,6 +25,7 @@ def test_control_tower_ui_calls_all_tradability_endpoints():
         "/top-executable?limit=20",
         "/execution-safety?limit=20",
         "/dry-run-execution?limit=20",
+        "/dry-run-execution/export?limit=20",
         "/fill-lifecycle",
         "/outcome-replay",
     ]
@@ -46,6 +47,7 @@ def test_control_tower_ui_renders_required_sections():
         "Top Executable",
         "Execution Safety",
         "Dry-Run Execution Adapter",
+        "Dry-Run Evidence Export Preview",
         "Readiness Breakdown Chart",
         "Outcome Counts Chart",
         "Quality Score Distribution Chart",
@@ -68,6 +70,7 @@ def test_control_tower_ui_exposes_blockers_and_no_order_boundaries():
     source = _frontend_source()
 
     assert "blockers" in source
+    assert "warnings" in source
     assert "execution_allowed" in source
     assert "execution_permitted" in source
     assert "quality_score" in source
@@ -114,6 +117,50 @@ def test_control_tower_ui_exposes_dry_run_execution_visibility_without_append():
         assert term in source
 
     assert "/dry-run-execution?limit=20" in source
+    assert "append=true" not in source
+
+
+def test_control_tower_ui_exposes_export_preview_without_order_controls():
+    source = _frontend_source()
+
+    required_terms = [
+        "dryRunExport",
+        "Dry-Run Evidence Export Preview",
+        "/dry-run-execution/export?limit=20",
+        "bundle_type",
+        "status",
+        "candidate_id",
+        "dry_run_order_id",
+        "dry_run_only",
+        "is_order_action",
+        "broker_api_called",
+        "real_order_id",
+        "export_preview_only",
+        "blockers",
+        "warnings",
+        "selected snapshot",
+        "safety snapshot",
+        "approval snapshot",
+        "readiness snapshot",
+        "exportFlagWarnings",
+        "UNSAFE_FLAG_WARNING",
+    ]
+
+    for term in required_terms:
+        assert term in source
+
+    forbidden_controls = [
+        "Submit Order",
+        "Modify Order",
+        "Cancel Order",
+        "Exit Order",
+        "Approve Order",
+        "Execute Order",
+        "Place Order",
+    ]
+    for control in forbidden_controls:
+        assert control not in source
+
     assert "append=true" not in source
 
 
