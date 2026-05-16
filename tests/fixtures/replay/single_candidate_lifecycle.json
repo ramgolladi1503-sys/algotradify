@@ -1,0 +1,75 @@
+{
+  "fixture_id": "single_candidate_lifecycle",
+  "description": "One candidate progresses through selected, submitted, accepted, filled, and closed statuses.",
+  "outcome_replay": [
+    {
+      "candidate_id": "c1",
+      "status": "SELECTED",
+      "strategy": "orb_retest",
+      "ts_epoch": 10,
+      "quality_score": 80
+    },
+    {
+      "candidate_id": "c1",
+      "status": "ORDER_SUBMITTED",
+      "strategy": "orb_retest",
+      "ts_epoch": 20,
+      "quality_score": 82
+    },
+    {
+      "candidate_id": "c1",
+      "status": "ORDER_ACCEPTED",
+      "strategy": "orb_retest",
+      "ts_epoch": 30,
+      "quality_score": 84
+    },
+    {
+      "candidate_id": "c1",
+      "status": "FILLED",
+      "strategy": "orb_retest",
+      "ts_epoch": 40,
+      "quality_score": 90
+    },
+    {
+      "candidate_id": "c1",
+      "status": "POSITION_CLOSED",
+      "strategy": "orb_retest",
+      "ts_epoch": 50,
+      "quality_score": 88
+    }
+  ],
+  "expected": {
+    "source_count": 5,
+    "candidate_count": 1,
+    "status_counts": {
+      "SELECTED": 1,
+      "SUBMITTED": 1,
+      "ACCEPTED": 1,
+      "FILLED": 1,
+      "CLOSED": 1
+    },
+    "strategy_counts": {
+      "orb_retest": 5
+    },
+    "query_cases": [
+      {
+        "name": "candidate_c1",
+        "filters": {"candidate_id": "c1"},
+        "result_count": 5,
+        "candidate_ids": ["c1", "c1", "c1", "c1", "c1"]
+      },
+      {
+        "name": "filled_alias",
+        "filters": {"status": "complete"},
+        "result_count": 1,
+        "candidate_ids": ["c1"]
+      },
+      {
+        "name": "time_window",
+        "filters": {"ts_from_epoch": 20, "ts_to_epoch": 40},
+        "result_count": 3,
+        "candidate_ids": ["c1", "c1", "c1"]
+      }
+    ]
+  }
+}
