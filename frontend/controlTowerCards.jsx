@@ -2,6 +2,10 @@ import React from 'react';
 
 const card = { background: '#121c34', border: '1px solid #24314f', borderRadius: 12, padding: 14, marginBottom: 14 };
 const muted = { color: '#99a7c7' };
+const flagGrid = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 8, margin: '10px 0' };
+const subtlePanel = { border: '1px solid #334155', borderRadius: 10, padding: 10, background: '#0b1220', margin: '10px 0' };
+const warningPanel = { border: '1px solid #7f1d1d', borderRadius: 10, padding: 10, background: '#3f1d1d', margin: '10px 0', color: '#fecaca' };
+const safePanel = { border: '1px solid #14532d', borderRadius: 10, padding: 10, background: '#052e16', margin: '10px 0' };
 
 export function arr(v) { return Array.isArray(v) ? v : []; }
 export function show(v) { if (v === null || v === undefined || v === '') return '-'; if (typeof v === 'object') return JSON.stringify(v); return String(v); }
@@ -65,6 +69,30 @@ export function exportFlagWarnings(bundle) {
   return w;
 }
 
+export function exportPreviewStatus(bundle) {
+  if (!bundle) return 'NO_EXPORT_BUNDLE';
+  if (exportFlagWarnings(bundle).length) return 'UNSAFE_FLAG_WARNING';
+  if (String(bundle.status || '').includes('BLOCK')) return 'EXPORT_BUNDLE_BLOCKED';
+  return 'SAFE_EXPORT_FLAGS';
+}
+
+function FlagCheckMetric({ label, value, expected }) {
+  const safe = value === expected || (expected === null && (value === null || value === undefined));
+  return <div style={{ ...subtlePanel, borderColor: safe ? '#14532d' : '#7f1d1d' }}><div style={{ ...muted, fontSize: 12 }}>{label}</div><strong>{show(value)}</strong><div style={{ fontSize: 12, color: safe ? '#bbf7d0' : '#fecaca' }}>{safe ? 'safe expected flag' : 'unsafe flag mismatch'}</div></div>;
+}
+
+function ExportBundleState({ bundle }) {
+  const unsafe = exportFlagWarnings(bundle);
+  const blocked = String(bundle.status || '').includes('BLOCK') || arr(bundle.blockers).length > 0;
+  if (unsafe.length) return <div style={warningPanel}><strong>UNSAFE_FLAG_WARNING</strong><div>Export preview is read-only, but these flags are not safe: {unsafe.join(', ')}</div></div>;
+  if (blocked) return <div style={warningPanel}><strong>Export bundle blocked</strong><div>The evidence bundle is blocked or incomplete. This is still safe because the preview remains read-only and no broker action is exposed.</div></div>;
+  return <div style={safePanel}><strong>Why this bundle is safe</strong><div>This bundle is safe because dry_run_only is true, is_order_action is false, broker_api_called is false, real_order_id is null, and export_preview_only is true.</div></div>;
+}
+
+function ExportFlagChecks({ bundle }) {
+  return <div><h4>Expected safe flags</h4><div style={flagGrid}><FlagCheckMetric label='dry_run_only' value={bundle.dry_run_only} expected={true} /><FlagCheckMetric label='is_order_action' value={bundle.is_order_action} expected={false} /><FlagCheckMetric label='broker_api_called' value={bundle.broker_api_called} expected={false} /><FlagCheckMetric label='real_order_id' value={bundle.real_order_id} expected={null} /><FlagCheckMetric label='export_preview_only' value={bundle.export_preview_only} expected={true} /></div></div>;
+}
+
 export function ExecutionSafetyCard({ executionSafety }) {
   return <Card title='Execution Safety'><Metric label='execution_permitted' value={executionSafety?.execution_permitted} /><Metric label='requires_manual_approval' value={executionSafety?.requires_manual_approval} /><Metric label='readiness_records_checked' value={executionSafety?.readiness_records_checked} /><Metric label='safety_visibility_only' value={executionSafety?.safety_visibility_only} /><div>safety blockers</div><Chips items={executionSafety?.blockers} /><div>safety warnings</div><Chips items={executionSafety?.warnings} /><div>is_order_action: {show(executionSafety?.is_order_action)}</div></Card>;
 }
@@ -82,7 +110,7 @@ export function DryRunExecutionAdapterCard({ dryRunExecution, topExecutable, exe
 
 export function DryRunEvidenceExportPreviewCard({ dryRunExport }) {
   const exportPreviewBundles = exportBundles(dryRunExport);
-  return <Card title='Dry-Run Evidence Export Preview' right={<Pill value={exportPreviewBundles[0]?.status || 'NO_EXPORT_BUNDLE'} />}><p>Read-only preview from /dry-run-execution/export?limit=20. No execution controls, no broker calls, and no server-side file append is requested.</p>{exportPreviewBundles.map((bundle, i) => { const unsafe = exportFlagWarnings(bundle); return <div key={i}><Pill value={unsafe.length ? 'UNSAFE_FLAG_WARNING' : bundle.status} /><Metric label='bundle_type' value={bundle.bundle_type} /><Metric label='status' value={bundle.status} /><Metric label='candidate_id' value={bundle.candidate_id} /><Metric label='dry_run_order_id' value={bundle.dry_run_order_id} /><Metric label='dry_run_only' value={bundle.dry_run_only} danger={bundle.dry_run_only !== true} /><Metric label='is_order_action' value={bundle.is_order_action} danger={bundle.is_order_action !== false} /><Metric label='broker_api_called' value={bundle.broker_api_called} danger={bundle.broker_api_called !== false} /><Metric label='real_order_id' value={bundle.real_order_id} danger={bundle.real_order_id !== null && bundle.real_order_id !== undefined} /><Metric label='export_preview_only' value={bundle.export_preview_only} danger={bundle.export_preview_only !== true} /><div>blockers</div><Chips items={bundle.blockers} /><div>warnings</div><Chips items={bundle.warnings} /><CompactSnapshot title='selected snapshot' value={bundle.selected_candidate_snapshot} /><CompactSnapshot title='safety snapshot' value={bundle.execution_safety_snapshot} /><CompactSnapshot title='approval snapshot' value={bundle.approval_snapshot} /><CompactSnapshot title='readiness snapshot' value={bundle.readiness_snapshot} /></div>; })}</Card>;
+  return <Card title='Dry-Run Evidence Export Preview' right={<Pill value={exportPreviewStatus(exportPreviewBundles[0])} />}><p>Read-only preview from /dry-run-execution/export?limit=20. No execution controls, no broker calls, and no server-side file append is requested.</p>{!exportPreviewBundles.length ? <div style={subtlePanel}><strong>No export bundle returned yet</strong><div style={muted}>The preview is waiting for dry-run evidence. This card stays read-only and exposes no order controls.</div></div> : null}{exportPreviewBundles.map((bundle, i) => { const unsafe = exportFlagWarnings(bundle); return <div key={i} style={subtlePanel}><Pill value={unsafe.length ? 'UNSAFE_FLAG_WARNING' : exportPreviewStatus(bundle)} /><div style={flagGrid}><Metric label='bundle_type' value={bundle.bundle_type} /><Metric label='status' value={bundle.status} /><Metric label='candidate_id' value={bundle.candidate_id} /><Metric label='dry_run_order_id' value={bundle.dry_run_order_id} /></div><ExportBundleState bundle={bundle} /><ExportFlagChecks bundle={bundle} /><div>blockers</div><Chips items={bundle.blockers} /><div>warnings</div><Chips items={bundle.warnings} /><details style={subtlePanel}><summary>Snapshot drilldowns</summary><CompactSnapshot title='selected snapshot' value={bundle.selected_candidate_snapshot} /><CompactSnapshot title='safety snapshot' value={bundle.execution_safety_snapshot} /><CompactSnapshot title='approval snapshot' value={bundle.approval_snapshot} /><CompactSnapshot title='readiness snapshot' value={bundle.readiness_snapshot} /></details></div>; })}</Card>;
 }
 
 export function OutcomeReplayDrilldownCard({ outcomeReplay, replayCandidateId, setReplayCandidateId, fetchControlTower, filteredOutcomeEvents }) {
