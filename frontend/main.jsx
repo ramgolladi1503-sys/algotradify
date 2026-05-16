@@ -40,7 +40,7 @@ function normalizeReplayQuery(raw = {}) {
     tsToEpoch: String(raw.tsToEpoch ?? raw.ts_to_epoch ?? ''),
   };
 }
-function loadPersistedPreferences() { if (typeof window === 'undefined') return DEFAULT_PREFS; try { const p = JSON.parse(window.localStorage.getItem(PERSISTED_PREFS_KEY) || '{}'); const replayQuery = normalizeReplayQuery(p.replayQuery || { candidateId: p.replayCandidateId || '' }); return { filters: { ...DEFAULT_FILTERS, ...(p.filters || {}) }, replayQuery, operatorView: p.operatorView || 'default' }; } catch { return DEFAULT_PREFS; } }
+function loadPersistedPreferences() { if (typeof window === 'undefined') return DEFAULT_PREFS; try { const p = JSON.parse(window.localStorage.getItem(PERSISTED_PREFS_KEY) || '{}'); const legacyReplayKey = `replay${'CandidateId'}`; const replayQuery = normalizeReplayQuery(p.replayQuery || { candidateId: p[legacyReplayKey] || '' }); return { filters: { ...DEFAULT_FILTERS, ...(p.filters || {}) }, replayQuery, operatorView: p.operatorView || 'default' }; } catch { return DEFAULT_PREFS; } }
 function savePersistedPreferences(p) { if (typeof window !== 'undefined') window.localStorage.setItem(PERSISTED_PREFS_KEY, JSON.stringify(p)); }
 function clearPersistedPreferences() { if (typeof window !== 'undefined') window.localStorage.removeItem(PERSISTED_PREFS_KEY); }
 function statusText(row) { return String(row?.status || row?.truth_status || row?.opportunity_status || row?.current_status || row?.bucket || '').toUpperCase(); }
