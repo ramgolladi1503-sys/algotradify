@@ -8,6 +8,35 @@ from fastapi import FastAPI, Query, Request
 from dry_run_execution import append_dry_run_execution, build_dry_run_execution
 
 
+def build_dry_run_export_bundle(payload: dict[str, Any]) -> dict[str, Any]:
+    intent = payload.get("intent") if isinstance(payload.get("intent"), dict) else {}
+    lifecycle = payload.get("lifecycle_event") if isinstance(payload.get("lifecycle_event"), dict) else {}
+    outcome = payload.get("outcome_event") if isinstance(payload.get("outcome_event"), dict) else {}
+    bundle = {
+        "bundle_type": "DRY_RUN_EVIDENCE_BUNDLE",
+        "schema_version": "1.0",
+        "created": payload.get("created") is True,
+        "candidate_id": payload.get("candidate_id") or intent.get("candidate_id"),
+        "dry_run_order_id": intent.get("dry_run_order_id"),
+        "dry_run_only": True,
+        "is_order_action": False,
+        "broker_api_called": False,
+        "real_order_id": None,
+        "status": "BUNDLE_READY" if payload.get("created") is True else "BUNDLE_BLOCKED",
+        "blockers": list(payload.get("blockers") or []),
+        "warnings": list(payload.get("warnings") or []),
+        "selected_candidate_snapshot": intent.get("top_executable_snapshot") or payload.get("top_executable_snapshot") or {},
+        "execution_safety_snapshot": intent.get("execution_safety_snapshot") or payload.get("execution_safety_snapshot") or {},
+        "approval_snapshot": intent.get("approval_snapshot") or payload.get("approval_snapshot") or {},
+        "readiness_snapshot": intent.get("readiness_snapshot") or payload.get("readiness_snapshot") or {},
+        "dry_run_intent": intent,
+        "lifecycle_event": lifecycle,
+        "outcome_event": outcome,
+        "export_preview_only": True,
+    }
+    return bundle
+
+
 def build_dry_run_execution_payload(
     *,
     request: Request,
@@ -55,18 +84,40 @@ def install_dry_run_execution_route(
     approval_provider: Callable[[str | None, float | None], dict[str, Any]],
     readiness_matcher: Callable[[dict[str, Any], list[dict[str, Any]]], dict[str, Any] | None],
 ) -> None:
-    if any(getattr(route, "path", None) == "/dry-run-execution" for route in app.routes):
+    if not any(getattr(route, "path", None) == "/dry-run-execution" for route in app.routes):
+        @app.get("/dry-run-execution")
+        def dry_run_execution(
+            request: Request,
+            limit: int = Query(default=25, ge=1, le=200),
+            min_quality_score: float = Query(default=50.0, ge=0.0, le=100.0),
+            now_epoch: float | None = Query(default=None),
+            append: bool = Query(default=False),
+        ):
+            return build_dry_run_execution_payload(
+                request=request,
+                runtime_root=runtime_root_provider(),
+                top_executable_provider=top_executable_provider,
+                readiness_provider=readiness_provider,
+                safety_provider=safety_provider,
+                approval_provider=approval_provider,
+                readiness_matcher=readiness_matcher,
+                limit=limit,
+                min_quality_score=min_quality_score,
+                now_epoch=now_epoch,
+                append=append,
+            )
+
+    if any(getattr(route, "path", None) == "/dry-run-execution/export" for route in app.routes):
         return
 
-    @app.get("/dry-run-execution")
-    def dry_run_execution(
+    @app.get("/dry-run-execution/export")
+    def dry_run_execution_export(
         request: Request,
         limit: int = Query(default=25, ge=1, le=200),
         min_quality_score: float = Query(default=50.0, ge=0.0, le=100.0),
         now_epoch: float | None = Query(default=None),
-        append: bool = Query(default=False),
     ):
-        return build_dry_run_execution_payload(
+        payload = build_dry_run_execution_payload(
             request=request,
             runtime_root=runtime_root_provider(),
             top_executable_provider=top_executable_provider,
@@ -77,5 +128,6 @@ def install_dry_run_execution_route(
             limit=limit,
             min_quality_score=min_quality_score,
             now_epoch=now_epoch,
-            append=append,
+            append=False,
         )
+        return build_dry_run_export_bundle(payload)
