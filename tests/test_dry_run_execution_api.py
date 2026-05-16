@@ -6,46 +6,27 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from api.dry_run_execution_route import build_dry_run_export_bundle, install_dry_run_execution_route
+from api.dry_run_execution_route import (
+    DRY_RUN_EXPORT_BUNDLE_TYPE,
+    DRY_RUN_EXPORT_COMPATIBLE_SCHEMA_VERSIONS,
+    DRY_RUN_EXPORT_REQUIRED_KEYS,
+    DRY_RUN_EXPORT_SAFE_FLAGS,
+    DRY_RUN_EXPORT_SCHEMA_VERSION,
+    build_dry_run_export_bundle,
+    dry_run_export_schema_contract,
+    install_dry_run_execution_route,
+)
 
 
-REQUIRED_EXPORT_BUNDLE_KEYS = {
-    "bundle_type",
-    "schema_version",
-    "created",
-    "candidate_id",
-    "dry_run_order_id",
-    "dry_run_only",
-    "is_order_action",
-    "broker_api_called",
-    "real_order_id",
-    "status",
-    "blockers",
-    "warnings",
-    "selected_candidate_snapshot",
-    "execution_safety_snapshot",
-    "approval_snapshot",
-    "readiness_snapshot",
-    "dry_run_intent",
-    "lifecycle_event",
-    "outcome_event",
-    "export_preview_only",
-}
-
-SAFE_EXPORT_FLAGS = {
-    "dry_run_only": True,
-    "is_order_action": False,
-    "broker_api_called": False,
-    "real_order_id": None,
-    "export_preview_only": True,
-}
+REQUIRED_EXPORT_BUNDLE_KEYS = set(DRY_RUN_EXPORT_REQUIRED_KEYS)
+SAFE_EXPORT_FLAGS = dict(DRY_RUN_EXPORT_SAFE_FLAGS)
 
 
 def _assert_export_bundle_contract(bundle: dict):
     missing = REQUIRED_EXPORT_BUNDLE_KEYS - set(bundle)
     assert not missing, f"missing export bundle keys: {sorted(missing)}"
-    assert bundle["bundle_type"] == "DRY_RUN_EVIDENCE_BUNDLE"
-    assert bundle["schema_version"] == "1.0"
+    assert bundle["bundle_type"] == DRY_RUN_EXPORT_BUNDLE_TYPE
+    assert bundle["schema_version"] == DRY_RUN_EXPORT_SCHEMA_VERSION
     assert isinstance(bundle["created"], bool)
     assert isinstance(bundle["blockers"], list)
     assert isinstance(bundle["warnings"], list)
@@ -212,8 +193,8 @@ def test_dry_run_export_bundle_shape_from_payload(tmp_path):
 
     bundle = build_dry_run_export_bundle(payload)
 
-    assert bundle["bundle_type"] == "DRY_RUN_EVIDENCE_BUNDLE"
-    assert bundle["schema_version"] == "1.0"
+    assert bundle["bundle_type"] == DRY_RUN_EXPORT_BUNDLE_TYPE
+    assert bundle["schema_version"] == DRY_RUN_EXPORT_SCHEMA_VERSION
     assert bundle["status"] == "BUNDLE_READY"
     assert bundle["candidate_id"] == "c1"
     assert bundle["dry_run_only"] is True
@@ -235,7 +216,7 @@ def test_dry_run_execution_export_endpoint_returns_bundle_and_writes_no_files(tm
 
     assert response.status_code == 200
     bundle = response.json()
-    assert bundle["bundle_type"] == "DRY_RUN_EVIDENCE_BUNDLE"
+    assert bundle["bundle_type"] == DRY_RUN_EXPORT_BUNDLE_TYPE
     assert bundle["status"] == "BUNDLE_READY"
     assert bundle["dry_run_only"] is True
     assert bundle["is_order_action"] is False
@@ -254,7 +235,7 @@ def test_dry_run_execution_export_endpoint_blocks_safely_when_evidence_missing(t
 
     assert response.status_code == 200
     bundle = response.json()
-    assert bundle["bundle_type"] == "DRY_RUN_EVIDENCE_BUNDLE"
+    assert bundle["bundle_type"] == DRY_RUN_EXPORT_BUNDLE_TYPE
     assert bundle["status"] == "BUNDLE_BLOCKED"
     assert bundle["dry_run_only"] is True
     assert bundle["is_order_action"] is False
@@ -340,3 +321,27 @@ def test_dry_run_export_bundle_builder_overrides_any_unsafe_payload_flags():
     assert bundle["broker_api_called"] is False
     assert bundle["real_order_id"] is None
     assert bundle["export_preview_only"] is True
+
+
+def test_dry_run_export_schema_version_contract_is_explicit():
+    contract = dry_run_export_schema_contract()
+
+    assert contract["bundle_type"] == DRY_RUN_EXPORT_BUNDLE_TYPE
+    assert contract["schema_version"] == "1.0"
+    assert contract["schema_version"] == DRY_RUN_EXPORT_SCHEMA_VERSION
+    assert contract["compatible_schema_versions"] == list(DRY_RUN_EXPORT_COMPATIBLE_SCHEMA_VERSIONS)
+    assert DRY_RUN_EXPORT_COMPATIBLE_SCHEMA_VERSIONS == ("1.0",)
+    assert set(contract["required_keys"]) == DRY_RUN_EXPORT_REQUIRED_KEYS
+    assert contract["safe_flags"] == DRY_RUN_EXPORT_SAFE_FLAGS
+
+
+def test_dry_run_export_bundle_uses_declared_schema_contract(tmp_path):
+    client = _client(tmp_path)
+    bundle = client.get("/dry-run-execution/export?now_epoch=100").json()
+    contract = dry_run_export_schema_contract()
+
+    assert bundle["bundle_type"] == contract["bundle_type"]
+    assert bundle["schema_version"] == contract["schema_version"]
+    assert set(bundle) == set(contract["required_keys"])
+    for key, expected in contract["safe_flags"].items():
+        assert bundle[key] is expected
