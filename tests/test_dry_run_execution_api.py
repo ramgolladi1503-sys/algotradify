@@ -9,6 +9,57 @@ from fastapi.testclient import TestClient
 from api.dry_run_execution_route import build_dry_run_export_bundle, install_dry_run_execution_route
 
 
+REQUIRED_EXPORT_BUNDLE_KEYS = {
+    "bundle_type",
+    "schema_version",
+    "created",
+    "candidate_id",
+    "dry_run_order_id",
+    "dry_run_only",
+    "is_order_action",
+    "broker_api_called",
+    "real_order_id",
+    "status",
+    "blockers",
+    "warnings",
+    "selected_candidate_snapshot",
+    "execution_safety_snapshot",
+    "approval_snapshot",
+    "readiness_snapshot",
+    "dry_run_intent",
+    "lifecycle_event",
+    "outcome_event",
+    "export_preview_only",
+}
+
+SAFE_EXPORT_FLAGS = {
+    "dry_run_only": True,
+    "is_order_action": False,
+    "broker_api_called": False,
+    "real_order_id": None,
+    "export_preview_only": True,
+}
+
+
+def _assert_export_bundle_contract(bundle: dict):
+    missing = REQUIRED_EXPORT_BUNDLE_KEYS - set(bundle)
+    assert not missing, f"missing export bundle keys: {sorted(missing)}"
+    assert bundle["bundle_type"] == "DRY_RUN_EVIDENCE_BUNDLE"
+    assert bundle["schema_version"] == "1.0"
+    assert isinstance(bundle["created"], bool)
+    assert isinstance(bundle["blockers"], list)
+    assert isinstance(bundle["warnings"], list)
+    assert isinstance(bundle["selected_candidate_snapshot"], dict)
+    assert isinstance(bundle["execution_safety_snapshot"], dict)
+    assert isinstance(bundle["approval_snapshot"], dict)
+    assert isinstance(bundle["readiness_snapshot"], dict)
+    assert isinstance(bundle["dry_run_intent"], dict)
+    assert isinstance(bundle["lifecycle_event"], dict)
+    assert isinstance(bundle["outcome_event"], dict)
+    for key, expected in SAFE_EXPORT_FLAGS.items():
+        assert bundle[key] is expected, f"{key} must remain {expected!r}"
+
+
 def _top(candidate_id="c1"):
     return {
         "status": "SELECTED",
@@ -209,3 +260,83 @@ def test_dry_run_execution_export_endpoint_blocks_safely_when_evidence_missing(t
     assert bundle["is_order_action"] is False
     assert bundle["broker_api_called"] is False
     assert "NO_TOP_EXECUTABLE_SELECTED" in bundle["blockers"]
+
+
+def test_dry_run_export_bundle_contract_ready_shape_is_frozen(tmp_path):
+    client = _client(tmp_path)
+
+    response = client.get("/dry-run-execution/export?now_epoch=100&limit=20")
+
+    assert response.status_code == 200
+    bundle = response.json()
+    _assert_export_bundle_contract(bundle)
+    assert set(bundle) == REQUIRED_EXPORT_BUNDLE_KEYS
+    assert bundle["created"] is True
+    assert bundle["status"] == "BUNDLE_READY"
+    assert bundle["candidate_id"] == "c1"
+    assert bundle["dry_run_order_id"]
+    assert bundle["dry_run_intent"]["dry_run_only"] is True
+    assert bundle["lifecycle_event"]["broker_api_called"] is False
+    assert bundle["outcome_event"]["real_order_id"] is None
+
+
+def test_dry_run_export_bundle_contract_blocked_shape_is_frozen(tmp_path):
+    client = _client(tmp_path, top={"status": "NONE"}, safety=_safety(False), approval={})
+
+    response = client.get("/dry-run-execution/export?limit=20")
+
+    assert response.status_code == 200
+    bundle = response.json()
+    _assert_export_bundle_contract(bundle)
+    assert set(bundle) == REQUIRED_EXPORT_BUNDLE_KEYS
+    assert bundle["created"] is False
+    assert bundle["status"] == "BUNDLE_BLOCKED"
+    assert bundle["candidate_id"] is None
+    assert bundle["dry_run_order_id"] is None
+    assert "NO_TOP_EXECUTABLE_SELECTED" in bundle["blockers"]
+    assert "EXECUTION_SAFETY_NOT_PERMITTED" in bundle["blockers"]
+    assert "APPROVAL_EVIDENCE_REQUIRED" in bundle["blockers"]
+
+
+def test_dry_run_export_ignores_append_true_and_writes_no_files(tmp_path):
+    client = _client(tmp_path)
+
+    response = client.get("/dry-run-execution/export?now_epoch=100&append=true")
+
+    assert response.status_code == 200
+    bundle = response.json()
+    _assert_export_bundle_contract(bundle)
+    assert bundle["status"] == "BUNDLE_READY"
+    assert not (tmp_path / "logs" / "dry_run_order_intents.jsonl").exists()
+    assert not (tmp_path / "logs" / "dry_run_lifecycle.jsonl").exists()
+    assert not (tmp_path / "logs" / "outcome_replay.jsonl").exists()
+
+
+def test_dry_run_export_bundle_builder_overrides_any_unsafe_payload_flags():
+    bundle = build_dry_run_export_bundle(
+        {
+            "created": True,
+            "candidate_id": "c-danger",
+            "dry_run_only": False,
+            "is_order_action": True,
+            "broker_api_called": True,
+            "real_order_id": "REAL-ORDER-1",
+            "export_preview_only": False,
+            "intent": {
+                "candidate_id": "c-danger",
+                "dry_run_order_id": "dry-run-1",
+                "real_order_id": "REAL-ORDER-2",
+                "broker_api_called": True,
+                "is_order_action": True,
+            },
+        }
+    )
+
+    _assert_export_bundle_contract(bundle)
+    assert bundle["candidate_id"] == "c-danger"
+    assert bundle["dry_run_order_id"] == "dry-run-1"
+    assert bundle["dry_run_only"] is True
+    assert bundle["is_order_action"] is False
+    assert bundle["broker_api_called"] is False
+    assert bundle["real_order_id"] is None
+    assert bundle["export_preview_only"] is True
