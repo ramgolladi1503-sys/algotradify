@@ -31,6 +31,7 @@ def test_control_tower_ui_component_split_exists():
         "ExecutionSafetyCard",
         "DryRunExecutionAdapterCard",
         "DryRunEvidenceExportPreviewCard",
+        "EvidenceHealthPanel",
         "OutcomeReplayDrilldownCard",
         "BarChart",
         "Table",
@@ -58,6 +59,7 @@ def test_control_tower_ui_calls_all_tradability_endpoints():
         "/execution-safety?limit=20",
         "/dry-run-execution?limit=20",
         "/dry-run-execution/export?limit=20",
+        "/evidence-health?limit=20",
         "/fill-lifecycle",
         "/outcome-replay",
     ]
@@ -80,6 +82,7 @@ def test_control_tower_ui_renders_required_sections():
         "Execution Safety",
         "Dry-Run Execution Adapter",
         "Dry-Run Evidence Export Preview",
+        "Evidence Health Panel",
         "Readiness Breakdown Chart",
         "Outcome Counts Chart",
         "Quality Score Distribution Chart",
@@ -222,6 +225,36 @@ def test_control_tower_export_preview_ux_hardening():
         assert term in source
 
     assert "append=true" not in source
+
+
+def test_control_tower_ui_exposes_evidence_health_panel_without_order_controls():
+    source = _frontend_source()
+
+    required_terms = [
+        "evidenceHealth",
+        "Evidence Health Panel",
+        "/evidence-health?limit=20",
+        "evidence_health_only",
+        "schema_count",
+        "valid_count",
+        "invalid_count",
+        "missing_key_count",
+        "safe_flag_violation_count",
+        "warning_count",
+        "missing_keys",
+        "safe_flag_violations",
+        "No evidence health returned yet",
+        "read-only integrity results",
+        "This panel validates evidence shape and safe flags only",
+        "it exposes no execution controls",
+    ]
+
+    for term in required_terms:
+        assert term in source
+
+    assert "append=true" not in source
+    for forbidden in ["Submit Order", "Modify Order", "Cancel Order", "Exit Order", "Approve Order", "Execute Order", "Place Order"]:
+        assert forbidden not in source
 
 
 def test_control_tower_ui_exposes_dry_run_evidence_drilldown_and_operator_explanation():
