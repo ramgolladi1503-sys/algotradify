@@ -33,6 +33,23 @@ def _fixtures() -> list[dict[str, Any]]:
     return [_load_fixture(filename) for filename in REQUIRED_FIXTURES]
 
 
+def _fixture_contract_payload() -> dict[str, Any]:
+    fixtures = _fixtures()
+    metadata_samples = []
+    for fixture in fixtures:
+        rows = fixture["outcome_replay"]
+        for case in fixture["expected"]["query_cases"]:
+            result = filter_outcome_replay_records(rows, **case["filters"])
+            metadata_samples.append(
+                replay_query_metadata(
+                    **case["filters"],
+                    source_count=len(rows),
+                    result_count=len(result),
+                )
+            )
+    return {"fixtures": fixtures, "metadata_samples": metadata_samples}
+
+
 def test_replay_fixture_files_exist():
     for filename in REQUIRED_FIXTURES:
         assert (FIXTURE_DIR / filename).is_file()
@@ -101,7 +118,7 @@ def test_replay_fixture_ui_contract_fields_are_present():
         "read_only",
         "is_order_action",
     ]
-    serialized = json.dumps(_fixtures(), sort_keys=True)
+    serialized = json.dumps(_fixture_contract_payload(), sort_keys=True)
 
     for term in expected_ui_terms:
         assert term in serialized
