@@ -83,6 +83,32 @@ def build_dry_run_export_bundle(payload: dict[str, Any]) -> dict[str, Any]:
     return bundle
 
 
+def build_evidence_health_payload(evidence_payloads: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    from api.evidence_integrity import validate_many_evidence_payloads
+
+    results = validate_many_evidence_payloads(evidence_payloads)
+    valid_count = sum(1 for result in results.values() if result.get("valid") is True)
+    invalid_count = sum(1 for result in results.values() if result.get("valid") is not True)
+    warning_count = sum(len(result.get("warnings") or []) for result in results.values())
+    safe_flag_violation_count = sum(len(result.get("safe_flag_violations") or []) for result in results.values())
+    missing_key_count = sum(len(result.get("missing_keys") or []) for result in results.values())
+    return {
+        "status": "HEALTHY" if invalid_count == 0 else "DEGRADED",
+        "evidence_health_only": True,
+        "dry_run_only": True,
+        "is_order_action": False,
+        "broker_api_called": False,
+        "real_order_id": None,
+        "schema_count": len(results),
+        "valid_count": valid_count,
+        "invalid_count": invalid_count,
+        "warning_count": warning_count,
+        "missing_key_count": missing_key_count,
+        "safe_flag_violation_count": safe_flag_violation_count,
+        "results": results,
+    }
+
+
 def build_dry_run_execution_payload(
     *,
     request: Request,
@@ -120,6 +146,19 @@ def build_dry_run_execution_payload(
     return payload
 
 
+def _evidence_payloads_from_dry_run(payload: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    bundle = build_dry_run_export_bundle(payload)
+    return {
+        "approval_evidence": bundle.get("approval_snapshot") if isinstance(bundle.get("approval_snapshot"), dict) else {},
+        "dry_run_execution_payload": payload,
+        "dry_run_export_bundle": bundle,
+        "execution_safety_decision": bundle.get("execution_safety_snapshot") if isinstance(bundle.get("execution_safety_snapshot"), dict) else {},
+        "lifecycle_event": bundle.get("lifecycle_event") if isinstance(bundle.get("lifecycle_event"), dict) else {},
+        "outcome_replay_event": bundle.get("outcome_event") if isinstance(bundle.get("outcome_event"), dict) else {},
+        "readiness_snapshot": bundle.get("readiness_snapshot") if isinstance(bundle.get("readiness_snapshot"), dict) else {},
+    }
+
+
 def install_dry_run_execution_route(
     app: FastAPI,
     *,
@@ -153,27 +192,48 @@ def install_dry_run_execution_route(
                 append=append,
             )
 
-    if any(getattr(route, "path", None) == "/dry-run-execution/export" for route in app.routes):
-        return
+    if not any(getattr(route, "path", None) == "/dry-run-execution/export" for route in app.routes):
+        @app.get("/dry-run-execution/export")
+        def dry_run_execution_export(
+            request: Request,
+            limit: int = Query(default=25, ge=1, le=200),
+            min_quality_score: float = Query(default=50.0, ge=0.0, le=100.0),
+            now_epoch: float | None = Query(default=None),
+        ):
+            payload = build_dry_run_execution_payload(
+                request=request,
+                runtime_root=runtime_root_provider(),
+                top_executable_provider=top_executable_provider,
+                readiness_provider=readiness_provider,
+                safety_provider=safety_provider,
+                approval_provider=approval_provider,
+                readiness_matcher=readiness_matcher,
+                limit=limit,
+                min_quality_score=min_quality_score,
+                now_epoch=now_epoch,
+                append=False,
+            )
+            return build_dry_run_export_bundle(payload)
 
-    @app.get("/dry-run-execution/export")
-    def dry_run_execution_export(
-        request: Request,
-        limit: int = Query(default=25, ge=1, le=200),
-        min_quality_score: float = Query(default=50.0, ge=0.0, le=100.0),
-        now_epoch: float | None = Query(default=None),
-    ):
-        payload = build_dry_run_execution_payload(
-            request=request,
-            runtime_root=runtime_root_provider(),
-            top_executable_provider=top_executable_provider,
-            readiness_provider=readiness_provider,
-            safety_provider=safety_provider,
-            approval_provider=approval_provider,
-            readiness_matcher=readiness_matcher,
-            limit=limit,
-            min_quality_score=min_quality_score,
-            now_epoch=now_epoch,
-            append=False,
-        )
-        return build_dry_run_export_bundle(payload)
+    if not any(getattr(route, "path", None) == "/evidence-health" for route in app.routes):
+        @app.get("/evidence-health")
+        def evidence_health(
+            request: Request,
+            limit: int = Query(default=25, ge=1, le=200),
+            min_quality_score: float = Query(default=50.0, ge=0.0, le=100.0),
+            now_epoch: float | None = Query(default=None),
+        ):
+            payload = build_dry_run_execution_payload(
+                request=request,
+                runtime_root=runtime_root_provider(),
+                top_executable_provider=top_executable_provider,
+                readiness_provider=readiness_provider,
+                safety_provider=safety_provider,
+                approval_provider=approval_provider,
+                readiness_matcher=readiness_matcher,
+                limit=limit,
+                min_quality_score=min_quality_score,
+                now_epoch=now_epoch,
+                append=False,
+            )
+            return build_evidence_health_payload(_evidence_payloads_from_dry_run(payload))
