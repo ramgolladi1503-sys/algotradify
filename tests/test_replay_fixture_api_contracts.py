@@ -24,7 +24,7 @@ def _load_fixture(filename: str) -> dict:
 
 def _seed_runtime_root(tmp_path, fixture: dict) -> Path:
     runtime_root = tmp_path / ".runtime"
-    runtime_root.mkdir()
+    runtime_root.mkdir(parents=True, exist_ok=True)
     (runtime_root / "outcome_replay_latest.json").write_text(
         json.dumps({"outcome_replay": fixture["outcome_replay"]}),
         encoding="utf-8",
@@ -93,11 +93,16 @@ def test_replay_fixture_api_single_candidate_lifecycle_summary(tmp_path, monkeyp
     payload = response.json()
     assert payload["candidate_id"] == "c1"
     assert payload["selected_count"] == 1
-    assert payload["submitted_count"] == 1
-    assert payload["accepted_count"] == 1
     assert payload["filled_count"] == 1
-    assert payload["closed_count"] == 1
     assert payload["current_status"] == "CLOSED"
+    assert payload["terminal"] is True
+    assert [event["status"] for event in payload["events"]] == [
+        "SELECTED",
+        "SUBMITTED",
+        "ACCEPTED",
+        "FILLED",
+        "CLOSED",
+    ]
     assert payload["best_quality_score"] == 90
     assert payload["query"]["source_count"] == 5
     assert payload["query"]["result_count"] == 5
