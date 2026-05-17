@@ -10,6 +10,126 @@ from movement_engine import StrategyContext, run_movement_opportunity_pipeline
 MOVEMENT_OPPORTUNITY_API_SCHEMA_VERSION = "1.0"
 MOVEMENT_OPPORTUNITY_API_ROUTE = "/movement-opportunity"
 
+MOVEMENT_OPPORTUNITY_RESPONSE_TOP_LEVEL_KEYS = (
+    "api_schema_version",
+    "route",
+    "method",
+    "read_only",
+    "is_order_action",
+    "context",
+    "summary",
+    "ranked_candidates",
+    "rank_records",
+    "exclusions",
+    "warnings",
+    "diagnostics",
+    "pipeline",
+)
+
+MOVEMENT_OPPORTUNITY_CONTEXT_REQUIRED_KEYS = (
+    "symbol",
+    "ts_epoch",
+    "is_order_action",
+)
+
+MOVEMENT_OPPORTUNITY_SUMMARY_REQUIRED_KEYS = (
+    "schema_version",
+    "provider_count",
+    "registry_candidate_count",
+    "pooled_candidate_count",
+    "option_enriched_count",
+    "allowed_count",
+    "blocked_count",
+    "no_trade_count",
+    "ranked_count",
+    "excluded_count",
+    "diagnostic_count",
+    "warning_count",
+    "top_candidate_id",
+    "read_only",
+    "is_order_action",
+)
+
+MOVEMENT_OPPORTUNITY_RANKED_CANDIDATE_REQUIRED_KEYS = (
+    "schema_version",
+    "candidate_id",
+    "strategy_id",
+    "movement_type",
+    "symbol",
+    "direction",
+    "status",
+    "raw_score",
+    "confidence_score",
+    "price_structure_score",
+    "option_confirmation_score",
+    "liquidity_score",
+    "freshness_score",
+    "volatility_score",
+    "regime_alignment_score",
+    "entry_trigger",
+    "invalid_if",
+    "rank_reason",
+    "blockers",
+    "warnings",
+    "evidence",
+    "is_order_action",
+)
+
+MOVEMENT_OPPORTUNITY_RANK_RECORD_REQUIRED_KEYS = (
+    "candidate_id",
+    "strategy_id",
+    "rank",
+    "rank_score",
+    "component_scores",
+    "tie_breaker",
+    "is_order_action",
+)
+
+MOVEMENT_OPPORTUNITY_EXCLUSION_REQUIRED_KEYS = (
+    "candidate_id",
+    "strategy_id",
+    "reason",
+    "status",
+    "blockers",
+    "is_order_action",
+)
+
+MOVEMENT_OPPORTUNITY_PIPELINE_REQUIRED_KEYS = (
+    "summary",
+    "registry_result",
+    "candidate_pool_result",
+    "option_enriched_candidates",
+    "no_trade_filter_result",
+    "rank_result",
+    "warnings",
+    "diagnostics",
+    "read_only",
+    "is_order_action",
+)
+
+MOVEMENT_OPPORTUNITY_RANK_RESULT_REQUIRED_KEYS = (
+    "ranked_candidates",
+    "rank_records",
+    "exclusions",
+    "summary",
+    "warnings",
+    "diagnostics",
+    "is_order_action",
+)
+
+MOVEMENT_OPPORTUNITY_REQUIRED_SAFE_FLAGS = {
+    "top_level": {"read_only": True, "is_order_action": False},
+    "context": {"is_order_action": False},
+    "summary": {"read_only": True, "is_order_action": False},
+    "ranked_candidates[]": {"is_order_action": False},
+    "rank_records[]": {"is_order_action": False},
+    "exclusions[]": {"is_order_action": False},
+    "diagnostics[]": {"is_order_action": False},
+    "pipeline": {"read_only": True, "is_order_action": False},
+    "pipeline.summary": {"read_only": True, "is_order_action": False},
+    "pipeline.rank_result": {"is_order_action": False},
+}
+
 _NUMERIC_CONTEXT_FIELDS = {
     "spot_ltp",
     "vwap",
@@ -57,21 +177,25 @@ def movement_opportunity_schema_contract() -> dict[str, Any]:
         "optional_numeric_query_params": sorted(_NUMERIC_CONTEXT_FIELDS),
         "optional_integer_query_params": sorted(_INT_CONTEXT_FIELDS),
         "optional_string_query_params": sorted(_STRING_CONTEXT_FIELDS),
-        "response_top_level_keys": [
-            "api_schema_version",
-            "route",
-            "method",
-            "read_only",
-            "is_order_action",
-            "context",
-            "summary",
-            "ranked_candidates",
-            "rank_records",
-            "exclusions",
-            "warnings",
-            "diagnostics",
-            "pipeline",
-        ],
+        "response_top_level_keys": list(MOVEMENT_OPPORTUNITY_RESPONSE_TOP_LEVEL_KEYS),
+        "response_nested_required_keys": {
+            "context": list(MOVEMENT_OPPORTUNITY_CONTEXT_REQUIRED_KEYS),
+            "summary": list(MOVEMENT_OPPORTUNITY_SUMMARY_REQUIRED_KEYS),
+            "ranked_candidates[]": list(MOVEMENT_OPPORTUNITY_RANKED_CANDIDATE_REQUIRED_KEYS),
+            "rank_records[]": list(MOVEMENT_OPPORTUNITY_RANK_RECORD_REQUIRED_KEYS),
+            "exclusions[]": list(MOVEMENT_OPPORTUNITY_EXCLUSION_REQUIRED_KEYS),
+            "diagnostics[]": ["is_order_action"],
+            "pipeline": list(MOVEMENT_OPPORTUNITY_PIPELINE_REQUIRED_KEYS),
+            "pipeline.summary": list(MOVEMENT_OPPORTUNITY_SUMMARY_REQUIRED_KEYS),
+            "pipeline.rank_result": list(MOVEMENT_OPPORTUNITY_RANK_RESULT_REQUIRED_KEYS),
+        },
+        "required_safe_flags": MOVEMENT_OPPORTUNITY_REQUIRED_SAFE_FLAGS,
+        "openapi_contract": {
+            "path": MOVEMENT_OPPORTUNITY_API_ROUTE,
+            "method": "get",
+            "schema_path": f"{MOVEMENT_OPPORTUNITY_API_ROUTE}/schema",
+            "required_query_params": ["symbol", "ts_epoch"],
+        },
     }
 
 
