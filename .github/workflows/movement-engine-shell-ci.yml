@@ -9,7 +9,7 @@ on:
 
 jobs:
   movement-engine-shell-contracts:
-    name: Movement registry, candidate pool, and provider contracts
+    name: Movement registry, candidate pool, provider, and option-pressure contracts
     runs-on: ubuntu-latest
 
     steps:
@@ -21,16 +21,19 @@ jobs:
           set -euo pipefail
           test -f movement_engine/registry.py
           test -f movement_engine/candidate_pool.py
+          test -f movement_engine/option_pressure.py
           test -f movement_engine/providers/__init__.py
           test -f movement_engine/providers/opening_drive_orb.py
           test -f movement_engine/providers/compression_trend.py
           test -f movement_engine/providers/vwap_trap.py
           test -f tests/test_movement_registry.py
           test -f tests/test_candidate_pool.py
+          test -f tests/test_option_pressure.py
           test -f tests/test_opening_drive_orb_providers.py
           test -f tests/test_compression_trend_providers.py
           test -f tests/test_vwap_trap_providers.py
           test -f docs/movement-registry-candidate-pool.md
+          test -f docs/option-pressure-confirmation.md
           test -f docs/opening-drive-orb-retest.md
           test -f docs/compression-breakout-trend-pullback.md
           test -f docs/vwap-reclaim-failed-breakout-trap.md
@@ -52,6 +55,7 @@ jobs:
             tests/test_candidate_pool.py \
             tests/test_movement_contract.py \
             tests/test_movement_regime.py \
+            tests/test_option_pressure.py \
             tests/test_opening_drive_orb_providers.py \
             tests/test_compression_trend_providers.py \
             tests/test_vwap_trap_providers.py \
