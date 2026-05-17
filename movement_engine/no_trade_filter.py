@@ -115,14 +115,19 @@ def apply_no_trade_filter(candidate: StrategyCandidate) -> tuple[StrategyCandida
     option_status = _option_pressure_status(candidate)
     option_payload = _option_pressure_payload(candidate)
 
-    if candidate.direction == Direction.NO_TRADE:
+    if option_status == OptionPressureStatus.BLOCKED.value:
+        blockers.append("OPTION_PRESSURE_BLOCKED")
+
+    if candidate.status == CandidateStatus.NO_TRADE:
+        blockers.append("NO_TRADE_STATUS")
+        if candidate.direction == Direction.NO_TRADE:
+            blockers.append("NO_TRADE_DIRECTION")
+        decision = NoTradeDecision.NO_TRADE
+        diagnostics.append(_diagnostic("NO_TRADE_STATUS", candidate, "Candidate already has NO_TRADE status."))
+    elif candidate.direction == Direction.NO_TRADE:
         blockers.append("NO_TRADE_DIRECTION")
         decision = NoTradeDecision.NO_TRADE
         diagnostics.append(_diagnostic("NO_TRADE_DIRECTION", candidate, "Candidate direction is NO_TRADE."))
-    elif candidate.status == CandidateStatus.NO_TRADE:
-        blockers.append("NO_TRADE_STATUS")
-        decision = NoTradeDecision.NO_TRADE
-        diagnostics.append(_diagnostic("NO_TRADE_STATUS", candidate, "Candidate already has NO_TRADE status."))
     elif option_status == OptionPressureStatus.CONFLICTING_PRESSURE.value:
         blockers.extend(["CONFLICTING_OPTION_PRESSURE", "CONFLICTING_TRAP_SIGNAL"])
         decision = NoTradeDecision.BLOCK_CANDIDATE
@@ -131,7 +136,6 @@ def apply_no_trade_filter(candidate: StrategyCandidate) -> tuple[StrategyCandida
         decision = NoTradeDecision.BLOCK_CANDIDATE
         diagnostics.append(_diagnostic("HARD_NO_TRADE_BLOCKER", candidate, "Candidate contains a hard no-trade blocker."))
     elif option_status == OptionPressureStatus.BLOCKED.value:
-        blockers.append("OPTION_PRESSURE_BLOCKED")
         decision = NoTradeDecision.BLOCK_CANDIDATE
         diagnostics.append(_diagnostic("OPTION_PRESSURE_BLOCKED", candidate, "Option pressure confirmation is blocked."))
     elif option_status == OptionPressureStatus.NOT_APPLICABLE.value and candidate.direction != Direction.NO_TRADE:
