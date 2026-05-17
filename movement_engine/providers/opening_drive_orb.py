@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import replace
 from typing import Any
 
 from movement_engine.candidate_pool import build_candidate_pool
@@ -45,6 +44,8 @@ def opening_drive_provider(context: StrategyContext) -> list[StrategyCandidate]:
     if direction is None:
         blockers.append("OPENING_DRIVE_NOT_TRIGGERED")
         direction = _direction_from_bias(context) or Direction.NO_TRADE
+
+    blockers.extend(_directional_hard_blockers(context, direction))
 
     evidence = _base_evidence(context)
     evidence.update(
@@ -97,6 +98,8 @@ def orb_retest_provider(context: StrategyContext) -> list[StrategyCandidate]:
     if direction is None:
         blockers.append("ORB_RETEST_NOT_TRIGGERED")
         direction = _direction_from_bias(context) or Direction.NO_TRADE
+
+    blockers.extend(_directional_hard_blockers(context, direction))
 
     evidence = _base_evidence(context)
     evidence.update(
@@ -233,7 +236,31 @@ def _shared_blockers(context: StrategyContext) -> tuple[list[str], list[str]]:
     if context.time_of_day and context.time_of_day.upper() == "CLOSED":
         blockers.append("MARKET_CLOSED")
 
+    if context.regime_hint and context.regime_hint.upper() == "CHOP":
+        blockers.append("NO_TRADE_CHOP")
+    if context.regime_hint and context.regime_hint.upper() in {"TRAP_RISK", "EXHAUSTION_RISK"}:
+        blockers.append("CONFLICTING_TRAP_SIGNAL")
+
     return blockers, warnings
+
+
+def _directional_hard_blockers(context: StrategyContext, direction: Direction) -> list[str]:
+    if direction == Direction.NO_TRADE:
+        return []
+
+    blockers: list[str] = []
+    spread = context.ce_spread_pct if direction == Direction.BUY_CALL else context.pe_spread_pct
+    depth = context.ce_depth if direction == Direction.BUY_CALL else context.pe_depth
+    option_ltp = context.option_ce_ltp if direction == Direction.BUY_CALL else context.option_pe_ltp
+
+    if option_ltp is None:
+        blockers.append("UNRESOLVED_CONTRACT")
+    if spread is None or spread > 3.0:
+        blockers.append("WIDE_SPREAD")
+    if depth is None or depth <= 0:
+        blockers.append("MISSING_DEPTH")
+
+    return blockers
 
 
 def _opening_window_warnings(context: StrategyContext) -> list[str]:
@@ -394,6 +421,10 @@ def _base_evidence(context: StrategyContext) -> dict[str, Any]:
         "regime_hint": context.regime_hint,
         "option_ltp_age_sec": context.option_ltp_age_sec,
         "quote_source": context.quote_source,
+        "ce_spread_pct": context.ce_spread_pct,
+        "pe_spread_pct": context.pe_spread_pct,
+        "ce_depth": context.ce_depth,
+        "pe_depth": context.pe_depth,
         "is_order_action": False,
     }
 
