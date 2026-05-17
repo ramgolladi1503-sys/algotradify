@@ -37,6 +37,13 @@ from movement_engine.option_pressure import (
     attach_option_pressure_to_candidates,
     confirm_option_pressure,
 )
+from movement_engine.pipeline import (
+    PIPELINE_SCHEMA_VERSION,
+    MovementOpportunityPipelineResult,
+    MovementOpportunityPipelineSummary,
+    build_default_movement_registry,
+    run_movement_opportunity_pipeline,
+)
 from movement_engine.providers import (
     COMPRESSION_BREAKOUT_PROVIDER_ID,
     FAILED_BREAKOUT_TRAP_PROVIDER_ID,
@@ -90,6 +97,8 @@ __all__ = [
     "HARD_NO_TRADE_BLOCKERS",
     "HARD_POOL_BLOCKERS",
     "MovementCandidateValidationResult",
+    "MovementOpportunityPipelineResult",
+    "MovementOpportunityPipelineSummary",
     "MovementProviderRegistrationResult",
     "MovementRankResult",
     "MovementRankSummary",
@@ -108,6 +117,7 @@ __all__ = [
     "ORB_RETEST_PROVIDER_ID",
     "OptionPressureConfirmationResult",
     "OptionPressureStatus",
+    "PIPELINE_SCHEMA_VERSION",
     "RANKER_EVIDENCE_KEY",
     "RankExclusionReason",
     "StrategyCandidate",
@@ -120,6 +130,7 @@ __all__ = [
     "attach_option_pressure_to_candidates",
     "build_candidate_pool",
     "build_compression_trend_candidate_pool",
+    "build_default_movement_registry",
     "build_opening_drive_orb_candidate_pool",
     "build_vwap_trap_candidate_pool",
     "candidate_from_mapping",
@@ -133,6 +144,7 @@ __all__ = [
     "register_compression_trend_providers",
     "register_opening_drive_orb_providers",
     "register_vwap_trap_providers",
+    "run_movement_opportunity_pipeline",
     "trend_pullback_provider",
     "validate_strategy_candidate",
     "vwap_reclaim_provider",
