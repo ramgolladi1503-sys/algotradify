@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import redis
 from redis.exceptions import RedisError
 
+from api.execution_mode_policy import execution_safety_policy_from_query
 from api.schemas import (
     CandidateTruthRecordResponse,
     ExecutionReadinessResponse,
@@ -480,26 +481,17 @@ def _int_query(request: Request, name: str, default: int) -> int:
         return default
 
 
+def _extend_unique(items: list[str] | None, additions: list[str] | None) -> list[str]:
+    out = list(items or [])
+    for item in additions or []:
+        if item and item not in out:
+            out.append(item)
+    return out
+
+
 def _execution_safety_policy_from_request(request: Request) -> ExecutionSafetyPolicy:
-    mode_raw = str(request.query_params.get("mode", "PAPER")).upper()
-    mode = ExecutionMode.LIVE if mode_raw == "LIVE" else ExecutionMode.PAPER
-    return ExecutionSafetyPolicy(
-        mode=mode,
-        manual_approval_required=_bool_query(request, "manual_approval_required", True),
-        kill_switch_enabled=_bool_query(request, "kill_switch_enabled", False),
-        broker_confirmation_required=_bool_query(request, "broker_confirmation_required", True),
-        dry_run_required=_bool_query(request, "dry_run_required", True),
-        max_daily_loss=_float_query(request, "max_daily_loss", 0.0),
-        current_daily_loss=_float_query(request, "current_daily_loss", 0.0),
-        max_orders_per_day=_int_query(request, "max_orders_per_day", 0),
-        orders_today=_int_query(request, "orders_today", 0),
-        max_quantity=_int_query(request, "max_quantity", 0),
-        requested_quantity=_int_query(request, "requested_quantity", 0),
-        approval_id=request.query_params.get("approval_id"),
-        operator_id=request.query_params.get("operator_id"),
-        broker_confirmation_id=request.query_params.get("broker_confirmation_id"),
-        warnings_acknowledged=_bool_query(request, "warnings_acknowledged", False),
-    )
+    policy, _ = execution_safety_policy_from_query(request.query_params)
+    return policy
 
 
 def _matching_readiness(top_executable: dict[str, Any], readiness: list[dict[str, Any]]) -> dict[str, Any] | None:
@@ -515,7 +507,18 @@ def _matching_readiness(top_executable: dict[str, Any], readiness: list[dict[str
 def _execution_safety_payload(request: Request, limit: int, min_quality_score: float) -> dict:
     top_executable = _top_executable_payload(limit=limit, min_quality_score=min_quality_score)
     readiness = _execution_readiness_payload(limit=limit)
-    decision = evaluate_execution_safety(_execution_safety_policy_from_request(request), top_executable=top_executable, execution_readiness=_matching_readiness(top_executable, readiness)).to_dict()
+    policy, mode_parse = execution_safety_policy_from_query(request.query_params)
+    decision = evaluate_execution_safety(policy, top_executable=top_executable, execution_readiness=_matching_readiness(top_executable, readiness)).to_dict()
+    decision["execution_mode_api_parse"] = mode_parse.to_dict()
+    decision["warnings"] = _extend_unique(decision.get("warnings"), mode_parse.warnings)
+    if mode_parse.blockers:
+        decision["blockers"] = _extend_unique(decision.get("blockers"), mode_parse.blockers)
+        decision["execution_permitted"] = False
+        decision["status"] = "BLOCKED"
+        decision["simulated_order_allowed"] = False
+        decision["paper_order_allowed"] = False
+        decision["broker_api_allowed"] = False
+        decision["real_order_allowed"] = False
     decision["top_executable"] = top_executable
     decision["readiness_records_checked"] = len(readiness)
     decision["safety_visibility_only"] = True
