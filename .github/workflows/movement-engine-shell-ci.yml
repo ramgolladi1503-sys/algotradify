@@ -9,21 +9,25 @@ on:
 
 jobs:
   movement-engine-shell-contracts:
-    name: Movement registry and candidate pool shell contracts
+    name: Movement registry, candidate pool, and opening providers contracts
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Validate PR 60 required files
+      - name: Validate movement engine required files
         run: |
           set -euo pipefail
           test -f movement_engine/registry.py
           test -f movement_engine/candidate_pool.py
+          test -f movement_engine/providers/__init__.py
+          test -f movement_engine/providers/opening_drive_orb.py
           test -f tests/test_movement_registry.py
           test -f tests/test_candidate_pool.py
+          test -f tests/test_opening_drive_orb_providers.py
           test -f docs/movement-registry-candidate-pool.md
+          test -f docs/opening-drive-orb-retest.md
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -35,11 +39,12 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r api/requirements.txt pytest httpx
 
-      - name: Run movement engine shell contract tests
+      - name: Run movement engine shell and provider contract tests
         run: |
           python -m pytest \
             tests/test_movement_registry.py \
             tests/test_candidate_pool.py \
             tests/test_movement_contract.py \
             tests/test_movement_regime.py \
+            tests/test_opening_drive_orb_providers.py \
             -q
