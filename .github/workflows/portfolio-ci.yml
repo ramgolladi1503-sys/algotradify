@@ -27,6 +27,7 @@ jobs:
           test -f docs/dry-run-execution-adapter.md
           test -f docs/dry-run-api-mount.md
           test -f docs/dry-run-control-tower-visibility.md
+          test -f docs/replay-contract-index.md
           test -f docs/replay-query-api.md
           test -f docs/replay-timeline-ui.md
           test -f docs/replay-result-drilldown-ux.md
