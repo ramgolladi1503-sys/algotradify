@@ -20,11 +20,17 @@ from movement_engine.contract import (
     validate_strategy_candidate,
 )
 from movement_engine.providers import (
+    COMPRESSION_BREAKOUT_PROVIDER_ID,
     OPENING_DRIVE_PROVIDER_ID,
     ORB_RETEST_PROVIDER_ID,
+    TREND_PULLBACK_PROVIDER_ID,
+    build_compression_trend_candidate_pool,
+    compression_breakout_provider,
     opening_drive_provider,
     orb_retest_provider,
+    register_compression_trend_providers,
     register_opening_drive_orb_providers,
+    trend_pullback_provider,
 )
 from movement_engine.providers.opening_drive_orb import build_opening_drive_orb_candidate_pool
 from movement_engine.regime import (
@@ -40,6 +46,7 @@ from movement_engine.registry import (
 )
 
 __all__ = [
+    "COMPRESSION_BREAKOUT_PROVIDER_ID",
     "CandidatePoolResult",
     "CandidatePoolSummary",
     "CandidateStatus",
@@ -56,12 +63,17 @@ __all__ = [
     "ORB_RETEST_PROVIDER_ID",
     "StrategyCandidate",
     "StrategyContext",
+    "TREND_PULLBACK_PROVIDER_ID",
     "build_candidate_pool",
+    "build_compression_trend_candidate_pool",
     "build_opening_drive_orb_candidate_pool",
     "candidate_from_mapping",
     "classify_movement_regime",
+    "compression_breakout_provider",
     "opening_drive_provider",
     "orb_retest_provider",
+    "register_compression_trend_providers",
     "register_opening_drive_orb_providers",
+    "trend_pullback_provider",
     "validate_strategy_candidate",
 ]
