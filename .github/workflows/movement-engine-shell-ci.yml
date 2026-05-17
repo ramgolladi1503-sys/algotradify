@@ -1,0 +1,45 @@
+name: Movement Engine Shell CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  movement-engine-shell-contracts:
+    name: Movement registry and candidate pool shell contracts
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate PR 60 required files
+        run: |
+          set -euo pipefail
+          test -f movement_engine/registry.py
+          test -f movement_engine/candidate_pool.py
+          test -f tests/test_movement_registry.py
+          test -f tests/test_candidate_pool.py
+          test -f docs/movement-registry-candidate-pool.md
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install backend test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r api/requirements.txt pytest httpx
+
+      - name: Run movement engine shell contract tests
+        run: |
+          python -m pytest \
+            tests/test_movement_registry.py \
+            tests/test_candidate_pool.py \
+            tests/test_movement_contract.py \
+            tests/test_movement_regime.py \
+            -q
