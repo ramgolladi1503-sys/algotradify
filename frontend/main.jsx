@@ -30,6 +30,32 @@ const OPERATOR_VIEWS = {
   lifecycle: { label: 'Lifecycle focus', filters: DEFAULT_FILTERS },
 };
 const DEFAULT_PREFS = { filters: DEFAULT_FILTERS, replayQuery: DEFAULT_REPLAY_QUERY, operatorView: 'default' };
+const REPLAY_CONTRACT_HEALTH = {
+  status: 'REPLAY_CONTRACTS_INDEXED',
+  indexDoc: 'docs/replay-contract-index.md',
+  readOnly: true,
+  source: 'static_frontend_contract_registry',
+  docs: [
+    'docs/replay-contract-index.md',
+    'docs/replay-query-api.md',
+    'docs/replay-timeline-ui.md',
+    'docs/replay-result-drilldown-ux.md',
+    'docs/replay-analytics-summary-panel.md',
+    'docs/replay-export-snapshot-panel.md',
+    'docs/replay-evidence-regression-fixtures.md',
+    'docs/replay-fixture-api-contract-tests.md',
+    'docs/replay-fixture-ui-snapshot-contracts.md',
+  ],
+  tests: [
+    'tests/test_outcome_replay_query.py',
+    'tests/test_outcome_replay_api_query.py',
+    'tests/test_replay_evidence_fixtures.py',
+    'tests/test_replay_fixture_api_contracts.py',
+    'tests/test_replay_fixture_ui_snapshot_contracts.py',
+    'tests/test_control_tower_ui.py',
+  ],
+  fixtures: ['tests/fixtures/replay/empty_replay.json', 'tests/fixtures/replay/single_candidate_lifecycle.json', 'tests/fixtures/replay/multi_candidate_mixed_status.json'],
+};
 const muted = { color: '#99a7c7' };
 
 function normalizeReplayQuery(raw = {}) {
@@ -72,6 +98,7 @@ function ReplayAnalyticsSummaryPanel({ events }) { const summary = replayAnalyti
 function replaySnapshotGroups(events) { const groups = new Map(); arr(events).forEach((event) => { const key = replayCandidateKey(event); const existing = groups.get(key) || []; existing.push(event); groups.set(key, existing); }); return Array.from(groups.entries()).map(([candidate_id, events]) => ({ candidate_id, event_count: events.length, latest_status: replayStatus(events[events.length - 1] || {}), strategy: replayStrategy(events[0] || {}), events })); }
 function buildReplayExportSnapshot({ replayQuery, queryMetadata, events }) { const rows = arr(events); return { snapshot_type: 'control_tower_replay_export_snapshot', read_only: true, source: 'frontend_filtered_replay_view', filters: normalizeReplayQuery(replayQuery), query_metadata: queryMetadata || {}, analytics_summary: replayAnalyticsSummary(rows), grouped_timeline: replaySnapshotGroups(rows), events: rows }; }
 function ReplayExportSnapshotPanel({ replayQuery, outcomeReplay, events }) { const snapshot = buildReplayExportSnapshot({ replayQuery, queryMetadata: outcomeReplay?.query, events }); const snapshotJson = JSON.stringify(snapshot, null, 2); return <Card title='Replay Export Snapshot Panel' right={<Pill value='COPYABLE_READ_ONLY_JSON' />}><p style={muted}>Copyable JSON snapshot of the filtered replay view. This is frontend-only text output and does not write files.</p><div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 8 }}><Metric label='snapshot_type' value={snapshot.snapshot_type} /><Metric label='read_only' value={snapshot.read_only} /><Metric label='event_count' value={snapshot.analytics_summary.eventCount} /><Metric label='candidate_count' value={snapshot.analytics_summary.candidateCount} /></div><textarea readOnly value={snapshotJson} rows={12} style={{ width: '100%', boxSizing: 'border-box', borderRadius: 8, border: '1px solid #334155', background: '#0b1220', color: '#e8eefc', padding: 8 }} /></Card>; }
+function ReplayContractHealthBadge() { const health = REPLAY_CONTRACT_HEALTH; return <Card title='Replay Contract Health Badge' right={<Pill value={health.status} />}><p style={muted}>Static frontend registry for replay contract docs, tests, and fixtures. Portfolio CI proves these files exist.</p><div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 8 }}><Metric label='index_doc' value={health.indexDoc} /><Metric label='read_only' value={health.readOnly} /><Metric label='doc_count' value={health.docs.length} /><Metric label='test_count' value={health.tests.length} /><Metric label='fixture_count' value={health.fixtures.length} /><Metric label='source' value={health.source} /></div><div>contract docs</div><Chips items={health.docs} /><div>contract tests</div><Chips items={health.tests} /><div>contract fixtures</div><Chips items={health.fixtures} /></Card>; }
 
 function App() {
   const initialPrefs = loadPersistedPreferences();
@@ -102,6 +129,7 @@ function App() {
     <DryRunExecutionAdapterCard dryRunExecution={state.dryRunExecution} topExecutable={state.topExecutable} executionSafety={state.executionSafety} />
     <DryRunEvidenceExportPreviewCard dryRunExport={state.dryRunExport} />
     <EvidenceHealthPanel evidenceHealth={state.evidenceHealth} />
+    <ReplayContractHealthBadge />
     <BarChart title='Readiness Breakdown Chart' data={analytics.readinessBreakdown} /><BarChart title='Outcome Counts Chart' data={analytics.outcomeCounts} /><BarChart title='Quality Score Distribution Chart' data={analytics.qualityDistribution} /><BarChart title='Candidate Truth Breakdown Chart' data={analytics.truthBreakdown} />
     <ReplayAnalyticsSummaryPanel events={filtered.outcomeEvents} />
     <ReplayExportSnapshotPanel replayQuery={replayQuery} outcomeReplay={state.outcomeReplay} events={filtered.outcomeEvents} />

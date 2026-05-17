@@ -2,6 +2,12 @@
 
 This document is the single map for the replay API, Control Tower replay UI, replay fixtures, and replay contract tests.
 
+Canonical path:
+
+```text
+docs/replay-contract-index.md
+```
+
 ## Purpose
 
 The replay layer exists to inspect historical and simulated outcome evidence safely.
@@ -113,6 +119,7 @@ Replay UI is split across these surfaces:
 2. Replay Result Drilldown
 3. Replay Analytics Summary Panel
 4. Replay Export Snapshot Panel
+5. Replay Contract Health Badge
 
 ### Replay Timeline UI
 
@@ -156,6 +163,18 @@ Purpose:
 
 It is a textarea-based frontend snapshot. It is not a backend file export.
 
+### Replay Contract Health Badge
+
+Purpose:
+
+- surface this index path
+- surface replay contract docs
+- surface replay contract tests
+- surface replay fixtures
+- stay static and read-only
+
+Portfolio CI proves the listed files exist. The badge does not perform runtime filesystem checks.
+
 ## Fixture contract
 
 Fixture directory:
@@ -190,6 +209,7 @@ Covered cases:
 | Fixture stability | `tests/test_replay_evidence_fixtures.py` | Fixture shape and deterministic query cases |
 | Fixture API | `tests/test_replay_fixture_api_contracts.py` | Fixture-backed API response stability |
 | Fixture UI | `tests/test_replay_fixture_ui_snapshot_contracts.py` | Fixture-backed Control Tower replay terms |
+| Contract badge | `tests/test_replay_contract_health_badge.py` | Static badge and replay index visibility |
 | Control Tower UI | `tests/test_control_tower_ui.py` | Static UI safety and section coverage |
 
 ## Safety boundary
