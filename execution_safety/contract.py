@@ -6,13 +6,68 @@ from typing import Any
 
 
 class ExecutionMode(StrEnum):
+    SIM = "SIM"
     PAPER = "PAPER"
     LIVE = "LIVE"
 
 
 @dataclass(frozen=True)
+class ExecutionModeContract:
+    """Pure execution-mode contract.
+
+    This contract decides what type of order surface is allowed for a mode.
+    It is intentionally separated from broker adapters so tests can prove mode
+    safety without importing or mocking any real broker client.
+    """
+
+    mode: ExecutionMode = ExecutionMode.SIM
+    live_broker_ready: bool = False
+    live_risk_ready: bool = False
+    live_kill_switch_ready: bool = False
+    real_broker_order_adapter_enabled: bool = False
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "mode": self.mode.value,
+            "live_broker_ready": self.live_broker_ready,
+            "live_risk_ready": self.live_risk_ready,
+            "live_kill_switch_ready": self.live_kill_switch_ready,
+            "real_broker_order_adapter_enabled": self.real_broker_order_adapter_enabled,
+        }
+
+
+@dataclass(frozen=True)
+class ExecutionModeDecision:
+    mode: ExecutionMode
+    status: str
+    blockers: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+    simulated_order_allowed: bool = False
+    paper_order_allowed: bool = False
+    broker_api_allowed: bool = False
+    real_order_allowed: bool = False
+
+    @property
+    def is_order_action(self) -> bool:
+        return False
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "mode": self.mode.value,
+            "status": self.status,
+            "blockers": list(self.blockers),
+            "warnings": list(self.warnings),
+            "simulated_order_allowed": self.simulated_order_allowed,
+            "paper_order_allowed": self.paper_order_allowed,
+            "broker_api_allowed": self.broker_api_allowed,
+            "real_order_allowed": self.real_order_allowed,
+            "is_order_action": self.is_order_action,
+        }
+
+
+@dataclass(frozen=True)
 class ExecutionSafetyPolicy:
-    mode: ExecutionMode = ExecutionMode.PAPER
+    mode: ExecutionMode = ExecutionMode.SIM
     manual_approval_required: bool = True
     kill_switch_enabled: bool = False
     broker_confirmation_required: bool = True
@@ -27,6 +82,19 @@ class ExecutionSafetyPolicy:
     operator_id: str | None = None
     broker_confirmation_id: str | None = None
     warnings_acknowledged: bool = False
+    live_broker_ready: bool = False
+    live_risk_ready: bool = False
+    live_kill_switch_ready: bool = False
+    real_broker_order_adapter_enabled: bool = False
+
+    def execution_mode_contract(self) -> ExecutionModeContract:
+        return ExecutionModeContract(
+            mode=self.mode,
+            live_broker_ready=self.live_broker_ready,
+            live_risk_ready=self.live_risk_ready,
+            live_kill_switch_ready=self.live_kill_switch_ready,
+            real_broker_order_adapter_enabled=self.real_broker_order_adapter_enabled,
+        )
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -45,6 +113,10 @@ class ExecutionSafetyPolicy:
             "operator_id": self.operator_id,
             "broker_confirmation_id": self.broker_confirmation_id,
             "warnings_acknowledged": self.warnings_acknowledged,
+            "live_broker_ready": self.live_broker_ready,
+            "live_risk_ready": self.live_risk_ready,
+            "live_kill_switch_ready": self.live_kill_switch_ready,
+            "real_broker_order_adapter_enabled": self.real_broker_order_adapter_enabled,
         }
 
 
@@ -56,6 +128,10 @@ class ExecutionSafetyDecision:
     blockers: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     audit: dict[str, Any] = field(default_factory=dict)
+    simulated_order_allowed: bool = False
+    paper_order_allowed: bool = False
+    broker_api_allowed: bool = False
+    real_order_allowed: bool = False
 
     @property
     def is_order_action(self) -> bool:
@@ -74,8 +150,60 @@ class ExecutionSafetyDecision:
             "warnings": list(self.warnings),
             "audit": dict(self.audit),
             "requires_manual_approval": self.requires_manual_approval,
+            "simulated_order_allowed": self.simulated_order_allowed,
+            "paper_order_allowed": self.paper_order_allowed,
+            "broker_api_allowed": self.broker_api_allowed,
+            "real_order_allowed": self.real_order_allowed,
             "is_order_action": self.is_order_action,
         }
+
+
+def evaluate_execution_mode_contract(contract: ExecutionModeContract) -> ExecutionModeDecision:
+    blockers: list[str] = []
+    warnings: list[str] = []
+
+    simulated_order_allowed = contract.mode == ExecutionMode.SIM
+    paper_order_allowed = contract.mode == ExecutionMode.PAPER
+    broker_api_allowed = False
+    real_order_allowed = False
+
+    if contract.mode == ExecutionMode.SIM:
+        warnings.append("SIM_MODE_NO_BROKER_ORDERS")
+    elif contract.mode == ExecutionMode.PAPER:
+        warnings.append("PAPER_MODE_NO_REAL_BROKER_PLACEMENT")
+    elif contract.mode == ExecutionMode.LIVE:
+        warnings.append("LIVE_MODE_REQUIRES_STRICT_APPROVAL")
+        if not contract.real_broker_order_adapter_enabled:
+            blockers.append("LIVE_REAL_BROKER_ADAPTER_NOT_ENABLED")
+        if not contract.live_broker_ready:
+            blockers.append("LIVE_BROKER_READINESS_REQUIRED")
+        if not contract.live_risk_ready:
+            blockers.append("LIVE_RISK_READINESS_REQUIRED")
+        if not contract.live_kill_switch_ready:
+            blockers.append("LIVE_KILL_SWITCH_READINESS_REQUIRED")
+        broker_api_allowed = not blockers
+        real_order_allowed = not blockers
+
+    blockers = _dedupe(blockers)
+    warnings = _dedupe(warnings)
+    return ExecutionModeDecision(
+        mode=contract.mode,
+        status="PERMITTED" if not blockers else "BLOCKED",
+        blockers=blockers,
+        warnings=warnings,
+        simulated_order_allowed=simulated_order_allowed,
+        paper_order_allowed=paper_order_allowed,
+        broker_api_allowed=broker_api_allowed,
+        real_order_allowed=real_order_allowed,
+    )
+
+
+def assert_broker_order_call_allowed(contract: ExecutionModeContract) -> None:
+    decision = evaluate_execution_mode_contract(contract)
+    if not decision.broker_api_allowed or not decision.real_order_allowed:
+        raise PermissionError(
+            f"Broker order calls are blocked for mode={contract.mode.value}: {','.join(decision.blockers or decision.warnings)}"
+        )
 
 
 def evaluate_execution_safety(
@@ -86,14 +214,12 @@ def evaluate_execution_safety(
 ) -> ExecutionSafetyDecision:
     blockers: list[str] = []
     warnings: list[str] = []
+    mode_decision = evaluate_execution_mode_contract(policy.execution_mode_contract())
+    blockers.extend(mode_decision.blockers)
+    warnings.extend(mode_decision.warnings)
 
     if policy.kill_switch_enabled:
         blockers.append("KILL_SWITCH_ENABLED")
-
-    if policy.mode == ExecutionMode.LIVE:
-        warnings.append("LIVE_MODE_REQUIRES_STRICT_APPROVAL")
-    else:
-        warnings.append("PAPER_MODE_ONLY")
 
     if policy.dry_run_required:
         blockers.append("DRY_RUN_REQUIRED")
@@ -131,7 +257,7 @@ def evaluate_execution_safety(
 
     blockers = _dedupe(blockers)
     warnings = _dedupe(warnings)
-    permitted = not blockers and policy.mode in {ExecutionMode.PAPER, ExecutionMode.LIVE}
+    permitted = not blockers and policy.mode in {ExecutionMode.SIM, ExecutionMode.PAPER, ExecutionMode.LIVE}
 
     return ExecutionSafetyDecision(
         execution_permitted=permitted,
@@ -141,10 +267,16 @@ def evaluate_execution_safety(
         warnings=warnings,
         audit={
             "policy": policy.to_dict(),
+            "execution_mode_contract": policy.execution_mode_contract().to_dict(),
+            "execution_mode_decision": mode_decision.to_dict(),
             "top_executable_candidate_id": _candidate_id(top_executable),
             "execution_readiness_candidate_id": execution_readiness.get("candidate_id") if isinstance(execution_readiness, dict) else None,
-            "safety_contract_version": "v1",
+            "safety_contract_version": "v2_execution_mode_contract",
         },
+        simulated_order_allowed=mode_decision.simulated_order_allowed,
+        paper_order_allowed=mode_decision.paper_order_allowed,
+        broker_api_allowed=mode_decision.broker_api_allowed,
+        real_order_allowed=mode_decision.real_order_allowed,
     )
 
 

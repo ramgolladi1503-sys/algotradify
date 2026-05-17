@@ -1,19 +1,23 @@
-"""Execution safety contracts for Algotradify.
-
-This package defines pre-order safety gates only. It does not place orders,
-call broker APIs, or mutate broker/runtime state.
-"""
+"""Execution safety contracts for Algotradify."""
 
 from execution_safety.contract import (
     ExecutionMode,
+    ExecutionModeContract,
+    ExecutionModeDecision,
     ExecutionSafetyDecision,
     ExecutionSafetyPolicy,
+    assert_broker_order_call_allowed,
+    evaluate_execution_mode_contract,
     evaluate_execution_safety,
 )
 
 __all__ = [
     "ExecutionMode",
+    "ExecutionModeContract",
+    "ExecutionModeDecision",
     "ExecutionSafetyDecision",
     "ExecutionSafetyPolicy",
+    "assert_broker_order_call_allowed",
+    "evaluate_execution_mode_contract",
     "evaluate_execution_safety",
 ]
