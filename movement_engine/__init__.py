@@ -57,6 +57,15 @@ from movement_engine.providers import (
     vwap_reclaim_provider,
 )
 from movement_engine.providers.opening_drive_orb import build_opening_drive_orb_candidate_pool
+from movement_engine.ranker import (
+    RANKER_EVIDENCE_KEY,
+    CandidateRankExclusion,
+    CandidateRankRecord,
+    MovementRankResult,
+    MovementRankSummary,
+    RankExclusionReason,
+    rank_movement_candidates,
+)
 from movement_engine.regime import (
     MovementRegime,
     MovementRegimeResult,
@@ -73,6 +82,8 @@ __all__ = [
     "COMPRESSION_BREAKOUT_PROVIDER_ID",
     "CandidatePoolResult",
     "CandidatePoolSummary",
+    "CandidateRankExclusion",
+    "CandidateRankRecord",
     "CandidateStatus",
     "Direction",
     "FAILED_BREAKOUT_TRAP_PROVIDER_ID",
@@ -80,6 +91,8 @@ __all__ = [
     "HARD_POOL_BLOCKERS",
     "MovementCandidateValidationResult",
     "MovementProviderRegistrationResult",
+    "MovementRankResult",
+    "MovementRankSummary",
     "MovementRegime",
     "MovementRegimeResult",
     "MovementRegistryRunResult",
@@ -95,6 +108,8 @@ __all__ = [
     "ORB_RETEST_PROVIDER_ID",
     "OptionPressureConfirmationResult",
     "OptionPressureStatus",
+    "RANKER_EVIDENCE_KEY",
+    "RankExclusionReason",
     "StrategyCandidate",
     "StrategyContext",
     "TREND_PULLBACK_PROVIDER_ID",
@@ -114,6 +129,7 @@ __all__ = [
     "failed_breakout_trap_provider",
     "opening_drive_provider",
     "orb_retest_provider",
+    "rank_movement_candidates",
     "register_compression_trend_providers",
     "register_opening_drive_orb_providers",
     "register_vwap_trap_providers",
