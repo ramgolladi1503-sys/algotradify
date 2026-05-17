@@ -9,7 +9,7 @@ on:
 
 jobs:
   movement-engine-shell-contracts:
-    name: Movement registry, candidate pool, provider, option-pressure, no-trade, and ranker contracts
+    name: Movement registry, candidate pool, provider, option-pressure, no-trade, ranker, and pipeline contracts
     runs-on: ubuntu-latest
 
     steps:
@@ -24,6 +24,7 @@ jobs:
           test -f movement_engine/option_pressure.py
           test -f movement_engine/no_trade_filter.py
           test -f movement_engine/ranker.py
+          test -f movement_engine/pipeline.py
           test -f movement_engine/providers/__init__.py
           test -f movement_engine/providers/opening_drive_orb.py
           test -f movement_engine/providers/compression_trend.py
@@ -33,6 +34,7 @@ jobs:
           test -f tests/test_option_pressure.py
           test -f tests/test_no_trade_filter.py
           test -f tests/test_movement_ranker.py
+          test -f tests/test_movement_pipeline.py
           test -f tests/test_opening_drive_orb_providers.py
           test -f tests/test_compression_trend_providers.py
           test -f tests/test_vwap_trap_providers.py
@@ -40,6 +42,7 @@ jobs:
           test -f docs/option-pressure-confirmation.md
           test -f docs/no-trade-conflict-filter.md
           test -f docs/movement-candidate-ranker.md
+          test -f docs/movement-opportunity-pipeline.md
           test -f docs/opening-drive-orb-retest.md
           test -f docs/compression-breakout-trend-pullback.md
           test -f docs/vwap-reclaim-failed-breakout-trap.md
@@ -64,6 +67,7 @@ jobs:
             tests/test_option_pressure.py \
             tests/test_no_trade_filter.py \
             tests/test_movement_ranker.py \
+            tests/test_movement_pipeline.py \
             tests/test_opening_drive_orb_providers.py \
             tests/test_compression_trend_providers.py \
             tests/test_vwap_trap_providers.py \
