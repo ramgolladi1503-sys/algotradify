@@ -15,6 +15,12 @@ import {
   arr,
   show,
 } from './controlTowerCards.jsx';
+import {
+  DEFAULT_MOVEMENT_QUERY,
+  MovementOpportunityPanel,
+  buildMovementOpportunityQueryString,
+  normalizeMovementQuery,
+} from './movementOpportunityPanel.jsx';
 
 const ENV = import.meta.env || {};
 const API_BASE = ENV.VITE_API_BASE_URL || ENV.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
@@ -28,8 +34,9 @@ const OPERATOR_VIEWS = {
   ready: { label: 'Trade-ready focus', filters: { query: '', status: 'allowed', minQuality: 70 } },
   replay: { label: 'Replay focus', filters: DEFAULT_FILTERS },
   lifecycle: { label: 'Lifecycle focus', filters: DEFAULT_FILTERS },
+  movement: { label: 'Movement focus', filters: DEFAULT_FILTERS },
 };
-const DEFAULT_PREFS = { filters: DEFAULT_FILTERS, replayQuery: DEFAULT_REPLAY_QUERY, operatorView: 'default' };
+const DEFAULT_PREFS = { filters: DEFAULT_FILTERS, replayQuery: DEFAULT_REPLAY_QUERY, movementQuery: DEFAULT_MOVEMENT_QUERY, operatorView: 'default' };
 const REPLAY_CONTRACT_HEALTH = {
   status: 'REPLAY_CONTRACTS_INDEXED',
   indexDoc: 'docs/replay-contract-index.md',
@@ -67,7 +74,7 @@ function normalizeReplayQuery(raw = {}) {
     tsToEpoch: String(raw.tsToEpoch ?? raw.ts_to_epoch ?? ''),
   };
 }
-function loadPersistedPreferences() { if (typeof window === 'undefined') return DEFAULT_PREFS; try { const p = JSON.parse(window.localStorage.getItem(PERSISTED_PREFS_KEY) || '{}'); const legacyReplayKey = `replay${'CandidateId'}`; const replayQuery = normalizeReplayQuery(p.replayQuery || { candidateId: p[legacyReplayKey] || '' }); return { filters: { ...DEFAULT_FILTERS, ...(p.filters || {}) }, replayQuery, operatorView: p.operatorView || 'default' }; } catch { return DEFAULT_PREFS; } }
+function loadPersistedPreferences() { if (typeof window === 'undefined') return DEFAULT_PREFS; try { const p = JSON.parse(window.localStorage.getItem(PERSISTED_PREFS_KEY) || '{}'); const legacyReplayKey = `replay${'CandidateId'}`; const replayQuery = normalizeReplayQuery(p.replayQuery || { candidateId: p[legacyReplayKey] || '' }); const movementQuery = normalizeMovementQuery(p.movementQuery || DEFAULT_MOVEMENT_QUERY); return { filters: { ...DEFAULT_FILTERS, ...(p.filters || {}) }, replayQuery, movementQuery, operatorView: p.operatorView || 'default' }; } catch { return DEFAULT_PREFS; } }
 function savePersistedPreferences(p) { if (typeof window !== 'undefined') window.localStorage.setItem(PERSISTED_PREFS_KEY, JSON.stringify(p)); }
 function clearPersistedPreferences() { if (typeof window !== 'undefined') window.localStorage.removeItem(PERSISTED_PREFS_KEY); }
 function statusText(row) { return String(row?.status || row?.truth_status || row?.opportunity_status || row?.current_status || row?.bucket || '').toUpperCase(); }
@@ -105,23 +112,27 @@ function App() {
   const [events, setEvents] = useState([]);
   const [filters, setFilters] = useState(initialPrefs.filters);
   const [replayQuery, setReplayQuery] = useState(initialPrefs.replayQuery);
+  const [movementQuery, setMovementQuery] = useState(initialPrefs.movementQuery);
   const [operatorView, setOperatorView] = useState(initialPrefs.operatorView);
-  const [state, setState] = useState({ health: null, preflight: null, snapshot: null, opportunities: [], candidateTruth: [], opportunityLayer: null, executionReadiness: [], tradeQuality: [], topExecutable: null, executionSafety: null, dryRunExecution: null, dryRunExport: null, evidenceHealth: null, fillLifecycle: null, outcomeReplay: null });
-  useEffect(() => savePersistedPreferences({ filters, replayQuery, operatorView }), [filters, replayQuery, operatorView]);
+  const [state, setState] = useState({ health: null, preflight: null, snapshot: null, opportunities: [], candidateTruth: [], opportunityLayer: null, executionReadiness: [], tradeQuality: [], topExecutable: null, executionSafety: null, dryRunExecution: null, dryRunExport: null, evidenceHealth: null, fillLifecycle: null, outcomeReplay: null, movementOpportunity: null });
+  useEffect(() => savePersistedPreferences({ filters, replayQuery, movementQuery, operatorView }), [filters, replayQuery, movementQuery, operatorView]);
   async function fetchJson(path) { const r = await fetch(`${API_BASE}${path}`); if (!r.ok) throw new Error(path); return r.json(); }
-  async function fetchControlTower(replayOverride = replayQuery) { const replayQueryString = buildReplayQueryString(replayOverride); const requests = [['health', '/runtime/health'], ['preflight', '/runtime/preflight'], ['snapshot', '/runtime/snapshot'], ['opportunities', '/opportunities?limit=20'], ['candidateTruth', '/candidate-truth?limit=20'], ['opportunityLayer', '/opportunity-layer?limit=20'], ['executionReadiness', '/execution-readiness?limit=20'], ['tradeQuality', '/trade-quality?limit=20'], ['topExecutable', '/top-executable?limit=20'], ['executionSafety', '/execution-safety?limit=20'], ['dryRunExecution', '/dry-run-execution?limit=20'], ['dryRunExport', '/dry-run-execution/export?limit=20'], ['evidenceHealth', '/evidence-health?limit=20'], ['fillLifecycle', '/fill-lifecycle'], ['outcomeReplay', `/outcome-replay${replayQueryString}`]]; const results = await Promise.allSettled(requests.map(([, p]) => fetchJson(p))); const next = {}; results.forEach((r, i) => { if (r.status === 'fulfilled') next[requests[i][0]] = r.value; }); setState((p) => ({ ...p, ...next })); }
+  async function fetchControlTower(replayOverride = replayQuery, movementOverride = movementQuery) { const replayQueryString = buildReplayQueryString(replayOverride); const movementQueryString = buildMovementOpportunityQueryString(movementOverride); const requests = [['health', '/runtime/health'], ['preflight', '/runtime/preflight'], ['snapshot', '/runtime/snapshot'], ['opportunities', '/opportunities?limit=20'], ['candidateTruth', '/candidate-truth?limit=20'], ['opportunityLayer', '/opportunity-layer?limit=20'], ['executionReadiness', '/execution-readiness?limit=20'], ['tradeQuality', '/trade-quality?limit=20'], ['topExecutable', '/top-executable?limit=20'], ['executionSafety', '/execution-safety?limit=20'], ['dryRunExecution', '/dry-run-execution?limit=20'], ['dryRunExport', '/dry-run-execution/export?limit=20'], ['evidenceHealth', '/evidence-health?limit=20'], ['fillLifecycle', '/fill-lifecycle'], ['outcomeReplay', `/outcome-replay${replayQueryString}`], ['movementOpportunity', `/movement-opportunity${movementQueryString}`]]; const results = await Promise.allSettled(requests.map(([, p]) => fetchJson(p))); const next = {}; results.forEach((r, i) => { if (r.status === 'fulfilled') next[requests[i][0]] = r.value; }); setState((p) => ({ ...p, ...next })); }
   function connect() { const ws = new WebSocket(WS_URL); ws.onmessage = (event) => { try { const payload = JSON.parse(event.data); setEvents((p) => [payload, ...p.slice(0, 80)]); if (payload?.type === 'runtime_snapshot' && payload?.payload) setState((p) => ({ ...p, snapshot: payload.payload })); } catch { setEvents((p) => [{ type: 'raw_ws', payload: event.data }, ...p.slice(0, 80)]); } }; ws.onclose = () => setTimeout(connect, 1000); ws.onerror = () => setTimeout(connect, 1000); }
   useEffect(() => { connect(); fetchControlTower(); const t = setInterval(() => fetchControlTower(), 3000); return () => clearInterval(t); }, []);
-  function resetToDefaultView() { clearPersistedPreferences(); setOperatorView('default'); setFilters(DEFAULT_FILTERS); setReplayQuery(DEFAULT_REPLAY_QUERY); }
+  function resetToDefaultView() { clearPersistedPreferences(); setOperatorView('default'); setFilters(DEFAULT_FILTERS); setReplayQuery(DEFAULT_REPLAY_QUERY); setMovementQuery(DEFAULT_MOVEMENT_QUERY); }
   function applyOperatorView(k) { setOperatorView(k); setFilters({ ...(OPERATOR_VIEWS[k] || OPERATOR_VIEWS.default).filters }); }
   function updateReplayQuery(patch) { setReplayQuery((p) => ({ ...p, ...patch })); }
-  function resetReplayQuery() { const next = DEFAULT_REPLAY_QUERY; setReplayQuery(next); fetchControlTower(next); }
+  function resetReplayQuery() { const next = DEFAULT_REPLAY_QUERY; setReplayQuery(next); fetchControlTower(next, movementQuery); }
+  function updateMovementQuery(patch) { setMovementQuery((p) => normalizeMovementQuery({ ...p, ...patch })); }
+  function applyMovementQuery(next = movementQuery) { const normalized = normalizeMovementQuery(next); setMovementQuery(normalized); fetchControlTower(replayQuery, normalized); }
+  function resetMovementQuery() { const next = DEFAULT_MOVEMENT_QUERY; setMovementQuery(next); fetchControlTower(replayQuery, next); }
 
   const selected = state.topExecutable?.selected;
   const filtered = useMemo(() => ({ opportunities: applyFilters(state.opportunities, filters), candidateTruth: applyFilters(state.candidateTruth, filters), executionReadiness: applyFilters(state.executionReadiness, filters), tradeQuality: applyFilters(state.tradeQuality, filters), topRejected: applyFilters(state.topExecutable?.rejected || [], filters), outcomeEvents: applyFilters(arr(state.outcomeReplay?.events), filters) }), [state, filters]);
   const analytics = { readinessBreakdown: [], qualityDistribution: [], outcomeCounts: [], truthBreakdown: [] };
 
-  return <div style={{ background: '#0b1220', color: '#e8eefc', minHeight: '100vh', padding: 20 }}><h1>Algotradify Control Tower</h1><p style={muted}>Runtime health, persisted UI preferences, execution safety, dry-run evidence, export preview, evidence health, replay timeline query filters, analytics charts, replay drilldowns, and lifecycle evidence.</p>
+  return <div style={{ background: '#0b1220', color: '#e8eefc', minHeight: '100vh', padding: 20 }}><h1>Algotradify Control Tower</h1><p style={muted}>Runtime health, persisted UI preferences, execution safety, dry-run evidence, export preview, evidence health, movement opportunity panel, replay timeline query filters, analytics charts, replay drilldowns, and lifecycle evidence.</p>
     <Card title='Operator Views'>{Object.entries(OPERATOR_VIEWS).map(([k, v]) => <button key={k} onClick={() => applyOperatorView(k)} style={buttonStyle(operatorView === k)}>{v.label}</button>)} <button onClick={resetToDefaultView}>Reset to default view</button><span> Persisted UI Preferences</span></Card>
     <Card title='Frontend Filters'><span>candidate search/filter</span><input value={filters.query} onChange={(e) => setFilters((p) => ({ ...p, query: e.target.value }))} /><span>status filter</span><select value={filters.status} onChange={(e) => setFilters((p) => ({ ...p, status: e.target.value }))}><option value='all'>all</option><option value='blocked'>blocked-only view</option><option value='selected'>selected-only view</option><option value='allowed'>allowed-only view</option><option value='rejected'>rejected-only view</option></select><span>quality score threshold filter</span><button onClick={() => setFilters(DEFAULT_FILTERS)}>Reset filters</button></Card>
     <Card title='Runtime'><Metric label='health' value={state.health?.status} /><Metric label='preflight' value={state.preflight?.status} /></Card><Card title='Cycle Snapshot'><Metric label='stage' value={state.snapshot?.cycle_stage} /></Card><Card title='Tradability Summary'><Metric label='real candidates' value={filtered.candidateTruth.length} /></Card><Card title='Top Executable' right={<Pill value={state.topExecutable?.status} />}><Metric label='selected candidate' value={selected?.candidate_id} /><Metric label='quality_score' value={selected?.quality_score} /><div>is_order: {show(state.topExecutable?.is_order)}</div></Card>
@@ -129,6 +140,7 @@ function App() {
     <DryRunExecutionAdapterCard dryRunExecution={state.dryRunExecution} topExecutable={state.topExecutable} executionSafety={state.executionSafety} />
     <DryRunEvidenceExportPreviewCard dryRunExport={state.dryRunExport} />
     <EvidenceHealthPanel evidenceHealth={state.evidenceHealth} />
+    <MovementOpportunityPanel movementOpportunity={state.movementOpportunity} movementQuery={movementQuery} updateMovementQuery={updateMovementQuery} applyMovementQuery={applyMovementQuery} resetMovementQuery={resetMovementQuery} />
     <ReplayContractHealthBadge />
     <BarChart title='Readiness Breakdown Chart' data={analytics.readinessBreakdown} /><BarChart title='Outcome Counts Chart' data={analytics.outcomeCounts} /><BarChart title='Quality Score Distribution Chart' data={analytics.qualityDistribution} /><BarChart title='Candidate Truth Breakdown Chart' data={analytics.truthBreakdown} />
     <ReplayAnalyticsSummaryPanel events={filtered.outcomeEvents} />
