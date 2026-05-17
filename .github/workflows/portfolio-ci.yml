@@ -34,6 +34,7 @@ jobs:
           test -f docs/replay-export-snapshot-panel.md
           test -f docs/replay-evidence-regression-fixtures.md
           test -f docs/replay-fixture-api-contract-tests.md
+          test -f docs/replay-fixture-ui-snapshot-contracts.md
           test -f docs/ci-test-suite-map.md
           test -f .github/workflows/core-unit-ci.yml
           test -f .github/workflows/lifecycle-safety-ci.yml
@@ -85,6 +86,7 @@ jobs:
           test -f tests/test_outcome_replay_api_query.py
           test -f tests/test_replay_evidence_fixtures.py
           test -f tests/test_replay_fixture_api_contracts.py
+          test -f tests/test_replay_fixture_ui_snapshot_contracts.py
           test -f tests/test_execution_safety.py
           test -f tests/test_execution_safety_api.py
           test -f tests/test_dry_run_execution_adapter.py
@@ -138,7 +140,7 @@ jobs:
           python -m pip install -r api/requirements.txt pytest httpx
 
       - name: Run runtime, preflight, strategy, candidate-truth, opportunity-layer, broker-contract, market-readiness, execution-readiness, evidence-wiring, trade-quality, top-selector, fill-lifecycle, outcome-replay, execution-safety, dry-run-execution, API, WebSocket, and schema contract tests
-        run: pytest -q tests/test_runtime_contract.py tests/test_runtime_preflight.py tests/test_strategy_registry.py tests/test_candidate_truth.py tests/test_opportunity_layer.py tests/test_broker_contract_resolver.py tests/test_broker_contract_readiness.py tests/test_market_readiness.py tests/test_execution_readiness.py tests/test_execution_readiness_api.py tests/test_execution_readiness_evidence_wiring.py tests/test_trade_quality.py tests/test_trade_quality_api.py tests/test_top_selector.py tests/test_top_selector_api.py tests/test_fill_lifecycle.py tests/test_fill_lifecycle_api.py tests/test_outcome_replay.py tests/test_outcome_replay_query.py tests/test_outcome_replay_api.py tests/test_outcome_replay_api_query.py tests/test_replay_evidence_fixtures.py tests/test_replay_fixture_api_contracts.py tests/test_execution_safety.py tests/test_execution_safety_api.py tests/test_dry_run_execution_adapter.py tests/test_dry_run_execution_api.py tests/test_dry_run_execution_api_mount.py tests/test_dry_run_execution_api_direct_mount.py tests/test_control_tower_ui.py tests/test_api_contracts.py tests/test_websocket_contracts.py tests/test_api_schema_contracts.py
+        run: pytest -q tests/test_runtime_contract.py tests/test_runtime_preflight.py tests/test_strategy_registry.py tests/test_candidate_truth.py tests/test_opportunity_layer.py tests/test_broker_contract_resolver.py tests/test_broker_contract_readiness.py tests/test_market_readiness.py tests/test_execution_readiness.py tests/test_execution_readiness_api.py tests/test_execution_readiness_evidence_wiring.py tests/test_trade_quality.py tests/test_trade_quality_api.py tests/test_top_selector.py tests/test_top_selector_api.py tests/test_fill_lifecycle.py tests/test_fill_lifecycle_api.py tests/test_outcome_replay.py tests/test_outcome_replay_query.py tests/test_outcome_replay_api.py tests/test_outcome_replay_api_query.py tests/test_replay_evidence_fixtures.py tests/test_replay_fixture_api_contracts.py tests/test_replay_fixture_ui_snapshot_contracts.py tests/test_execution_safety.py tests/test_execution_safety_api.py tests/test_dry_run_execution_adapter.py tests/test_dry_run_execution_api.py tests/test_dry_run_execution_api_mount.py tests/test_dry_run_execution_api_direct_mount.py tests/test_control_tower_ui.py tests/test_api_contracts.py tests/test_websocket_contracts.py tests/test_api_schema_contracts.py
 
       - name: Generate portfolio test report
         run: |
@@ -168,6 +170,7 @@ jobs:
           - Outcome replay query tests prove replay can be filtered without mutating runtime or creating order actions.
           - Replay evidence fixture tests prove empty, single-candidate, and mixed-status replay cases stay deterministic.
           - Replay fixture API contract tests prove fixture-backed /outcome-replay responses stay stable.
+          - Replay fixture UI snapshot contract tests prove fixture-backed Control Tower replay terms stay stable.
           - Execution safety tests prove manual approval, kill switch, loss/order/quantity guards, dry-run and broker-confirmation gates block execution by default.
           - Dry-run execution tests prove preview-only evidence creation, append-only JSONL persistence, safe flags, and direct API mount behavior.
           - Execution safety API/UI tests prove safety decisions are visible but do not trigger orders.
