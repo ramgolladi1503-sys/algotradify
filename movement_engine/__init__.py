@@ -13,13 +13,21 @@ from movement_engine.contract import (
     candidate_from_mapping,
     validate_strategy_candidate,
 )
+from movement_engine.regime import (
+    MovementRegime,
+    MovementRegimeResult,
+    classify_movement_regime,
+)
 
 __all__ = [
     "CandidateStatus",
     "Direction",
     "MovementCandidateValidationResult",
+    "MovementRegime",
+    "MovementRegimeResult",
     "StrategyCandidate",
     "StrategyContext",
     "candidate_from_mapping",
+    "classify_movement_regime",
     "validate_strategy_candidate",
 ]
