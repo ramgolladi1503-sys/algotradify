@@ -24,13 +24,16 @@ jobs:
           test -f movement_engine/providers/__init__.py
           test -f movement_engine/providers/opening_drive_orb.py
           test -f movement_engine/providers/compression_trend.py
+          test -f movement_engine/providers/vwap_trap.py
           test -f tests/test_movement_registry.py
           test -f tests/test_candidate_pool.py
           test -f tests/test_opening_drive_orb_providers.py
           test -f tests/test_compression_trend_providers.py
+          test -f tests/test_vwap_trap_providers.py
           test -f docs/movement-registry-candidate-pool.md
           test -f docs/opening-drive-orb-retest.md
           test -f docs/compression-breakout-trend-pullback.md
+          test -f docs/vwap-reclaim-failed-breakout-trap.md
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -51,4 +54,5 @@ jobs:
             tests/test_movement_regime.py \
             tests/test_opening_drive_orb_providers.py \
             tests/test_compression_trend_providers.py \
+            tests/test_vwap_trap_providers.py \
             -q
