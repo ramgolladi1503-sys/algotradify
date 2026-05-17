@@ -212,7 +212,7 @@ def _has_trap_risk(context: StrategyContext, range_position: float | None, vwap_
 
 
 def _has_exhaustion_risk(context: StrategyContext, vwap_distance: float, premium_bias: float) -> bool:
-    if vwap_distance < 0.01:
+    if vwap_distance < 0.025:
         return False
     if context.spot_ltp is None or context.vwap is None:
         return False
