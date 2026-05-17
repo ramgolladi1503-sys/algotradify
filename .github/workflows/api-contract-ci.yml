@@ -35,6 +35,7 @@ jobs:
             tests/test_fill_lifecycle_api.py \
             tests/test_outcome_replay_api.py \
             tests/test_execution_safety_api.py \
+            tests/test_movement_opportunity_api.py \
             tests/test_api_contracts.py \
             tests/test_websocket_contracts.py \
             tests/test_api_schema_contracts.py
