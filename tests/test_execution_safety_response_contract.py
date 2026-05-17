@@ -107,8 +107,9 @@ def test_execution_safety_response_schema_contract_lists_required_safety_fields(
         "safety_visibility_only",
     }.issubset(required)
     assert contract["supported_modes"] == ["SIM", "PAPER", "LIVE"]
-    assert "broker_api_allowed" in contract["safe_false_flags"]
-    assert "real_order_allowed" in contract["safe_false_flags"]
+    assert contract["always_false_flags"] == ["is_order_action"]
+    assert "broker_api_allowed" in contract["invalid_mode_false_flags"]
+    assert "real_order_allowed" in contract["invalid_mode_false_flags"]
 
 
 def test_execution_safety_response_contract_accepts_default_blocked_endpoint_payload(tmp_path, monkeypatch):
@@ -163,7 +164,14 @@ def test_execution_safety_response_contract_detects_missing_and_unsafe_fields():
         "broker_api_allowed": True,
         "real_order_allowed": True,
         "is_order_action": True,
-        "execution_mode_api_parse": {"mode": "LIVE", "invalid_mode": False, "supported_modes": ["SIM", "PAPER", "LIVE"], "blockers": [], "warnings": [], "is_order_action": False},
+        "execution_mode_api_parse": {
+            "mode": "SIM",
+            "invalid_mode": True,
+            "supported_modes": ["SIM", "PAPER", "LIVE"],
+            "blockers": ["INVALID_EXECUTION_MODE"],
+            "warnings": ["EXECUTION_MODE_FORCED_TO_SIM"],
+            "is_order_action": False,
+        },
         "top_executable": {},
         "readiness_records_checked": 1,
         "safety_visibility_only": True,
@@ -174,5 +182,6 @@ def test_execution_safety_response_contract_detects_missing_and_unsafe_fields():
     assert result["valid"] is False
     assert "raw_mode" in result["execution_mode_parse_missing_keys"]
     assert "is_order_action must be false" in result["safe_flag_violations"]
-    assert "broker_api_allowed must be false" in result["safe_flag_violations"]
-    assert "real_order_allowed must be false" in result["safe_flag_violations"]
+    assert "execution_permitted must be false when invalid_mode=true" in result["safe_flag_violations"]
+    assert "broker_api_allowed must be false when invalid_mode=true" in result["safe_flag_violations"]
+    assert "real_order_allowed must be false when invalid_mode=true" in result["safe_flag_violations"]
