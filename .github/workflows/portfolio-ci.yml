@@ -29,6 +29,8 @@ jobs:
           test -f docs/execution-safety-response-contract.md
           test -f docs/order-intent-contract.md
           test -f docs/paper-broker-adapter-contract.md
+          test -f docs/movement-opportunity-engine-bible.md
+          test -f docs/movement-opportunity-engine-roadmap.md
           test -f docs/dry-run-execution-adapter.md
           test -f docs/dry-run-api-mount.md
           test -f docs/dry-run-control-tower-visibility.md
@@ -166,7 +168,7 @@ jobs:
 
           ## Scope
 
-          This CI gate validates runtime-root, runtime-preflight, strategy-contract, candidate-truth, opportunity-layer, broker-contract resolver/readiness, market-readiness, execution-readiness, runtime evidence wiring, trade-quality, top-selector, fill-lifecycle, outcome-replay, execution-safety, strict execution-mode API parsing/wiring, execution-safety response schema contracts, pre-broker order-intent contracts, synthetic paper-broker contracts, dry-run execution adapter/API mounts, FastAPI, WebSocket, and schema contract tests.
+          This CI gate validates runtime-root, runtime-preflight, strategy-contract, candidate-truth, opportunity-layer, broker-contract resolver/readiness, market-readiness, execution-readiness, runtime evidence wiring, trade-quality, top-selector, fill-lifecycle, outcome-replay, execution-safety, strict execution-mode API parsing/wiring, execution-safety response schema contracts, pre-broker order-intent contracts, synthetic paper-broker contracts, movement-opportunity planning docs, dry-run execution adapter/API mounts, FastAPI, WebSocket, and schema contract tests.
 
           ## Checks
 
@@ -193,13 +195,14 @@ jobs:
           - Execution-safety response contract tests prove required safety flags and parser metadata cannot disappear silently.
           - Order-intent contract tests prove selected candidates can become validated pre-broker intents without broker calls.
           - Paper-broker adapter tests prove synthetic acknowledgements are created without external service calls.
+          - Movement-opportunity docs define the next candidate/regime/registry/ranker architecture before strategy expansion.
           - Dry-run execution tests prove preview-only evidence creation, append-only JSONL persistence, safe flags, and direct API mount behavior.
           - Execution safety API/UI tests prove safety decisions are visible but do not trigger orders.
           - FastAPI, WebSocket, and OpenAPI schema contract tests run.
 
           ## Current honest limitation
 
-          Execution safety, order intent, synthetic paper broker, and dry-run execution are visibility/evidence layers. They do not place real orders, call external trading services, or expose execution buttons.
+          Execution safety, order intent, synthetic paper broker, and dry-run execution are visibility/evidence layers. Movement-opportunity work is currently planning-only. They do not place real orders, call external trading services, or expose execution buttons.
           REPORT
 
       - name: Upload portfolio report
