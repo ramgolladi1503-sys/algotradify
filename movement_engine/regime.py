@@ -114,14 +114,15 @@ def classify_movement_regime(context: StrategyContext | None) -> MovementRegimeR
         scores[MovementRegime.CHOP.value] += 0.15
 
     if _is_choppy(context):
-        scores[MovementRegime.CHOP.value] += 0.55
-        scores[MovementRegime.RANGE.value] += 0.15
+        scores[MovementRegime.CHOP.value] += 0.80
+        scores[MovementRegime.RANGE.value] += 0.05
+        evidence["chop_signature"] = True
 
-    if _has_trap_risk(context, range_position):
+    if _has_trap_risk(context, range_position, vwap_distance):
         scores[MovementRegime.TRAP_RISK.value] += 0.55
 
     if _has_exhaustion_risk(context, vwap_distance, premium_bias):
-        scores[MovementRegime.EXHAUSTION_RISK.value] += 0.50
+        scores[MovementRegime.EXHAUSTION_RISK.value] += 0.60
 
     if context.volatility_state:
         state = context.volatility_state.upper()
@@ -198,8 +199,10 @@ def _is_choppy(context: StrategyContext) -> bool:
     return bool(near_vwap and narrow and weak_premium)
 
 
-def _has_trap_risk(context: StrategyContext, range_position: float | None) -> bool:
+def _has_trap_risk(context: StrategyContext, range_position: float | None, vwap_distance: float) -> bool:
     if range_position is None:
+        return False
+    if vwap_distance >= 0.025:
         return False
     ce = _float(context.ce_premium_change, 0.0)
     pe = _float(context.pe_premium_change, 0.0)
