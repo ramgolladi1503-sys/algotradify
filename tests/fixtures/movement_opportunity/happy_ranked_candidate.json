@@ -1,0 +1,105 @@
+{
+  "api_schema_version": "1.0",
+  "route": "/movement-opportunity",
+  "method": "GET",
+  "read_only": true,
+  "is_order_action": false,
+  "context": {
+    "symbol": "NIFTY",
+    "ts_epoch": 77777.0,
+    "is_order_action": false
+  },
+  "summary": {
+    "schema_version": "1.0",
+    "provider_count": 6,
+    "registry_candidate_count": 6,
+    "pooled_candidate_count": 6,
+    "option_enriched_count": 6,
+    "allowed_count": 1,
+    "blocked_count": 0,
+    "no_trade_count": 0,
+    "ranked_count": 1,
+    "excluded_count": 0,
+    "diagnostic_count": 0,
+    "warning_count": 0,
+    "top_candidate_id": "move_nifty_opening_drive_001",
+    "read_only": true,
+    "is_order_action": false
+  },
+  "ranked_candidates": [
+    {
+      "schema_version": "1.0",
+      "candidate_id": "move_nifty_opening_drive_001",
+      "strategy_id": "opening_drive",
+      "movement_type": "OPENING_DRIVE",
+      "symbol": "NIFTY",
+      "direction": "CALL_BIAS",
+      "status": "RANKED",
+      "raw_score": 82.5,
+      "confidence_score": 78.0,
+      "price_structure_score": 80.0,
+      "option_confirmation_score": 88.0,
+      "liquidity_score": 90.0,
+      "freshness_score": 95.0,
+      "volatility_score": 65.0,
+      "regime_alignment_score": 72.0,
+      "entry_trigger": "spot holds above opening drive high with call pressure",
+      "invalid_if": "spot loses VWAP or option pressure fades",
+      "rank_reason": "opening drive with fresh quote and call-side pressure",
+      "blockers": [],
+      "warnings": [],
+      "evidence": {"source": "fixture", "quote_source": "PRIMARY"},
+      "is_order_action": false
+    }
+  ],
+  "rank_records": [
+    {
+      "candidate_id": "move_nifty_opening_drive_001",
+      "strategy_id": "opening_drive",
+      "rank": 1,
+      "rank_score": 82.5,
+      "component_scores": {"option_confirmation_score": 88.0, "liquidity_score": 90.0},
+      "tie_breaker": "highest_rank_score",
+      "is_order_action": false
+    }
+  ],
+  "exclusions": [],
+  "warnings": [],
+  "diagnostics": [],
+  "pipeline": {
+    "summary": {
+      "schema_version": "1.0",
+      "provider_count": 6,
+      "registry_candidate_count": 6,
+      "pooled_candidate_count": 6,
+      "option_enriched_count": 6,
+      "allowed_count": 1,
+      "blocked_count": 0,
+      "no_trade_count": 0,
+      "ranked_count": 1,
+      "excluded_count": 0,
+      "diagnostic_count": 0,
+      "warning_count": 0,
+      "top_candidate_id": "move_nifty_opening_drive_001",
+      "read_only": true,
+      "is_order_action": false
+    },
+    "registry_result": {"is_order_action": false},
+    "candidate_pool_result": {"is_order_action": false},
+    "option_enriched_candidates": [],
+    "no_trade_filter_result": {"candidates": [], "results": [], "is_order_action": false},
+    "rank_result": {
+      "ranked_candidates": [],
+      "rank_records": [],
+      "exclusions": [],
+      "summary": {},
+      "warnings": [],
+      "diagnostics": [],
+      "is_order_action": false
+    },
+    "warnings": [],
+    "diagnostics": [],
+    "read_only": true,
+    "is_order_action": false
+  }
+}
