@@ -175,11 +175,12 @@ def _duplicate_blockers(event: dict[str, Any], existing_events: list[dict[str, A
     incoming_idempotency_key = str(event["idempotency_key"])
     incoming_json = _stable_json(event)
     for existing in existing_events:
+        existing_json = _stable_json(existing)
+        if str(existing["idempotency_key"]) == incoming_idempotency_key and existing_json == incoming_json:
+            return ["PAPER_EVENT_DUPLICATE_IDEMPOTENCY_KEY_NOOP"]
         if str(existing["event_id"]) == incoming_event_id:
             return ["PAPER_EVENT_DUPLICATE_EVENT_ID"]
         if str(existing["idempotency_key"]) == incoming_idempotency_key:
-            if _stable_json(existing) == incoming_json:
-                return ["PAPER_EVENT_DUPLICATE_IDEMPOTENCY_KEY_NOOP"]
             return ["PAPER_EVENT_CONFLICTING_IDEMPOTENCY_KEY"]
     return []
 
