@@ -2,11 +2,11 @@
 
 ## Latest confirmed merged
 
-GitHub PR #101 / Product PR 93 — Paper Evidence Persistence Layer
+GitHub PR #102 / Product PR 94 — Paper Session Boundary and Reset Controls
 
 ## Current product PR
 
-PR 94 — Paper Session Boundary and Reset Controls
+PR 95 — End-to-End Paper Scenario Suite
 
 ## Current posture
 
@@ -26,18 +26,18 @@ ml_ranker_work=false
 - PR 91 — Paper State Reconciliation Report
 - PR 92 — Paper Trading Pipeline Orchestrator
 - PR 93 — Paper Evidence Persistence Layer
+- PR 94 — Paper Session Boundary and Reset Controls
 
 ## Current implementation focus
 
-- Create deterministic paper session identifiers.
-- Build SESSION_START, SESSION_END, and RESET_MARKER boundary records.
-- Persist boundary records through the local paper evidence persistence layer.
-- Load/filter session boundary records without mutating history.
-- Keep reset markers non-destructive: no delete, truncate, or rewrite behavior.
+- Run deterministic paper-only scenarios.
+- Prove session boundary, pipeline, and persistence work together.
+- Surface expected blocked paths instead of hiding them.
+- Keep scenarios local, deterministic, and disconnected from runtime/live/API/UI.
 
-## Next product PR only after PR 94 merges
+## Next product PR only after PR 95 merges
 
-PR 95 — End-to-End Paper Scenario Suite
+PR 96 — Paper Evidence Export Bundle
 
 ## Hard rules
 
@@ -52,6 +52,7 @@ PR 95 — End-to-End Paper Scenario Suite
 - Pipeline orchestrates existing paper modules; it does not become runtime/live execution.
 - Persistence stores evidence only; it does not become runtime execution.
 - Session reset markers are non-destructive evidence boundaries only.
+- Scenario suite proves controlled paper paths only; it is not runtime execution.
 - Every PR must include Grill, GSD, and Hermes handoff artifacts.
 - Every PR must include acceptance proof.
 
