@@ -3,12 +3,15 @@ from __future__ import annotations
 from market_readiness import (
     LiveMarketDataSnapshotStatus,
     MarketReadinessStatus,
+    OptionChainDepthQualityStatus,
     QuoteFreshnessMonitorStatus,
     build_live_market_data_snapshot,
+    build_option_chain_depth_quality_monitor,
     build_quote_freshness_runtime_monitor,
     evaluate_market_readiness,
     evaluate_market_readiness_batch,
     live_market_data_snapshot_schema_contract,
+    option_chain_depth_quality_schema_contract,
     quote_freshness_runtime_monitor_schema_contract,
 )
 
@@ -38,6 +41,18 @@ def _live_snapshot_row(**overrides):
         "expiry": "WEEKLY",
         "ce_count": 120,
         "pe_count": 118,
+    }
+    row.update(overrides)
+    return row
+
+
+def _option_depth_row(**overrides):
+    row = {
+        "ce_count": 120,
+        "pe_count": 118,
+        "ce_depth": 850.0,
+        "pe_depth": 760.0,
+        "depth_age_sec": 1.2,
     }
     row.update(overrides)
     return row
@@ -358,3 +373,113 @@ def test_quote_freshness_runtime_monitor_accepts_prebuilt_snapshots():
     assert result.status == QuoteFreshnessMonitorStatus.HEALTHY
     assert result.snapshots[0] is snapshot
     assert result.to_dict()["summary"]["ready_count"] == 1
+
+
+def test_option_chain_depth_quality_schema_contract_is_safe_and_complete():
+    contract = option_chain_depth_quality_schema_contract()
+
+    assert contract["schema_version"] == "1.0"
+    assert contract["monitor_type"] == "OPTION_CHAIN_DEPTH_QUALITY_MONITOR"
+    assert contract["safe_flags"] == {"read_only": True, "is_order_action": False}
+    assert "summary" in contract["required_keys"]
+    assert "side_quality" in contract["required_keys"]
+    assert "imbalance_ratio" in contract["summary_required_keys"]
+    assert "ce_available" in contract["side_quality_required_keys"]
+    assert contract["default_thresholds"]["min_side_count"] == 1
+    assert contract["default_thresholds"]["min_total_depth"] == 100.0
+
+
+def test_option_chain_depth_quality_monitor_is_healthy_for_balanced_fresh_depth():
+    result = build_option_chain_depth_quality_monitor(_option_depth_row())
+    payload = result.to_dict()
+
+    assert result.status == OptionChainDepthQualityStatus.HEALTHY
+    assert payload["monitor_type"] == "OPTION_CHAIN_DEPTH_QUALITY_MONITOR"
+    assert payload["read_only"] is True
+    assert payload["is_order_action"] is False
+    assert payload["summary"]["ce_count"] == 120
+    assert payload["summary"]["pe_count"] == 118
+    assert payload["summary"]["total_depth"] == 1610.0
+    assert payload["summary"]["missing_side_count"] == 0
+    assert payload["summary"]["zero_side_count"] == 0
+    assert payload["summary"]["shallow_depth_count"] == 0
+    assert payload["summary"]["stale_depth_count"] == 0
+    assert payload["summary"]["imbalance_count"] == 0
+    assert payload["side_quality"]["ce_available"] is True
+    assert payload["side_quality"]["pe_available"] is True
+    assert payload["side_quality"]["depth_fresh"] is True
+    assert payload["blockers"] == []
+
+
+def test_option_chain_depth_quality_monitor_blocks_missing_side():
+    result = build_option_chain_depth_quality_monitor(_option_depth_row(ce_count=None))
+    payload = result.to_dict()
+
+    assert result.status == OptionChainDepthQualityStatus.BLOCKED_MISSING_SIDE
+    assert payload["summary"]["missing_side_count"] == 1
+    assert "MISSING_CE_SIDE_COUNT" in payload["blockers"]
+    assert payload["side_quality"]["ce_available"] is False
+    assert payload["read_only"] is True
+    assert payload["is_order_action"] is False
+
+
+def test_option_chain_depth_quality_monitor_blocks_zero_side():
+    result = build_option_chain_depth_quality_monitor(_option_depth_row(pe_count=0))
+    payload = result.to_dict()
+
+    assert result.status == OptionChainDepthQualityStatus.BLOCKED_ZERO_SIDE
+    assert payload["summary"]["zero_side_count"] == 1
+    assert "ZERO_PE_SIDE_COUNT" in payload["blockers"]
+    assert payload["side_quality"]["pe_available"] is False
+
+
+def test_option_chain_depth_quality_monitor_blocks_shallow_depth():
+    result = build_option_chain_depth_quality_monitor(_option_depth_row(ce_depth=20.0, pe_depth=25.0), min_total_depth=100.0)
+    payload = result.to_dict()
+
+    assert result.status == OptionChainDepthQualityStatus.BLOCKED_SHALLOW_DEPTH
+    assert payload["summary"]["total_depth"] == 45.0
+    assert payload["summary"]["shallow_depth_count"] == 1
+    assert "TOTAL_DEPTH_BELOW_MINIMUM" in payload["blockers"]
+
+
+def test_option_chain_depth_quality_monitor_blocks_stale_depth():
+    result = build_option_chain_depth_quality_monitor(_option_depth_row(depth_age_sec=9.5), max_depth_age_sec=5.0)
+    payload = result.to_dict()
+
+    assert result.status == OptionChainDepthQualityStatus.BLOCKED_STALE_DEPTH
+    assert payload["summary"]["stale_depth_count"] == 1
+    assert "STALE_OPTION_DEPTH" in payload["blockers"]
+    assert payload["side_quality"]["depth_fresh"] is False
+
+
+def test_option_chain_depth_quality_monitor_blocks_depth_imbalance():
+    result = build_option_chain_depth_quality_monitor(_option_depth_row(ce_depth=900.0, pe_depth=100.0), max_imbalance_ratio=3.0)
+    payload = result.to_dict()
+
+    assert result.status == OptionChainDepthQualityStatus.BLOCKED_DEPTH_IMBALANCE
+    assert payload["summary"]["imbalance_count"] == 1
+    assert payload["summary"]["imbalance_ratio"] == 9.0
+    assert "OPTION_DEPTH_IMBALANCE" in payload["blockers"]
+    assert payload["side_quality"]["imbalance_ok"] is False
+
+
+def test_option_chain_depth_quality_monitor_empty_when_no_depth_data():
+    result = build_option_chain_depth_quality_monitor(None)
+    payload = result.to_dict()
+
+    assert result.status == OptionChainDepthQualityStatus.EMPTY
+    assert "NO_OPTION_CHAIN_DEPTH_DATA" in payload["blockers"]
+    assert payload["summary"]["missing_side_count"] == 2
+    assert payload["summary"]["shallow_depth_count"] == 3
+    assert payload["read_only"] is True
+    assert payload["is_order_action"] is False
+
+
+def test_option_chain_depth_quality_monitor_warns_when_imbalance_unavailable():
+    result = build_option_chain_depth_quality_monitor(_option_depth_row(ce_depth=0.0, pe_depth=760.0))
+    payload = result.to_dict()
+
+    assert "DEPTH_IMBALANCE_UNAVAILABLE" in payload["warnings"]
+    assert payload["read_only"] is True
+    assert payload["is_order_action"] is False
