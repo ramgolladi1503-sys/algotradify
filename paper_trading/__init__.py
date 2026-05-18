@@ -4,9 +4,9 @@ This package builds simulation-only paper intent, lifecycle, fill, position, MTM
 realized PnL, slippage, performance snapshot, canonical paper event journal,
 deterministic paper state rebuild evidence, paper state reconciliation reports,
 in-memory paper trading pipeline evidence, local paper evidence persistence,
-non-destructive paper session boundary controls, and deterministic paper scenario
-suite evidence. It does not place broker orders and does not expose real order
-actions.
+non-destructive paper session boundary controls, deterministic paper scenario
+suite evidence, and local paper evidence export bundles. It does not place
+broker orders and does not expose real order actions.
 """
 
 from paper_trading.event_journal import (
@@ -21,6 +21,15 @@ from paper_trading.events import (
     normalize_paper_event,
     paper_event_schema_contract,
     validate_paper_event,
+)
+from paper_trading.export_bundle import (
+    PaperExportBundleResult,
+    PaperExportBundleStatus,
+    build_paper_export_bundle,
+    load_paper_export_manifest,
+    paper_export_bundle_schema_contract,
+    stable_file_hash,
+    validate_paper_export_bundle,
 )
 from paper_trading.fill_simulation import (
     PaperFillSimulationResult,
@@ -144,6 +153,13 @@ __all__ = [
     "paper_event_schema_contract",
     "paper_event_journal_schema_contract",
     "validate_paper_event",
+    "PaperExportBundleResult",
+    "PaperExportBundleStatus",
+    "build_paper_export_bundle",
+    "load_paper_export_manifest",
+    "paper_export_bundle_schema_contract",
+    "stable_file_hash",
+    "validate_paper_export_bundle",
     "PaperOrderIntent",
     "PaperOrderIntentResult",
     "build_paper_order_intent",
