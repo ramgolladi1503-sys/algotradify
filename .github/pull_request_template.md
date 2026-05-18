@@ -4,6 +4,16 @@ Product PR:
 GitHub PR:
 Scope:
 
+## Agent handoff evidence
+
+Grill artifact:
+GSD artifact:
+Hermes artifact:
+
+Grill independent: yes
+GSD followed Grill scope: yes
+Hermes reviewed final diff: yes
+
 ## Pre-code scope review
 
 Proposed PR:
