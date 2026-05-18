@@ -16,6 +16,16 @@ from agent_system.evidence import (
     build_agent_evidence_payload,
     write_agent_evidence,
 )
+from agent_system.patch_approval import (
+    AGENT_PATCH_APPROVAL_CONTRACT,
+    AGENT_PATCH_APPROVAL_SCHEMA_VERSION,
+    AgentPatchApprovalError,
+    agent_patch_approval_schema_contract,
+    build_agent_patch_approval_record,
+    build_agent_patch_rejection_record,
+    load_agent_patch_approval,
+    persist_agent_patch_approval,
+)
 from agent_system.scope_guard import (
     FORBIDDEN_PATH_PREFIXES,
     HIGH_RISK_PATH_PREFIXES,
@@ -51,6 +61,8 @@ from agent_system.work_contract import (
 )
 
 __all__ = [
+    "AGENT_PATCH_APPROVAL_CONTRACT",
+    "AGENT_PATCH_APPROVAL_SCHEMA_VERSION",
     "AGENT_WORK_SCHEMA_VERSION",
     "FORBIDDEN_AGENT_ACTIONS",
     "FORBIDDEN_PATH_PREFIXES",
@@ -62,6 +74,7 @@ __all__ = [
     "AgentAction",
     "AgentApprovalDecision",
     "AgentEvidenceError",
+    "AgentPatchApprovalError",
     "AgentRiskLevel",
     "AgentScopeDecision",
     "AgentSource",
@@ -71,16 +84,21 @@ __all__ = [
     "AgentWorkValidationError",
     "agent_approval_schema_contract",
     "agent_evidence_schema_contract",
+    "agent_patch_approval_schema_contract",
     "agent_scope_guard_schema_contract",
     "agent_task_store_schema_contract",
     "agent_work_schema_contract",
     "approve_agent_work",
     "assess_agent_scope",
     "build_agent_evidence_payload",
+    "build_agent_patch_approval_record",
+    "build_agent_patch_rejection_record",
     "build_agent_task_record",
     "build_agent_work_id",
+    "load_agent_patch_approval",
     "load_agent_task",
     "normalize_agent_work_request",
+    "persist_agent_patch_approval",
     "persist_agent_task",
     "query_agent_tasks",
     "rebuild_agent_task_index",
