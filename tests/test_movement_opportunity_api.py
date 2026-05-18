@@ -58,10 +58,24 @@ def _query(**overrides) -> dict[str, object]:
     return payload
 
 
+def _control_tower_default_movement_query() -> dict[str, object]:
+    return {"symbol": "NIFTY", "ts_epoch": "77777"}
+
+
 def _client() -> TestClient:
     app = FastAPI()
     install_movement_opportunity_route(app)
     return TestClient(app)
+
+
+def _main_server_client() -> TestClient:
+    server = importlib.import_module("api.server")
+    return TestClient(server.app)
+
+
+def _main_server_app():
+    server = importlib.import_module("api.server")
+    return server.app
 
 
 def _assert_keys(payload: dict[str, object], required_keys: tuple[str, ...] | list[str]) -> None:
@@ -277,3 +291,62 @@ def test_server_with_movement_mounts_read_only_endpoint():
     assert payload["read_only"] is True
     assert payload["is_order_action"] is False
     assert payload["summary"]["provider_count"] == 6
+
+
+def test_control_tower_movement_api_runtime_smoke_uses_default_dashboard_query():
+    response = _main_server_client().get(
+        MOVEMENT_OPPORTUNITY_API_ROUTE,
+        params=_control_tower_default_movement_query(),
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert tuple(payload.keys()) == MOVEMENT_OPPORTUNITY_RESPONSE_TOP_LEVEL_KEYS
+    assert payload["route"] == MOVEMENT_OPPORTUNITY_API_ROUTE
+    assert payload["method"] == "GET"
+    assert payload["read_only"] is True
+    assert payload["is_order_action"] is False
+    assert payload["context"]["symbol"] == "NIFTY"
+    assert payload["context"]["ts_epoch"] == 77777.0
+    assert payload["context"]["is_order_action"] is False
+    assert payload["summary"]["read_only"] is True
+    assert payload["summary"]["is_order_action"] is False
+    assert payload["pipeline"]["read_only"] is True
+    assert payload["pipeline"]["is_order_action"] is False
+
+
+def test_control_tower_movement_schema_runtime_smoke_on_main_server():
+    response = _main_server_client().get(f"{MOVEMENT_OPPORTUNITY_API_ROUTE}/schema")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["route"] == MOVEMENT_OPPORTUNITY_API_ROUTE
+    assert payload["method"] == "GET"
+    assert payload["read_only"] is True
+    assert payload["is_order_action"] is False
+    assert payload["openapi_contract"]["path"] == MOVEMENT_OPPORTUNITY_API_ROUTE
+    assert payload["openapi_contract"]["schema_path"] == f"{MOVEMENT_OPPORTUNITY_API_ROUTE}/schema"
+    assert payload["required_query_params"] == ["symbol", "ts_epoch"]
+
+
+def test_control_tower_movement_openapi_runtime_smoke_on_main_server():
+    openapi = _main_server_app().openapi()
+
+    assert MOVEMENT_OPPORTUNITY_API_ROUTE in openapi["paths"]
+    assert f"{MOVEMENT_OPPORTUNITY_API_ROUTE}/schema" in openapi["paths"]
+    assert set(openapi["paths"][MOVEMENT_OPPORTUNITY_API_ROUTE].keys()) == {"get"}
+    assert set(openapi["paths"][f"{MOVEMENT_OPPORTUNITY_API_ROUTE}/schema"].keys()) == {"get"}
+    operation = openapi["paths"][MOVEMENT_OPPORTUNITY_API_ROUTE]["get"]
+    required_params = {
+        param["name"]
+        for param in operation["parameters"]
+        if param.get("required") is True
+    }
+    assert required_params == {"symbol", "ts_epoch"}
+
+
+def test_control_tower_movement_runtime_routes_are_registered_once_on_main_server():
+    route_paths = [getattr(route, "path", None) for route in _main_server_app().routes]
+
+    assert route_paths.count(MOVEMENT_OPPORTUNITY_API_ROUTE) == 1
+    assert route_paths.count(f"{MOVEMENT_OPPORTUNITY_API_ROUTE}/schema") == 1
