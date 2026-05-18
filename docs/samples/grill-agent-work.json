@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "source_agent": "grill_me",
+  "action": "REVIEW_PR",
+  "title": "Review local agent CLI scope",
+  "scope": "Review the local agent CLI scope for fake progress, unsafe behavior, and scope creep.",
+  "allowed_paths": ["docs/"],
+  "requested_paths": ["docs/local-agent-work-cli.md"],
+  "forbidden_paths": [".env", "credentials.py", "broker_contract/", "runtime/live"],
+  "requires_human_approval": false,
+  "metadata": {
+    "sample": true,
+    "project": "algotradify"
+  }
+}
