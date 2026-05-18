@@ -118,17 +118,17 @@ def build_live_market_data_snapshot(
     if not isinstance(row, dict):
         row = {}
 
-    symbol = str(row.get("symbol") or row.get("underlying") or row.get("index_symbol") or "UNKNOWN").upper()
-    source = _optional_text(row.get("source") or row.get("quote_source") or row.get("feed_source"))
+    symbol = str(_first_present(row, "symbol", "underlying", "index_symbol", default="UNKNOWN")).upper()
+    source = _optional_text(_first_present(row, "source", "quote_source", "feed_source"))
     source_key = str(source or "UNKNOWN").upper()
-    session_state = _optional_text(row.get("session_state") or row.get("market_session") or row.get("market_state"))
+    session_state = _optional_text(_first_present(row, "session_state", "market_session", "market_state"))
     session_key = str(session_state or "UNKNOWN").upper()
-    spot_ltp = _num(row.get("spot_ltp") or row.get("spot_price") or row.get("ltp") or row.get("last_price"))
-    spot_age = _num(row.get("spot_quote_age_sec") or row.get("quote_age_sec") or row.get("ltp_age_sec"))
-    option_chain_age = _num(row.get("option_chain_age_sec") or row.get("chain_age_sec") or row.get("option_ltp_age_sec"))
-    expiry = _optional_text(row.get("expiry") or row.get("expiry_context"))
-    ce_count = _int(row.get("ce_count") or row.get("call_count") or row.get("option_ce_count"))
-    pe_count = _int(row.get("pe_count") or row.get("put_count") or row.get("option_pe_count"))
+    spot_ltp = _num(_first_present(row, "spot_ltp", "spot_price", "ltp", "last_price"))
+    spot_age = _num(_first_present(row, "spot_quote_age_sec", "quote_age_sec", "ltp_age_sec"))
+    option_chain_age = _num(_first_present(row, "option_chain_age_sec", "chain_age_sec", "option_ltp_age_sec"))
+    expiry = _optional_text(_first_present(row, "expiry", "expiry_context"))
+    ce_count = _int(_first_present(row, "ce_count", "call_count", "option_ce_count"))
+    pe_count = _int(_first_present(row, "pe_count", "put_count", "option_pe_count"))
 
     spot_quote_fresh = spot_ltp is not None and spot_age is not None and spot_age <= max_spot_quote_age_sec
     option_chain_present = option_chain_age is not None or ce_count is not None or pe_count is not None or expiry is not None
@@ -206,6 +206,13 @@ def _status_from_blockers(blockers: list[str]) -> LiveMarketDataSnapshotStatus:
     if "MARKET_SESSION_NOT_OPEN" in blockers:
         return LiveMarketDataSnapshotStatus.BLOCKED_SESSION_CLOSED
     return LiveMarketDataSnapshotStatus.READY
+
+
+def _first_present(row: dict[str, Any], *keys: str, default: Any = None) -> Any:
+    for key in keys:
+        if key in row and row[key] not in (None, ""):
+            return row[key]
+    return default
 
 
 def _num(value: Any) -> float | None:
