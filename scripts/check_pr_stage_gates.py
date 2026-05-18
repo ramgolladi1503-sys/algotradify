@@ -6,6 +6,7 @@ from pathlib import Path
 
 
 REQUIRED_SECTIONS = [
+    "## Agent handoff evidence",
     "## Pre-code scope review",
     "## Post-code review",
     "## Test commands",
@@ -13,6 +14,12 @@ REQUIRED_SECTIONS = [
 ]
 
 REQUIRED_PHRASES = [
+    "Grill artifact:",
+    "GSD artifact:",
+    "Hermes artifact:",
+    "Grill independent: yes",
+    "GSD followed Grill scope: yes",
+    "Hermes reviewed final diff: yes",
     "Files to change",
     "Files not to touch",
     "Safety boundary",
@@ -36,7 +43,7 @@ def check_pr_body(body: str) -> list[str]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Check PR body for required agent stage gate evidence.")
+    parser = argparse.ArgumentParser(description="Check PR body for required independent stage-gate evidence.")
     parser.add_argument("body_file", help="Path to a file containing the PR body.")
     args = parser.parse_args()
 
