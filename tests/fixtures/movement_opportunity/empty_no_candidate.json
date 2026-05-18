@@ -1,0 +1,86 @@
+{
+  "api_schema_version": "1.0",
+  "route": "/movement-opportunity",
+  "method": "GET",
+  "read_only": true,
+  "is_order_action": false,
+  "context": {
+    "symbol": "NIFTY",
+    "ts_epoch": 77777.0,
+    "is_order_action": false
+  },
+  "summary": {
+    "schema_version": "1.0",
+    "provider_count": 6,
+    "registry_candidate_count": 0,
+    "pooled_candidate_count": 0,
+    "option_enriched_count": 0,
+    "allowed_count": 0,
+    "blocked_count": 0,
+    "no_trade_count": 0,
+    "ranked_count": 0,
+    "excluded_count": 0,
+    "diagnostic_count": 1,
+    "warning_count": 1,
+    "top_candidate_id": null,
+    "read_only": true,
+    "is_order_action": false
+  },
+  "ranked_candidates": [],
+  "rank_records": [],
+  "exclusions": [],
+  "warnings": ["no movement candidates matched current context"],
+  "diagnostics": [
+    {
+      "code": "NO_MOVEMENT_CANDIDATES",
+      "message": "No movement candidates matched current context.",
+      "candidate_id": null,
+      "strategy_id": null,
+      "is_order_action": false
+    }
+  ],
+  "pipeline": {
+    "summary": {
+      "schema_version": "1.0",
+      "provider_count": 6,
+      "registry_candidate_count": 0,
+      "pooled_candidate_count": 0,
+      "option_enriched_count": 0,
+      "allowed_count": 0,
+      "blocked_count": 0,
+      "no_trade_count": 0,
+      "ranked_count": 0,
+      "excluded_count": 0,
+      "diagnostic_count": 1,
+      "warning_count": 1,
+      "top_candidate_id": null,
+      "read_only": true,
+      "is_order_action": false
+    },
+    "registry_result": {"is_order_action": false},
+    "candidate_pool_result": {"is_order_action": false},
+    "option_enriched_candidates": [],
+    "no_trade_filter_result": {"candidates": [], "results": [], "is_order_action": false},
+    "rank_result": {
+      "ranked_candidates": [],
+      "rank_records": [],
+      "exclusions": [],
+      "summary": {},
+      "warnings": [],
+      "diagnostics": [],
+      "is_order_action": false
+    },
+    "warnings": ["no movement candidates matched current context"],
+    "diagnostics": [
+      {
+        "code": "NO_MOVEMENT_CANDIDATES",
+        "message": "No movement candidates matched current context.",
+        "candidate_id": null,
+        "strategy_id": null,
+        "is_order_action": false
+      }
+    ],
+    "read_only": true,
+    "is_order_action": false
+  }
+}
