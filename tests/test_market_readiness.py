@@ -3,10 +3,13 @@ from __future__ import annotations
 from market_readiness import (
     LiveMarketDataSnapshotStatus,
     MarketReadinessStatus,
+    QuoteFreshnessMonitorStatus,
     build_live_market_data_snapshot,
+    build_quote_freshness_runtime_monitor,
     evaluate_market_readiness,
     evaluate_market_readiness_batch,
     live_market_data_snapshot_schema_contract,
+    quote_freshness_runtime_monitor_schema_contract,
 )
 
 
@@ -225,3 +228,133 @@ def test_live_market_data_snapshot_warns_for_zero_option_side_counts_without_bec
     assert "OPTION_CHAIN_SIDE_COUNT_ZERO" in payload["warnings"]
     assert payload["read_only"] is True
     assert payload["is_order_action"] is False
+
+
+def test_quote_freshness_runtime_monitor_schema_contract_is_safe_and_complete():
+    contract = quote_freshness_runtime_monitor_schema_contract()
+
+    assert contract["schema_version"] == "1.0"
+    assert contract["monitor_type"] == "QUOTE_FRESHNESS_RUNTIME_MONITOR"
+    assert contract["safe_flags"] == {"read_only": True, "is_order_action": False}
+    assert "summary" in contract["required_keys"]
+    assert "snapshots" in contract["required_keys"]
+    assert "fresh_ratio" in contract["summary_required_keys"]
+    assert "blocked_count" in contract["summary_required_keys"]
+
+
+def test_quote_freshness_runtime_monitor_is_healthy_for_all_fresh_snapshots():
+    result = build_quote_freshness_runtime_monitor([
+        _live_snapshot_row(symbol="NIFTY"),
+        _live_snapshot_row(symbol="BANKNIFTY"),
+    ])
+    payload = result.to_dict()
+
+    assert result.status == QuoteFreshnessMonitorStatus.HEALTHY
+    assert payload["monitor_type"] == "QUOTE_FRESHNESS_RUNTIME_MONITOR"
+    assert payload["read_only"] is True
+    assert payload["is_order_action"] is False
+    assert payload["summary"]["snapshot_count"] == 2
+    assert payload["summary"]["ready_count"] == 2
+    assert payload["summary"]["blocked_count"] == 0
+    assert payload["summary"]["fresh_ratio"] == 1.0
+    assert payload["blockers"] == []
+    assert len(payload["snapshots"]) == 2
+
+
+def test_quote_freshness_runtime_monitor_blocks_stale_quotes():
+    result = build_quote_freshness_runtime_monitor([
+        _live_snapshot_row(symbol="NIFTY", spot_quote_age_sec=8.0),
+        _live_snapshot_row(symbol="BANKNIFTY"),
+    ])
+    payload = result.to_dict()
+
+    assert result.status == QuoteFreshnessMonitorStatus.BLOCKED
+    assert payload["summary"]["snapshot_count"] == 2
+    assert payload["summary"]["ready_count"] == 1
+    assert payload["summary"]["stale_spot_count"] == 1
+    assert payload["summary"]["blocked_count"] == 1
+    assert payload["summary"]["fresh_ratio"] == 0.5
+    assert "STALE_SPOT_QUOTES_PRESENT" in payload["blockers"]
+
+
+def test_quote_freshness_runtime_monitor_blocks_missing_quote_data():
+    result = build_quote_freshness_runtime_monitor([
+        _live_snapshot_row(symbol="NIFTY", spot_ltp=None),
+    ])
+    payload = result.to_dict()
+
+    assert result.status == QuoteFreshnessMonitorStatus.BLOCKED
+    assert payload["summary"]["missing_spot_count"] == 1
+    assert "MISSING_SPOT_DATA_PRESENT" in payload["blockers"]
+    assert payload["snapshots"][0]["read_only"] is True
+    assert payload["snapshots"][0]["is_order_action"] is False
+
+
+def test_quote_freshness_runtime_monitor_blocks_fallback_source():
+    result = build_quote_freshness_runtime_monitor([
+        _live_snapshot_row(symbol="NIFTY", source="FALLBACK"),
+    ])
+    payload = result.to_dict()
+
+    assert result.status == QuoteFreshnessMonitorStatus.BLOCKED
+    assert payload["summary"]["fallback_source_count"] == 1
+    assert "FALLBACK_MARKET_DATA_SOURCE_PRESENT" in payload["blockers"]
+
+
+def test_quote_freshness_runtime_monitor_blocks_closed_session():
+    result = build_quote_freshness_runtime_monitor([
+        _live_snapshot_row(symbol="NIFTY", session_state="CLOSED"),
+    ])
+    payload = result.to_dict()
+
+    assert result.status == QuoteFreshnessMonitorStatus.BLOCKED
+    assert payload["summary"]["closed_session_count"] == 1
+    assert "MARKET_SESSION_CLOSED_PRESENT" in payload["blockers"]
+
+
+def test_quote_freshness_runtime_monitor_blocks_missing_and_stale_option_chain():
+    result = build_quote_freshness_runtime_monitor([
+        _live_snapshot_row(symbol="NIFTY", option_chain_age_sec=None, expiry=None, ce_count=None, pe_count=None),
+        _live_snapshot_row(symbol="BANKNIFTY", option_chain_age_sec=15.0),
+    ])
+    payload = result.to_dict()
+
+    assert result.status == QuoteFreshnessMonitorStatus.BLOCKED
+    assert payload["summary"]["missing_option_chain_count"] == 1
+    assert payload["summary"]["stale_option_chain_count"] == 1
+    assert "MISSING_OPTION_CHAIN_PRESENT" in payload["blockers"]
+    assert "STALE_OPTION_CHAIN_PRESENT" in payload["blockers"]
+
+
+def test_quote_freshness_runtime_monitor_is_empty_when_no_snapshots_exist():
+    result = build_quote_freshness_runtime_monitor([])
+    payload = result.to_dict()
+
+    assert result.status == QuoteFreshnessMonitorStatus.EMPTY
+    assert payload["summary"]["snapshot_count"] == 0
+    assert payload["summary"]["fresh_ratio"] == 0.0
+    assert "NO_MARKET_DATA_SNAPSHOTS" in payload["blockers"]
+    assert payload["read_only"] is True
+    assert payload["is_order_action"] is False
+
+
+def test_quote_freshness_runtime_monitor_degrades_on_snapshot_warnings_only():
+    result = build_quote_freshness_runtime_monitor([
+        _live_snapshot_row(symbol="NIFTY", ce_count=0, pe_count=0),
+    ])
+    payload = result.to_dict()
+
+    assert result.status == QuoteFreshnessMonitorStatus.DEGRADED
+    assert payload["summary"]["warning_count"] == 1
+    assert payload["summary"]["blocked_count"] == 0
+    assert "SNAPSHOT_WARNINGS_PRESENT" in payload["warnings"]
+    assert "NIFTY:OPTION_CHAIN_SIDE_COUNT_ZERO" in payload["warnings"]
+
+
+def test_quote_freshness_runtime_monitor_accepts_prebuilt_snapshots():
+    snapshot = build_live_market_data_snapshot(_live_snapshot_row(symbol="NIFTY"))
+    result = build_quote_freshness_runtime_monitor([snapshot])
+
+    assert result.status == QuoteFreshnessMonitorStatus.HEALTHY
+    assert result.snapshots[0] is snapshot
+    assert result.to_dict()["summary"]["ready_count"] == 1
