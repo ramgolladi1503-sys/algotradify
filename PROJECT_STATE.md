@@ -2,20 +2,21 @@
 
 ## Latest confirmed merged
 
-GitHub PR #103 / Product PR 95 — End-to-End Paper Scenario Suite
+GitHub PR #115 / Agent PR 10 — Dashboard Patch Approval Controls
 
 ## Current product PR
 
-PR 96 — Paper Evidence Export Bundle
+PR 97 — Paper Replay Dataset Builder
 
 ## Current posture
 
-mode=paper_pipeline_and_persistence
+mode=paper_replay_dataset_foundation
 live_execution=false
 broker_order_placement=false
 dashboard_changes=false
 strategy_provider_expansion=false
 ml_ranker_work=false
+agent_scope_expansion=false
 
 ## Completed paper truth foundation
 
@@ -28,18 +29,33 @@ ml_ranker_work=false
 - PR 93 — Paper Evidence Persistence Layer
 - PR 94 — Paper Session Boundary and Reset Controls
 - PR 95 — End-to-End Paper Scenario Suite
+- PR 96 — Paper Evidence Export Bundle
+
+## Completed agent mini-scope
+
+- Agent PR 1 — Agent Work Request Contract
+- Agent PR 2 — Agent Scope Guard
+- Agent PR 3 — Agent Approval and Evidence Journal
+- Agent PR 4 — Local Agent Work CLI
+- Agent PR 5 — Agent Task Store
+- Agent PR 6 — POST /agent/tasks Intake Webhook
+- Agent PR 7 — Agent Task Query API
+- Agent PR 8 — Read-only Dashboard Agent Panel
+- Agent PR 9 — Patch-only Approval API
+- Agent PR 10 — Dashboard Patch Approval Controls
 
 ## Current implementation focus
 
-- Build deterministic local paper evidence export bundles.
-- Package evidence JSONL, scenario results, manifest, and checksums.
-- Validate bundle files and hashes.
-- Block unsafe evidence, replay dataset leakage, and expectancy/profitability leakage.
-- Keep exports local, paper-only, and disconnected from runtime/live/API/UI.
+- Build deterministic paper replay dataset rows from validated PR96 export bundles.
+- Preserve source bundle and evidence record identifiers.
+- Preserve paper-only safe flags.
+- Write JSONL replay rows locally only when requested.
+- Block unsafe evidence, unsafe rows, and analysis/profitability leakage.
+- Keep replay dataset building disconnected from runtime/live/API/UI/broker/agent-system work.
 
-## Next product PR only after PR 96 merges
+## Next product PR only after PR 97 merges
 
-PR 97 — Paper Replay Dataset Builder
+PR 98 — Replay Dataset Schema Hardening and Snapshot Contracts
 
 ## Hard rules
 
@@ -56,6 +72,8 @@ PR 97 — Paper Replay Dataset Builder
 - Session reset markers are non-destructive evidence boundaries only.
 - Scenario suite proves controlled paper paths only; it is not runtime execution.
 - Export bundle packages evidence only; it does not generate replay datasets or profitability proof.
+- Replay dataset builder shapes source-traceable rows only; it does not compute labels, rewards, expectancy, profitability, or ML features.
+- Agent mini-scope is complete. Do not add more agent PRs unless a real blocker exists.
 - Every PR must include Grill, GSD, and Hermes handoff artifacts.
 - Every PR must include acceptance proof.
 
