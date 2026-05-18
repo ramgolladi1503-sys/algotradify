@@ -3,7 +3,12 @@ from __future__ import annotations
 import json
 
 from dry_run_execution import append_dry_run_execution, build_dry_run_execution
-from paper_trading import build_paper_order_intent, paper_order_intent_schema_contract
+from paper_trading import (
+    build_paper_order_intent,
+    build_paper_order_lifecycle_event,
+    paper_order_intent_schema_contract,
+    paper_order_lifecycle_schema_contract,
+)
 
 
 def _top(candidate_id="c1", **selected_overrides):
@@ -103,6 +108,19 @@ def _instrument_health(**overrides):
     }
     payload.update(overrides)
     return payload
+
+
+def _paper_intent_payload(**selected_overrides):
+    result = build_paper_order_intent(
+        top_executable=_top(**selected_overrides),
+        execution_safety=_safety(),
+        readiness=_readiness(),
+        market_data=_market_data(),
+        instrument_health=_instrument_health(),
+        ts_epoch=100.0,
+    )
+    assert result.created is True
+    return result.to_dict()["intent"]
 
 
 def test_creates_dry_run_intent_when_all_evidence_valid():
@@ -321,3 +339,158 @@ def test_paper_order_intent_degraded_context_warns_but_can_create():
     assert "MARKET_DATA_DEGRADED" in result.warnings
     assert "INSTRUMENT_HEALTH_DEGRADED" in result.warnings
     assert result.to_dict()["intent"]["is_order_action"] is False
+
+
+def test_paper_order_lifecycle_schema_contract_is_safe():
+    contract = paper_order_lifecycle_schema_contract()
+
+    assert contract["schema_version"] == "1.0"
+    assert contract["lifecycle_type"] == "PAPER_ORDER_LIFECYCLE"
+    assert contract["event_type"] == "PAPER_ORDER_LIFECYCLE_EVENT"
+    assert contract["safe_flags"] == {
+        "paper_only": True,
+        "is_order_action": False,
+        "broker_api_called": False,
+        "real_order_id": None,
+    }
+    assert "CREATED" in contract["states"]
+    assert "FILLED" in contract["terminal_states"]
+    assert "paper_order_id" in contract["required_event_keys"]
+
+
+def test_paper_order_lifecycle_creates_initial_created_event():
+    result = build_paper_order_lifecycle_event(intent=_paper_intent_payload(), requested_status="CREATED", ts_epoch=101.0)
+    payload = result.to_dict()
+
+    assert payload["created"] is True
+    assert payload["paper_only"] is True
+    assert payload["is_order_action"] is False
+    assert payload["broker_api_called"] is False
+    assert payload["real_order_id"] is None
+    assert payload["event"]["status"] == "CREATED"
+    assert payload["event"]["terminal"] is False
+    assert payload["event"]["paper_only"] is True
+    assert payload["event"]["is_order_action"] is False
+    assert payload["event"]["broker_api_called"] is False
+    assert payload["event"]["real_order_id"] is None
+    assert payload["event"]["remaining_quantity"] == 10
+
+
+def test_paper_order_lifecycle_accepts_created_to_accepted_flow():
+    created = build_paper_order_lifecycle_event(intent=_paper_intent_payload(), requested_status="CREATED", ts_epoch=101.0)
+    accepted = build_paper_order_lifecycle_event(
+        intent=_paper_intent_payload(),
+        previous_event=created.to_dict()["event"],
+        requested_status="ACCEPTED",
+        ts_epoch=102.0,
+        reason="paper broker accepted intent",
+    )
+    payload = accepted.to_dict()
+
+    assert payload["created"] is True
+    assert payload["previous_status"] == "CREATED"
+    assert payload["requested_status"] == "ACCEPTED"
+    assert payload["event"]["status"] == "ACCEPTED"
+    assert payload["event"]["event_sequence"] == 2
+    assert payload["event"]["reason"] == "paper broker accepted intent"
+
+
+def test_paper_order_lifecycle_rejects_from_created_state():
+    created = build_paper_order_lifecycle_event(intent=_paper_intent_payload(), requested_status="CREATED", ts_epoch=101.0)
+    rejected = build_paper_order_lifecycle_event(
+        intent=_paper_intent_payload(),
+        previous_event=created.to_dict()["event"],
+        requested_status="REJECTED",
+        ts_epoch=102.0,
+        reason="paper risk rejected",
+    )
+    payload = rejected.to_dict()
+
+    assert payload["created"] is True
+    assert payload["event"]["status"] == "REJECTED"
+    assert payload["event"]["terminal"] is True
+    assert payload["event"]["paper_only"] is True
+    assert payload["event"]["broker_api_called"] is False
+
+
+def test_paper_order_lifecycle_fills_from_open_state():
+    created = build_paper_order_lifecycle_event(intent=_paper_intent_payload(), requested_status="CREATED", ts_epoch=101.0)
+    accepted = build_paper_order_lifecycle_event(intent=_paper_intent_payload(), previous_event=created.to_dict()["event"], requested_status="ACCEPTED", ts_epoch=102.0)
+    opened = build_paper_order_lifecycle_event(intent=_paper_intent_payload(), previous_event=accepted.to_dict()["event"], requested_status="OPEN", ts_epoch=103.0)
+    filled = build_paper_order_lifecycle_event(
+        intent=_paper_intent_payload(),
+        previous_event=opened.to_dict()["event"],
+        requested_status="FILLED",
+        filled_quantity=10,
+        average_fill_price=101.25,
+        ts_epoch=104.0,
+    )
+    payload = filled.to_dict()
+
+    assert payload["created"] is True
+    assert payload["event"]["status"] == "FILLED"
+    assert payload["event"]["terminal"] is True
+    assert payload["event"]["filled_quantity"] == 10
+    assert payload["event"]["remaining_quantity"] == 0
+    assert payload["event"]["average_fill_price"] == 101.25
+    assert payload["event"]["real_order_id"] is None
+
+
+def test_paper_order_lifecycle_partially_fills_then_cancels():
+    created = build_paper_order_lifecycle_event(intent=_paper_intent_payload(), requested_status="CREATED", ts_epoch=101.0)
+    accepted = build_paper_order_lifecycle_event(intent=_paper_intent_payload(), previous_event=created.to_dict()["event"], requested_status="ACCEPTED", ts_epoch=102.0)
+    opened = build_paper_order_lifecycle_event(intent=_paper_intent_payload(), previous_event=accepted.to_dict()["event"], requested_status="OPEN", ts_epoch=103.0)
+    partial = build_paper_order_lifecycle_event(intent=_paper_intent_payload(), previous_event=opened.to_dict()["event"], requested_status="PARTIALLY_FILLED", filled_quantity=4, ts_epoch=104.0)
+    cancelled = build_paper_order_lifecycle_event(intent=_paper_intent_payload(), previous_event=partial.to_dict()["event"], requested_status="CANCELLED", ts_epoch=105.0)
+    payload = cancelled.to_dict()
+
+    assert partial.created is True
+    assert partial.to_dict()["event"]["filled_quantity"] == 4
+    assert partial.to_dict()["event"]["remaining_quantity"] == 6
+    assert payload["created"] is True
+    assert payload["event"]["status"] == "CANCELLED"
+    assert payload["event"]["filled_quantity"] == 4
+    assert payload["event"]["terminal"] is True
+
+
+def test_paper_order_lifecycle_expires_from_open_state():
+    created = build_paper_order_lifecycle_event(intent=_paper_intent_payload(), requested_status="CREATED", ts_epoch=101.0)
+    accepted = build_paper_order_lifecycle_event(intent=_paper_intent_payload(), previous_event=created.to_dict()["event"], requested_status="ACCEPTED", ts_epoch=102.0)
+    opened = build_paper_order_lifecycle_event(intent=_paper_intent_payload(), previous_event=accepted.to_dict()["event"], requested_status="OPEN", ts_epoch=103.0)
+    expired = build_paper_order_lifecycle_event(intent=_paper_intent_payload(), previous_event=opened.to_dict()["event"], requested_status="EXPIRED", ts_epoch=104.0)
+
+    assert expired.created is True
+    assert expired.to_dict()["event"]["status"] == "EXPIRED"
+    assert expired.to_dict()["event"]["terminal"] is True
+    assert expired.to_dict()["event"]["broker_api_called"] is False
+
+
+def test_paper_order_lifecycle_blocks_invalid_transition_from_terminal_state():
+    created = build_paper_order_lifecycle_event(intent=_paper_intent_payload(), requested_status="CREATED", ts_epoch=101.0)
+    rejected = build_paper_order_lifecycle_event(intent=_paper_intent_payload(), previous_event=created.to_dict()["event"], requested_status="REJECTED", ts_epoch=102.0)
+    reopened = build_paper_order_lifecycle_event(intent=_paper_intent_payload(), previous_event=rejected.to_dict()["event"], requested_status="OPEN", ts_epoch=103.0)
+
+    assert reopened.created is False
+    assert "INVALID_PAPER_ORDER_TRANSITION" in reopened.blockers
+    assert reopened.to_dict()["broker_api_called"] is False
+
+
+def test_paper_order_lifecycle_blocks_unsafe_intent_flags():
+    intent = _paper_intent_payload()
+    intent["broker_api_called"] = True
+    result = build_paper_order_lifecycle_event(intent=intent, requested_status="CREATED", ts_epoch=101.0)
+
+    assert result.created is False
+    assert "PAPER_INTENT_BROKER_API_CALLED" in result.blockers
+    assert result.to_dict()["is_order_action"] is False
+
+
+def test_paper_order_lifecycle_blocks_bad_fill_quantities():
+    created = build_paper_order_lifecycle_event(intent=_paper_intent_payload(), requested_status="CREATED", ts_epoch=101.0)
+    accepted = build_paper_order_lifecycle_event(intent=_paper_intent_payload(), previous_event=created.to_dict()["event"], requested_status="ACCEPTED", ts_epoch=102.0)
+    opened = build_paper_order_lifecycle_event(intent=_paper_intent_payload(), previous_event=accepted.to_dict()["event"], requested_status="OPEN", ts_epoch=103.0)
+    bad_fill = build_paper_order_lifecycle_event(intent=_paper_intent_payload(), previous_event=opened.to_dict()["event"], requested_status="PARTIALLY_FILLED", filled_quantity=10, ts_epoch=104.0)
+
+    assert bad_fill.created is False
+    assert "PARTIAL_FILL_MUST_BE_LESS_THAN_ORDER_QUANTITY" in bad_fill.blockers
+    assert bad_fill.to_dict()["real_order_id"] is None
