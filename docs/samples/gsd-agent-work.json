@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "source_agent": "gsd",
+  "action": "GENERATE_TESTS",
+  "title": "Add local agent CLI tests",
+  "scope": "Add deterministic tests for the local agent work CLI only.",
+  "allowed_paths": ["tests/"],
+  "requested_paths": ["tests/test_submit_agent_work.py"],
+  "forbidden_paths": [".env", "credentials.py", "broker_contract/", "runtime/live"],
+  "requires_human_approval": false,
+  "metadata": {
+    "sample": true,
+    "project": "algotradify"
+  }
+}
