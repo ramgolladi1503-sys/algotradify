@@ -2,11 +2,11 @@
 
 ## Latest confirmed merged
 
-GitHub PR #102 / Product PR 94 — Paper Session Boundary and Reset Controls
+GitHub PR #103 / Product PR 95 — End-to-End Paper Scenario Suite
 
 ## Current product PR
 
-PR 95 — End-to-End Paper Scenario Suite
+PR 96 — Paper Evidence Export Bundle
 
 ## Current posture
 
@@ -27,17 +27,19 @@ ml_ranker_work=false
 - PR 92 — Paper Trading Pipeline Orchestrator
 - PR 93 — Paper Evidence Persistence Layer
 - PR 94 — Paper Session Boundary and Reset Controls
+- PR 95 — End-to-End Paper Scenario Suite
 
 ## Current implementation focus
 
-- Run deterministic paper-only scenarios.
-- Prove session boundary, pipeline, and persistence work together.
-- Surface expected blocked paths instead of hiding them.
-- Keep scenarios local, deterministic, and disconnected from runtime/live/API/UI.
+- Build deterministic local paper evidence export bundles.
+- Package evidence JSONL, scenario results, manifest, and checksums.
+- Validate bundle files and hashes.
+- Block unsafe evidence, replay dataset leakage, and expectancy/profitability leakage.
+- Keep exports local, paper-only, and disconnected from runtime/live/API/UI.
 
-## Next product PR only after PR 95 merges
+## Next product PR only after PR 96 merges
 
-PR 96 — Paper Evidence Export Bundle
+PR 97 — Paper Replay Dataset Builder
 
 ## Hard rules
 
@@ -53,6 +55,7 @@ PR 96 — Paper Evidence Export Bundle
 - Persistence stores evidence only; it does not become runtime execution.
 - Session reset markers are non-destructive evidence boundaries only.
 - Scenario suite proves controlled paper paths only; it is not runtime execution.
+- Export bundle packages evidence only; it does not generate replay datasets or profitability proof.
 - Every PR must include Grill, GSD, and Hermes handoff artifacts.
 - Every PR must include acceptance proof.
 
