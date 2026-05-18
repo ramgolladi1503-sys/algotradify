@@ -1,7 +1,7 @@
 """Paper trading contracts for Algotradify.
 
-This package builds simulation-only paper intent, lifecycle, and fill evidence.
-It does not place broker orders and does not expose real order actions.
+This package builds simulation-only paper intent, lifecycle, fill, and position
+evidence. It does not place broker orders and does not expose real order actions.
 """
 
 from paper_trading.fill_simulation import (
@@ -26,6 +26,13 @@ from paper_trading.lifecycle import (
     paper_order_lifecycle_schema_contract,
     validate_paper_order_lifecycle_transition,
 )
+from paper_trading.position_ledger import (
+    PaperPositionLedgerResult,
+    PaperPositionLedgerStatus,
+    build_paper_position_ledger,
+    paper_position_ledger_schema_contract,
+    validate_paper_position_ledger_inputs,
+)
 
 __all__ = [
     "PaperOrderIntent",
@@ -44,4 +51,9 @@ __all__ = [
     "paper_fill_simulation_schema_contract",
     "simulate_paper_fill",
     "validate_paper_fill_simulation_inputs",
+    "PaperPositionLedgerResult",
+    "PaperPositionLedgerStatus",
+    "build_paper_position_ledger",
+    "paper_position_ledger_schema_contract",
+    "validate_paper_position_ledger_inputs",
 ]
