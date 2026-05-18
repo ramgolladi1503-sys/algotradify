@@ -1,0 +1,25 @@
+name: PR Stage Gates
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened, ready_for_review]
+
+jobs:
+  check-pr-stage-gates:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Write PR body
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          printf '%s' "$PR_BODY" > /tmp/pr_body.md
+
+      - name: Check required stage-gate evidence
+        run: |
+          python scripts/check_pr_stage_gates.py /tmp/pr_body.md
