@@ -102,6 +102,73 @@ def _seed_runtime(tmp_path):
     return runtime_root
 
 
+def test_movement_opportunity_exists_on_direct_main_app():
+    client = TestClient(app)
+
+    response = client.get(
+        "/movement-opportunity",
+        params={
+            "symbol": "NIFTY",
+            "ts_epoch": 77777.0,
+            "spot_ltp": 101.4,
+            "vwap": 101.0,
+            "orb_high": 101.0,
+            "orb_low": 99.5,
+            "day_high": 101.2,
+            "day_low": 99.0,
+            "prev_day_high": 102.0,
+            "prev_day_low": 98.0,
+            "atr": 1.1,
+            "atr_short": 0.7,
+            "atr_long": 1.0,
+            "range_width_pct": 0.35,
+            "volume_z": 1.9,
+            "volatility_state": "COMPRESSION",
+            "regime_hint": "COMPRESSION",
+            "option_ce_ltp": 125.0,
+            "option_pe_ltp": 85.0,
+            "ce_premium_change": 22.0,
+            "pe_premium_change": -4.0,
+            "ce_spread_pct": 0.8,
+            "pe_spread_pct": 1.1,
+            "ce_depth": 650.0,
+            "pe_depth": 500.0,
+            "option_ltp_age_sec": 1.0,
+            "quote_source": "PRIMARY",
+            "time_of_day": "OPEN",
+            "minutes_since_open": 14,
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["route"] == "/movement-opportunity"
+    assert payload["method"] == "GET"
+    assert payload["read_only"] is True
+    assert payload["is_order_action"] is False
+    assert payload["context"]["symbol"] == "NIFTY"
+    assert payload["context"]["is_order_action"] is False
+    assert payload["summary"]["read_only"] is True
+    assert payload["summary"]["is_order_action"] is False
+    assert payload["pipeline"]["read_only"] is True
+    assert payload["pipeline"]["is_order_action"] is False
+
+
+def test_movement_opportunity_schema_exists_on_direct_main_app():
+    client = TestClient(app)
+
+    response = client.get("/movement-opportunity/schema")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["route"] == "/movement-opportunity"
+    assert payload["method"] == "GET"
+    assert payload["read_only"] is True
+    assert payload["is_order_action"] is False
+    assert "ranked_candidates" in payload["response_top_level_keys"]
+    assert "pipeline" in payload["response_top_level_keys"]
+
+
 def test_dry_run_execution_exists_on_direct_app(tmp_path, monkeypatch):
     import api.server as server
 
@@ -241,9 +308,11 @@ def test_evidence_health_exists_on_direct_app_and_writes_nothing(tmp_path, monke
     assert not (runtime_root / "logs" / "outcome_replay.jsonl").exists()
 
 
-def test_dry_run_route_is_not_registered_twice():
+def test_direct_app_routes_are_not_registered_twice():
     route_paths = [getattr(route, "path", None) for route in app.routes]
 
+    assert route_paths.count("/movement-opportunity") == 1
+    assert route_paths.count("/movement-opportunity/schema") == 1
     assert route_paths.count("/dry-run-execution") == 1
     assert route_paths.count("/dry-run-execution/export") == 1
     assert route_paths.count("/evidence-health") == 1
