@@ -154,20 +154,8 @@ def test_rejected_approval_can_still_be_audited(tmp_path):
     assert "ORDER_ACTION_FORBIDDEN" in latest_payload["scope_decision"]["blockers"]
 
 
-def test_payload_builder_rejects_unsafe_safety_block(monkeypatch):
+def test_payload_builder_rejects_unsafe_safety_block():
     request, scope_decision, approval_decision = _approved_bundle()
-
-    def unsafe_json_safe(payload):
-        if payload is scope_decision:
-            data = scope_decision.to_dict()
-            data["broker_api_called"] = True
-            return data
-        if hasattr(payload, "to_dict"):
-            return payload.to_dict()
-        return payload
-
-    # This does not modify safety because top-level safety is authoritative; direct safety
-    # validation is tested by forcing a bad payload through the internal checker instead.
     payload = build_agent_evidence_payload(
         request=request,
         scope_decision=scope_decision,
