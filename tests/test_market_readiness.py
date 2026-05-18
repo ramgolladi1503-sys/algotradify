@@ -3,14 +3,17 @@ from __future__ import annotations
 from market_readiness import (
     LiveMarketDataSnapshotStatus,
     MarketReadinessStatus,
+    MarketSessionExpiryGuardStatus,
     OptionChainDepthQualityStatus,
     QuoteFreshnessMonitorStatus,
     build_live_market_data_snapshot,
+    build_market_session_expiry_guard,
     build_option_chain_depth_quality_monitor,
     build_quote_freshness_runtime_monitor,
     evaluate_market_readiness,
     evaluate_market_readiness_batch,
     live_market_data_snapshot_schema_contract,
+    market_session_expiry_guard_schema_contract,
     option_chain_depth_quality_schema_contract,
     quote_freshness_runtime_monitor_schema_contract,
 )
@@ -53,6 +56,17 @@ def _option_depth_row(**overrides):
         "ce_depth": 850.0,
         "pe_depth": 760.0,
         "depth_age_sec": 1.2,
+    }
+    row.update(overrides)
+    return row
+
+
+def _session_expiry_row(**overrides):
+    row = {
+        "session_state": "OPEN",
+        "expiry": "2026-05-21",
+        "expiry_type": "WEEKLY",
+        "trade_date": "2026-05-18",
     }
     row.update(overrides)
     return row
@@ -483,3 +497,111 @@ def test_option_chain_depth_quality_monitor_warns_when_imbalance_unavailable():
     assert "DEPTH_IMBALANCE_UNAVAILABLE" in payload["warnings"]
     assert payload["read_only"] is True
     assert payload["is_order_action"] is False
+
+
+def test_market_session_expiry_guard_schema_contract_is_safe_and_complete():
+    contract = market_session_expiry_guard_schema_contract()
+
+    assert contract["schema_version"] == "1.0"
+    assert contract["guard_type"] == "MARKET_SESSION_EXPIRY_CONTEXT_GUARD"
+    assert contract["safe_flags"] == {"read_only": True, "is_order_action": False}
+    assert "session_state" in contract["required_keys"]
+    assert "expiry" in contract["required_keys"]
+    assert "days_to_expiry" in contract["required_keys"]
+    assert contract["default_thresholds"]["near_expiry_days"] == 1
+
+
+def test_market_session_expiry_guard_ready_for_open_valid_future_expiry():
+    result = build_market_session_expiry_guard(_session_expiry_row(), today="2026-05-18")
+    payload = result.to_dict()
+
+    assert result.status == MarketSessionExpiryGuardStatus.READY
+    assert payload["guard_type"] == "MARKET_SESSION_EXPIRY_CONTEXT_GUARD"
+    assert payload["read_only"] is True
+    assert payload["is_order_action"] is False
+    assert payload["session_open"] is True
+    assert payload["expiry_valid"] is True
+    assert payload["contract_expired"] is False
+    assert payload["near_expiry"] is False
+    assert payload["days_to_expiry"] == 3
+    assert payload["blockers"] == []
+
+
+def test_market_session_expiry_guard_blocks_pre_open_session():
+    result = build_market_session_expiry_guard(_session_expiry_row(session_state="PRE_OPEN"), today="2026-05-18")
+    payload = result.to_dict()
+
+    assert result.status == MarketSessionExpiryGuardStatus.BLOCKED_PRE_OPEN
+    assert payload["session_open"] is False
+    assert "MARKET_SESSION_PRE_OPEN" in payload["blockers"]
+
+
+def test_market_session_expiry_guard_blocks_closing_session():
+    result = build_market_session_expiry_guard(_session_expiry_row(session_state="CLOSING"), today="2026-05-18")
+    payload = result.to_dict()
+
+    assert result.status == MarketSessionExpiryGuardStatus.BLOCKED_CLOSING
+    assert payload["session_open"] is False
+    assert "MARKET_SESSION_CLOSING" in payload["blockers"]
+
+
+def test_market_session_expiry_guard_blocks_closed_session():
+    result = build_market_session_expiry_guard(_session_expiry_row(session_state="CLOSED"), today="2026-05-18")
+    payload = result.to_dict()
+
+    assert result.status == MarketSessionExpiryGuardStatus.BLOCKED_CLOSED
+    assert payload["session_open"] is False
+    assert "MARKET_SESSION_CLOSED" in payload["blockers"]
+
+
+def test_market_session_expiry_guard_blocks_expired_contract():
+    result = build_market_session_expiry_guard(_session_expiry_row(expiry="2026-05-16"), today="2026-05-18")
+    payload = result.to_dict()
+
+    assert result.status == MarketSessionExpiryGuardStatus.BLOCKED_EXPIRED_CONTRACT
+    assert payload["expiry_valid"] is False
+    assert payload["contract_expired"] is True
+    assert payload["days_to_expiry"] == -2
+    assert "EXPIRED_CONTRACT" in payload["blockers"]
+
+
+def test_market_session_expiry_guard_blocks_invalid_expiry():
+    result = build_market_session_expiry_guard(_session_expiry_row(expiry="not-a-date"), today="2026-05-18")
+    payload = result.to_dict()
+
+    assert result.status == MarketSessionExpiryGuardStatus.BLOCKED_INVALID_EXPIRY
+    assert payload["expiry_valid"] is False
+    assert payload["days_to_expiry"] is None
+    assert "INVALID_EXPIRY" in payload["blockers"]
+
+
+def test_market_session_expiry_guard_blocks_missing_context():
+    result = build_market_session_expiry_guard({"session_state": "", "expiry": ""}, today="2026-05-18")
+    payload = result.to_dict()
+
+    assert result.status == MarketSessionExpiryGuardStatus.BLOCKED_MISSING_CONTEXT
+    assert "MISSING_MARKET_SESSION_STATE" in payload["blockers"]
+    assert "MISSING_EXPIRY" in payload["blockers"]
+    assert payload["read_only"] is True
+    assert payload["is_order_action"] is False
+
+
+def test_market_session_expiry_guard_degrades_near_expiry_warning_only():
+    result = build_market_session_expiry_guard(_session_expiry_row(expiry="2026-05-19"), today="2026-05-18")
+    payload = result.to_dict()
+
+    assert result.status == MarketSessionExpiryGuardStatus.DEGRADED_NEAR_EXPIRY
+    assert payload["near_expiry"] is True
+    assert payload["expiry_valid"] is True
+    assert payload["blockers"] == []
+    assert "NEAR_EXPIRY_CONTRACT" in payload["warnings"]
+
+
+def test_market_session_expiry_guard_warns_unknown_expiry_type_without_blocking():
+    result = build_market_session_expiry_guard(_session_expiry_row(expiry_type="ODD"), today="2026-05-18")
+    payload = result.to_dict()
+
+    assert result.status == MarketSessionExpiryGuardStatus.READY
+    assert payload["expiry_type"] == "UNKNOWN"
+    assert payload["blockers"] == []
+    assert "EXPIRY_TYPE_UNKNOWN" in payload["warnings"]

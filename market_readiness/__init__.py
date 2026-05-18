@@ -29,6 +29,12 @@ from market_readiness.quote_liquidity import (
     evaluate_market_readiness,
     evaluate_market_readiness_batch,
 )
+from market_readiness.session_expiry_guard import (
+    MarketSessionExpiryGuard,
+    MarketSessionExpiryGuardStatus,
+    build_market_session_expiry_guard,
+    market_session_expiry_guard_schema_contract,
+)
 
 __all__ = [
     "LiveMarketDataSnapshot",
@@ -48,4 +54,8 @@ __all__ = [
     "QuoteSnapshot",
     "evaluate_market_readiness",
     "evaluate_market_readiness_batch",
+    "MarketSessionExpiryGuard",
+    "MarketSessionExpiryGuardStatus",
+    "build_market_session_expiry_guard",
+    "market_session_expiry_guard_schema_contract",
 ]
