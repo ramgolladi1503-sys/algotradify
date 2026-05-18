@@ -3,8 +3,8 @@
 This package builds simulation-only paper intent, lifecycle, fill, position, MTM,
 realized PnL, slippage, performance snapshot, canonical paper event journal,
 deterministic paper state rebuild evidence, paper state reconciliation reports,
-and in-memory paper trading pipeline evidence. It does not place broker orders
-and does not expose real order actions.
+in-memory paper trading pipeline evidence, and local paper evidence persistence.
+It does not place broker orders and does not expose real order actions.
 """
 
 from paper_trading.event_journal import (
@@ -55,6 +55,18 @@ from paper_trading.performance_snapshot import (
     build_paper_performance_snapshot,
     paper_performance_snapshot_schema_contract,
     validate_paper_performance_snapshot_inputs,
+)
+from paper_trading.persistence import (
+    PaperEvidencePersistenceStatus,
+    PaperEvidenceReadResult,
+    PaperEvidenceRecord,
+    PaperEvidenceWriteResult,
+    load_paper_evidence_records,
+    paper_evidence_persistence_schema_contract,
+    stable_paper_evidence_payload_hash,
+    validate_paper_evidence_record,
+    validate_paper_evidence_write_inputs,
+    write_paper_evidence_record,
 )
 from paper_trading.pipeline import (
     PaperTradingPipelineResult,
@@ -165,4 +177,14 @@ __all__ = [
     "paper_trading_pipeline_schema_contract",
     "run_paper_trading_pipeline",
     "validate_paper_trading_pipeline_inputs",
+    "PaperEvidencePersistenceStatus",
+    "PaperEvidenceReadResult",
+    "PaperEvidenceRecord",
+    "PaperEvidenceWriteResult",
+    "load_paper_evidence_records",
+    "paper_evidence_persistence_schema_contract",
+    "stable_paper_evidence_payload_hash",
+    "validate_paper_evidence_record",
+    "validate_paper_evidence_write_inputs",
+    "write_paper_evidence_record",
 ]
