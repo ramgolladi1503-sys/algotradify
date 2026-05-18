@@ -76,6 +76,10 @@ def _write_json_atomic(path: Path, payload: Mapping[str, Any]) -> None:
 
 
 def _assert_safe_record(payload: Mapping[str, Any]) -> None:
+    if payload.get("schema_version") != AGENT_PATCH_APPROVAL_SCHEMA_VERSION:
+        raise AgentPatchApprovalError("APPROVAL_SCHEMA_UNSUPPORTED")
+    if payload.get("contract") != AGENT_PATCH_APPROVAL_CONTRACT:
+        raise AgentPatchApprovalError("APPROVAL_CONTRACT_UNSUPPORTED")
     for key, expected_value in _base_safe_flags().items():
         if payload.get(key) != expected_value:
             raise AgentPatchApprovalError(f"UNSAFE_APPROVAL_{key.upper()}")
@@ -105,6 +109,36 @@ def _clean_reason(value: str | None) -> str | None:
     return cleaned or None
 
 
+def _assert_task_safe(task: Mapping[str, Any]) -> None:
+    if task.get("read_only") is not True:
+        raise AgentPatchApprovalError("TASK_READ_ONLY_FLAG_UNSAFE")
+    if task.get("is_order_action") is not False:
+        raise AgentPatchApprovalError("TASK_ORDER_ACTION_UNSAFE")
+    if task.get("broker_api_called") is not False:
+        raise AgentPatchApprovalError("TASK_BROKER_FLAG_UNSAFE")
+    if task.get("live_mode_touched") is not False:
+        raise AgentPatchApprovalError("TASK_LIVE_FLAG_UNSAFE")
+    if task.get("allowed_for_live_execution") is not False:
+        raise AgentPatchApprovalError("TASK_LIVE_PERMISSION_UNSAFE")
+
+
+def _assert_approval_decision_safe(approval_decision: Mapping[str, Any]) -> None:
+    if approval_decision.get("approved") is not True:
+        raise AgentPatchApprovalError("APPROVAL_DECISION_NOT_APPROVED")
+    if approval_decision.get("allowed_for_patch") is not True:
+        raise AgentPatchApprovalError("PATCH_NOT_ALLOWED")
+    for key in [
+        "allowed_for_runtime_wiring",
+        "allowed_for_broker_api",
+        "allowed_for_live_execution",
+        "is_order_action",
+        "broker_api_called",
+        "live_mode_touched",
+    ]:
+        if approval_decision.get(key) is True:
+            raise AgentPatchApprovalError(f"UNSAFE_APPROVAL_DECISION_{key.upper()}")
+
+
 def build_agent_patch_approval_record(
     *,
     work_id: str,
@@ -118,13 +152,8 @@ def build_agent_patch_approval_record(
     cleaned_reason = _clean_reason(reason)
     if task.get("work_id") != work_id:
         raise AgentPatchApprovalError("TASK_WORK_ID_MISMATCH")
-    if approval_decision.get("approved") is not True:
-        raise AgentPatchApprovalError("APPROVAL_DECISION_NOT_APPROVED")
-    if approval_decision.get("allowed_for_patch") is not True:
-        raise AgentPatchApprovalError("PATCH_NOT_ALLOWED")
-    for key in ["allowed_for_runtime_wiring", "allowed_for_broker_api", "allowed_for_live_execution", "is_order_action", "broker_api_called", "live_mode_touched"]:
-        if approval_decision.get(key) is True:
-            raise AgentPatchApprovalError(f"UNSAFE_APPROVAL_DECISION_{key.upper()}")
+    _assert_task_safe(task)
+    _assert_approval_decision_safe(approval_decision)
 
     payload = {
         "schema_version": AGENT_PATCH_APPROVAL_SCHEMA_VERSION,
@@ -162,6 +191,7 @@ def build_agent_patch_rejection_record(
     cleaned_reason = _clean_reason(reason)
     if task.get("work_id") != work_id:
         raise AgentPatchApprovalError("TASK_WORK_ID_MISMATCH")
+    _assert_task_safe(task)
 
     payload = {
         "schema_version": AGENT_PATCH_APPROVAL_SCHEMA_VERSION,
@@ -188,8 +218,6 @@ def build_agent_patch_rejection_record(
 
 
 def persist_agent_patch_approval(record: Mapping[str, Any], root_dir: str | Path = "runtime/agent_work") -> dict[str, Any]:
-    if record.get("schema_version") != AGENT_PATCH_APPROVAL_SCHEMA_VERSION:
-        raise AgentPatchApprovalError("APPROVAL_SCHEMA_UNSUPPORTED")
     _assert_safe_record(record)
     path = _approval_path(root_dir, str(record.get("work_id")))
     if path.exists():
@@ -213,7 +241,5 @@ def load_agent_patch_approval(root_dir: str | Path, work_id: str) -> dict[str, A
         raise AgentPatchApprovalError(f"APPROVAL_FILE_CORRUPT:{path.name}") from exc
     if not isinstance(payload, dict):
         raise AgentPatchApprovalError(f"APPROVAL_FILE_NOT_OBJECT:{path.name}")
-    if payload.get("schema_version") != AGENT_PATCH_APPROVAL_SCHEMA_VERSION:
-        raise AgentPatchApprovalError(f"APPROVAL_FILE_SCHEMA_UNSUPPORTED:{path.name}")
     _assert_safe_record(payload)
     return payload
