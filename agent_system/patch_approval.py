@@ -16,11 +16,10 @@ class AgentPatchApprovalError(RuntimeError):
     """Raised when a patch-only approval decision cannot be safely recorded."""
 
 
-def _safe_flags() -> dict[str, Any]:
+def _base_safe_flags() -> dict[str, Any]:
     return {
         "read_only": True,
         "patch_approval_only": True,
-        "allowed_for_patch": False,
         "allowed_for_runtime_wiring": False,
         "allowed_for_broker_api": False,
         "allowed_for_live_execution": False,
@@ -28,6 +27,13 @@ def _safe_flags() -> dict[str, Any]:
         "broker_api_called": False,
         "live_mode_touched": False,
         "real_order_id": None,
+    }
+
+
+def _response_safe_flags(*, allowed_for_patch: bool = False) -> dict[str, Any]:
+    return {
+        **_base_safe_flags(),
+        "allowed_for_patch": allowed_for_patch,
     }
 
 
@@ -40,7 +46,7 @@ def agent_patch_approval_schema_contract() -> dict[str, Any]:
             "POST /agent/tasks/{work_id}/rejection",
         ],
         "methods": ["POST"],
-        "safe_defaults": _safe_flags(),
+        "safe_defaults": _response_safe_flags(allowed_for_patch=False),
         "scope": "patch_approval_record_only_no_execution_no_broker_no_live_no_paper_orders",
     }
 
@@ -70,12 +76,15 @@ def _write_json_atomic(path: Path, payload: Mapping[str, Any]) -> None:
 
 
 def _assert_safe_record(payload: Mapping[str, Any]) -> None:
-    expected = _safe_flags()
-    for key, expected_value in expected.items():
+    for key, expected_value in _base_safe_flags().items():
         if payload.get(key) != expected_value:
             raise AgentPatchApprovalError(f"UNSAFE_APPROVAL_{key.upper()}")
-    if payload.get("allowed_for_patch") is True and payload.get("decision") != "APPROVED_FOR_PATCH":
+    allowed_for_patch = payload.get("allowed_for_patch")
+    decision = payload.get("decision")
+    if allowed_for_patch is True and decision != "APPROVED_FOR_PATCH":
         raise AgentPatchApprovalError("PATCH_PERMISSION_WITHOUT_APPROVAL")
+    if allowed_for_patch is not True and allowed_for_patch is not False:
+        raise AgentPatchApprovalError("ALLOWED_FOR_PATCH_MUST_BE_BOOLEAN")
 
 
 def _clean_actor(value: str | None, field: str) -> str:
@@ -135,10 +144,9 @@ def build_agent_patch_approval_record(
         "metadata": {
             "scope": "patch_approval_record_only_no_execution",
         },
-        **_safe_flags(),
+        **_response_safe_flags(allowed_for_patch=True),
     }
-    payload["allowed_for_patch"] = True
-    _assert_safe_record({**payload, "allowed_for_patch": False} if False else payload)
+    _assert_safe_record(payload)
     return payload
 
 
@@ -173,7 +181,7 @@ def build_agent_patch_rejection_record(
         "metadata": {
             "scope": "patch_rejection_record_only_no_execution",
         },
-        **_safe_flags(),
+        **_response_safe_flags(allowed_for_patch=False),
     }
     _assert_safe_record(payload)
     return payload
@@ -191,7 +199,7 @@ def persist_agent_patch_approval(record: Mapping[str, Any], root_dir: str | Path
         "status": "CREATED",
         "approval_path": str(path),
         "work_id": record.get("work_id"),
-        **_safe_flags(),
+        **_response_safe_flags(allowed_for_patch=bool(record.get("allowed_for_patch"))),
     }
 
 
