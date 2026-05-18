@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from copy import deepcopy
 
-from paper_trading import (
-    reduce_paper_events,
+from paper_trading.state_reducer import (
     paper_state_reducer_schema_contract,
+    reduce_paper_events,
 )
 
 
