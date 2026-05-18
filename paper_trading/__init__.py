@@ -5,8 +5,9 @@ realized PnL, slippage, performance snapshot, canonical paper event journal,
 deterministic paper state rebuild evidence, paper state reconciliation reports,
 in-memory paper trading pipeline evidence, local paper evidence persistence,
 non-destructive paper session boundary controls, deterministic paper scenario
-suite evidence, and local paper evidence export bundles. It does not place
-broker orders and does not expose real order actions.
+suite evidence, local paper evidence export bundles, and deterministic replay
+ready paper dataset rows. It does not place broker orders and does not expose
+real order actions.
 """
 
 from paper_trading.event_journal import (
@@ -113,6 +114,15 @@ from paper_trading.reconciliation import (
     paper_state_reconciliation_schema_contract,
     reconcile_paper_state,
     validate_paper_state_reconciliation_inputs,
+)
+from paper_trading.replay_dataset import (
+    PaperReplayDatasetResult,
+    PaperReplayDatasetStatus,
+    build_paper_replay_dataset,
+    load_paper_replay_dataset_rows,
+    paper_replay_dataset_schema_contract,
+    stable_replay_row_id,
+    validate_paper_replay_dataset_rows,
 )
 from paper_trading.scenarios import (
     PaperScenarioName,
@@ -243,4 +253,11 @@ __all__ = [
     "run_paper_scenario",
     "run_standard_paper_scenarios",
     "validate_paper_scenario_inputs",
+    "PaperReplayDatasetResult",
+    "PaperReplayDatasetStatus",
+    "build_paper_replay_dataset",
+    "load_paper_replay_dataset_rows",
+    "paper_replay_dataset_schema_contract",
+    "stable_replay_row_id",
+    "validate_paper_replay_dataset_rows",
 ]
