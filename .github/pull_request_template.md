@@ -4,6 +4,19 @@ Product PR:
 GitHub PR:
 Scope:
 
+## Pre-code scope review
+
+Proposed PR:
+Why this PR is next:
+Files to change:
+Files not to touch:
+Safety boundary:
+Failure cases:
+Negative tests:
+Acceptance proof:
+Regression risks:
+Merge blockers:
+
 ## Proposed design
 
 ## Files changed
@@ -39,6 +52,19 @@ python -m pytest ...
 ```
 
 ## Acceptance proof
+
+## Post-code review
+
+Changed files match approved scope:
+Forbidden files touched:
+Safety boundary preserved:
+Behavior tests added:
+Negative tests added:
+Focused test command:
+Adjacent regression command:
+CI status:
+Remaining risks:
+Reject before merge if:
 
 ## Regression risks
 
