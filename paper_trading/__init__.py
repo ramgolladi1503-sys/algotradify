@@ -4,8 +4,9 @@ This package builds simulation-only paper intent, lifecycle, fill, position, MTM
 realized PnL, slippage, performance snapshot, canonical paper event journal,
 deterministic paper state rebuild evidence, paper state reconciliation reports,
 in-memory paper trading pipeline evidence, local paper evidence persistence,
-and non-destructive paper session boundary controls. It does not place broker
-orders and does not expose real order actions.
+non-destructive paper session boundary controls, and deterministic paper scenario
+suite evidence. It does not place broker orders and does not expose real order
+actions.
 """
 
 from paper_trading.event_journal import (
@@ -103,6 +104,15 @@ from paper_trading.reconciliation import (
     paper_state_reconciliation_schema_contract,
     reconcile_paper_state,
     validate_paper_state_reconciliation_inputs,
+)
+from paper_trading.scenarios import (
+    PaperScenarioName,
+    PaperScenarioResult,
+    PaperScenarioStatus,
+    paper_scenario_schema_contract,
+    run_paper_scenario,
+    run_standard_paper_scenarios,
+    validate_paper_scenario_inputs,
 )
 from paper_trading.session_boundary import (
     PAPER_SESSION_BOUNDARY_RECORD_TYPE,
@@ -210,4 +220,11 @@ __all__ = [
     "mark_paper_session_boundary",
     "paper_session_boundary_schema_contract",
     "validate_paper_session_boundary_record",
+    "PaperScenarioName",
+    "PaperScenarioResult",
+    "PaperScenarioStatus",
+    "paper_scenario_schema_contract",
+    "run_paper_scenario",
+    "run_standard_paper_scenarios",
+    "validate_paper_scenario_inputs",
 ]
