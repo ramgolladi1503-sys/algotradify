@@ -2,11 +2,11 @@
 
 ## Latest confirmed merged
 
-GitHub PR #94 / Product PR 89 — Paper Event Ordering and Idempotency Guard
+GitHub PR #96 / Product PR 90 — Paper State Rebuild CLI
 
 ## Current product PR
 
-PR 90 — Paper State Rebuild CLI / Deterministic Rebuild Proof
+PR 91 — Paper State Reconciliation Report
 
 ## Current posture
 
@@ -22,18 +22,18 @@ ml_ranker_work=false
 - PR 87 — Canonical Paper Event Journal
 - PR 88 — Deterministic Paper State Reducer
 - PR 89 — Paper Event Ordering and Idempotency Guard
+- PR 90 — Paper State Rebuild CLI / Deterministic Rebuild Proof
 
 ## Current implementation focus
 
-- Load canonical paper journal events.
-- Guard event ordering and idempotency.
-- Derive state through the deterministic reducer.
-- Expose read-only rebuild result and CLI.
-- Fail closed on corrupt, unsafe, duplicate, or unordered journals.
+- Compare deterministic rebuilt paper state against observed paper state.
+- Report MATCH, DRIFT, EMPTY, or BLOCKED.
+- Fail closed on invalid rebuild results, unsafe state flags, or missing required state keys.
+- Keep reconciliation read-only and report-only.
 
-## Next product PR only after PR 90 merges
+## Next product PR only after PR 91 merges
 
-PR 91 — Paper State Reconciliation Report
+PR 92 — Paper Trading Pipeline Orchestrator
 
 ## Hard rules
 
@@ -44,6 +44,7 @@ PR 91 — Paper State Reconciliation Report
 - No broker adapter work in this wave.
 - Journal is truth.
 - Reducer derives state.
+- Reconciliation reports drift; it does not become truth.
 - Every PR must include acceptance proof.
 
 ## Process note
