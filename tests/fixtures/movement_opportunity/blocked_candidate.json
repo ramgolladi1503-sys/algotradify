@@ -1,0 +1,103 @@
+{
+  "api_schema_version": "1.0",
+  "route": "/movement-opportunity",
+  "method": "GET",
+  "read_only": true,
+  "is_order_action": false,
+  "context": {
+    "symbol": "NIFTY",
+    "ts_epoch": 77777.0,
+    "is_order_action": false
+  },
+  "summary": {
+    "schema_version": "1.0",
+    "provider_count": 6,
+    "registry_candidate_count": 2,
+    "pooled_candidate_count": 2,
+    "option_enriched_count": 2,
+    "allowed_count": 0,
+    "blocked_count": 2,
+    "no_trade_count": 2,
+    "ranked_count": 0,
+    "excluded_count": 2,
+    "diagnostic_count": 1,
+    "warning_count": 1,
+    "top_candidate_id": null,
+    "read_only": true,
+    "is_order_action": false
+  },
+  "ranked_candidates": [],
+  "rank_records": [],
+  "exclusions": [
+    {
+      "candidate_id": "move_nifty_failed_breakout_001",
+      "strategy_id": "failed_breakout_trap",
+      "reason": "quote source fallback blocked movement candidate",
+      "status": "BLOCKED",
+      "blockers": ["FALLBACK_QUOTE_SOURCE", "OPTION_PRESSURE_WEAK"],
+      "is_order_action": false
+    },
+    {
+      "candidate_id": "move_nifty_vwap_reclaim_001",
+      "strategy_id": "vwap_reclaim",
+      "reason": "option liquidity below required depth",
+      "status": "BLOCKED",
+      "blockers": ["OPTION_DEPTH_LOW"],
+      "is_order_action": false
+    }
+  ],
+  "warnings": ["all movement candidates blocked by safety filters"],
+  "diagnostics": [
+    {
+      "code": "ALL_MOVEMENT_CANDIDATES_BLOCKED",
+      "message": "No ranked movement candidates remain after safety filtering.",
+      "candidate_id": null,
+      "strategy_id": null,
+      "is_order_action": false
+    }
+  ],
+  "pipeline": {
+    "summary": {
+      "schema_version": "1.0",
+      "provider_count": 6,
+      "registry_candidate_count": 2,
+      "pooled_candidate_count": 2,
+      "option_enriched_count": 2,
+      "allowed_count": 0,
+      "blocked_count": 2,
+      "no_trade_count": 2,
+      "ranked_count": 0,
+      "excluded_count": 2,
+      "diagnostic_count": 1,
+      "warning_count": 1,
+      "top_candidate_id": null,
+      "read_only": true,
+      "is_order_action": false
+    },
+    "registry_result": {"is_order_action": false},
+    "candidate_pool_result": {"is_order_action": false},
+    "option_enriched_candidates": [],
+    "no_trade_filter_result": {"candidates": [], "results": [], "is_order_action": false},
+    "rank_result": {
+      "ranked_candidates": [],
+      "rank_records": [],
+      "exclusions": [],
+      "summary": {},
+      "warnings": [],
+      "diagnostics": [],
+      "is_order_action": false
+    },
+    "warnings": ["all movement candidates blocked by safety filters"],
+    "diagnostics": [
+      {
+        "code": "ALL_MOVEMENT_CANDIDATES_BLOCKED",
+        "message": "No ranked movement candidates remain after safety filtering.",
+        "candidate_id": null,
+        "strategy_id": null,
+        "is_order_action": false
+      }
+    ],
+    "read_only": true,
+    "is_order_action": false
+  }
+}
