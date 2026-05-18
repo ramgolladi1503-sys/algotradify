@@ -1,11 +1,16 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Card, Chips, JsonBlock, Metric, Pill, Table, arr, show } from './controlTowerCards.jsx';
 
+const ENV = import.meta.env || {};
+const API_BASE = ENV.VITE_API_BASE_URL || ENV.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
 const muted = { color: '#99a7c7' };
 const flagGrid = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 8, margin: '10px 0' };
 const subtlePanel = { border: '1px solid #334155', borderRadius: 10, padding: 10, background: '#0b1220', margin: '10px 0' };
 const warningPanel = { border: '1px solid #7f1d1d', borderRadius: 10, padding: 10, background: '#3f1d1d', margin: '10px 0', color: '#fecaca' };
 const safePanel = { border: '1px solid #14532d', borderRadius: 10, padding: 10, background: '#052e16', margin: '10px 0' };
+const reviewButton = { border: 0, borderRadius: 8, padding: '8px 10px', fontWeight: 800, background: '#2563eb', color: 'white', marginRight: 8 };
+const rejectButton = { ...reviewButton, background: '#7f1d1d' };
+const inputStyle = { border: '1px solid #334155', background: '#0b1220', color: '#e8eefc', borderRadius: 8, padding: 8, marginRight: 8, minWidth: 180 };
 
 export function agentTaskSafeFlagWarnings(payload) {
   const warnings = [];
@@ -56,9 +61,37 @@ function agentTaskStateCounts(records) {
   return Object.entries(counts).map(([state, count]) => `${state}: ${count}`);
 }
 
-export function AgentTaskPanel({ agentTasks }) {
+export function canRecordPatchDecision(record) {
+  return Boolean(record?.work_id && record?.read_only === true && record?.is_order_action === false && record?.broker_api_called === false && record?.live_mode_touched === false && record?.allowed_for_live_execution === false);
+}
+
+async function postPatchDecision(workId, decision, payload) {
+  const endpoint = decision === 'approval' ? `/agent/tasks/${encodeURIComponent(workId)}/approval` : `/agent/tasks/${encodeURIComponent(workId)}/rejection`;
+  const response = await fetch(`${API_BASE}${endpoint}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload || {}) });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(JSON.stringify(body));
+  return { endpoint, body };
+}
+
+function PatchReviewControls({ records, onPatchDecision, onPatchDecisionResult }) {
+  const [actor, setActor] = useState('ram');
+  const [reason, setReason] = useState('');
+  const actionable = arr(records).filter(canRecordPatchDecision);
+  async function recordDecision(workId, decision, payload) {
+    try {
+      const result = onPatchDecision ? await onPatchDecision(workId, decision, payload) : await postPatchDecision(workId, decision, payload);
+      onPatchDecisionResult?.({ ok: true, decision, workId, result });
+    } catch (error) {
+      onPatchDecisionResult?.({ ok: false, decision, workId, error: String(error?.message || error) });
+    }
+  }
+  return <div style={subtlePanel}><strong>Patch-review decision controls</strong><p style={muted}>These controls only call the patch-review record API. They do not run tasks, apply patches, merge code, place orders, call brokers, or touch live mode.</p><div><input aria-label='patch review actor' value={actor} onChange={(e) => setActor(e.target.value)} style={inputStyle} placeholder='reviewed by' /><input aria-label='patch review reason' value={reason} onChange={(e) => setReason(e.target.value)} style={{ ...inputStyle, minWidth: 260 }} placeholder='optional reason' /></div>{actionable.length ? actionable.map((record) => <div key={record.work_id} style={{ borderTop: '1px solid #334155', paddingTop: 8, marginTop: 8 }}><span style={{ marginRight: 12 }}>{show(record.work_id)} · {show(record.state)} · {show(record.risk_level)}</span><button style={reviewButton} onClick={() => recordDecision(record.work_id, 'approval', { approved_by: actor, reason })}>Record Patch Approval</button><button style={rejectButton} onClick={() => recordDecision(record.work_id, 'rejection', { rejected_by: actor, reason })}>Record Patch Rejection</button></div>) : <div style={muted}>No safe agent task records available for patch-review recording.</div>}</div>;
+}
+
+export function AgentTaskPanel({ agentTasks, onPatchDecision }) {
+  const [patchDecisionResult, setPatchDecisionResult] = useState(null);
   const payload = agentTasks || {};
-  const status = payload.read_only === true && payload.is_order_action === false && payload.broker_api_called === false && payload.allowed_for_live_execution === false ? 'READ_ONLY_AGENT_TASK_PANEL' : 'AGENT_TASK_QUERY_UNAVAILABLE';
+  const status = payload.read_only === true && payload.is_order_action === false && payload.broker_api_called === false && payload.allowed_for_live_execution === false ? 'PATCH_REVIEW_PANEL_SAFE' : 'AGENT_TASK_QUERY_UNAVAILABLE';
   const rows = agentTaskRows(payload);
-  return <Card title='Agent Task Dashboard Read-only Panel' right={<Pill value={status} />}><p style={muted}>Read-only agent task view from /agent/tasks?limit=20. This panel displays task intake status, risk level, query metadata, and safety flags only.</p><AgentTaskSafeFlagPanel payload={payload} /><div style={flagGrid}><Metric label='contract' value={payload.contract} /><Metric label='source_count' value={payload.source_count} /><Metric label='result_count' value={payload.result_count} /><Metric label='record_count' value={rows.length} /></div><div style={subtlePanel}><strong>Agent task state distribution</strong><Chips items={agentTaskStateCounts(payload.records)} /></div><h4>Agent task records</h4><Table rows={rows} empty='no agent task records yet' /><JsonBlock title='agent task query raw payload' value={payload} /></Card>;
+  return <Card title='Agent Task Patch Review Panel' right={<Pill value={status} />}><p style={muted}>Agent task view from /agent/tasks?limit=20 with patch-review recording controls. The controls only call /agent/tasks/{'{work_id}'}/approval or /agent/tasks/{'{work_id}'}/rejection.</p><AgentTaskSafeFlagPanel payload={payload} /><div style={flagGrid}><Metric label='contract' value={payload.contract} /><Metric label='source_count' value={payload.source_count} /><Metric label='result_count' value={payload.result_count} /><Metric label='record_count' value={rows.length} /></div><div style={subtlePanel}><strong>Agent task state distribution</strong><Chips items={agentTaskStateCounts(payload.records)} /></div><PatchReviewControls records={payload.records} onPatchDecision={onPatchDecision} onPatchDecisionResult={setPatchDecisionResult} />{patchDecisionResult ? <div style={patchDecisionResult.ok ? safePanel : warningPanel}><strong>Latest patch-review API result</strong><JsonBlock title='patch review result' value={patchDecisionResult} /></div> : null}<h4>Agent task records</h4><Table rows={rows} empty='no agent task records yet' /><JsonBlock title='agent task query raw payload' value={payload} /></Card>;
 }

@@ -70,7 +70,7 @@ def test_agent_task_panel_component_exists_and_is_wired():
     assert "from './agentTaskPanel.jsx'" in main_source
     assert "AgentTaskPanel" in main_source
     assert "export function AgentTaskPanel" in panel_source
-    assert "Agent Task Dashboard Read-only Panel" in panel_source
+    assert "Agent Task Patch Review Panel" in panel_source
 
 
 def test_agent_task_panel_fetches_read_only_query_endpoint():
@@ -117,7 +117,7 @@ def test_agent_task_panel_exposes_safe_flags_visibly():
     source = _panel_source()
 
     required_terms = [
-        "READ_ONLY_AGENT_TASK_PANEL",
+        "PATCH_REVIEW_PANEL_SAFE",
         "AGENT_TASK_QUERY_UNAVAILABLE",
         "agentTaskSafeFlagWarnings",
         "AgentTaskSafeFlagPanel",
@@ -132,12 +132,29 @@ def test_agent_task_panel_exposes_safe_flags_visibly():
         assert term in source
 
 
-def test_agent_task_panel_does_not_add_write_or_execution_controls():
+def test_agent_task_patch_review_controls_call_record_only_endpoints():
+    source = _panel_source()
+
+    required_terms = [
+        "Patch-review decision controls",
+        "Record Patch Approval",
+        "Record Patch Rejection",
+        "/agent/tasks/${encodeURIComponent(workId)}/approval",
+        "/agent/tasks/${encodeURIComponent(workId)}/rejection",
+        "approved_by",
+        "rejected_by",
+        "Latest patch-review API result",
+        "canRecordPatchDecision",
+        "patch_approval_only",
+    ]
+    for term in required_terms:
+        assert term in source
+
+
+def test_agent_task_panel_does_not_add_execution_or_trading_controls():
     source = _combined_source()
 
     forbidden_terms = [
-        "Approve Task",
-        "Reject Task",
         "Run Task",
         "Execute Task",
         "Merge Task",
@@ -147,6 +164,13 @@ def test_agent_task_panel_does_not_add_write_or_execution_controls():
         "Enable Live",
         "Change Live Config",
         "append=true",
+        "submit_order",
+        "modify_order",
+        "cancel_order",
+        "exit_position",
+        "enable_live_now",
+        "auto_merge",
+        "apply_patch_now",
     ]
     for term in forbidden_terms:
         assert term not in source
