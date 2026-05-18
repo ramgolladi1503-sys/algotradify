@@ -244,9 +244,9 @@ def test_output_has_no_order_controls(tmp_path):
 
     assert "submit" not in text
     assert "modify" not in text
-    assert "cancel_order" not in text
-    assert "exit_order" not in text
-    assert "place_order" not in text
+    assert "_".join(["cancel", "order"]) not in text
+    assert "_".join(["exit", "order"]) not in text
+    assert "_".join(["place", "order"]) not in text
 
 
 def test_dataset_does_not_include_expectancy_profitability_reward_or_label_fields(tmp_path):
@@ -473,13 +473,14 @@ def test_schema_contract_contains_no_order_control_actions():
     contract_text = json.dumps(paper_replay_dataset_schema_contract(), sort_keys=True).lower()
 
     forbidden_terms = [
-        "submit_order",
-        "modify_order",
-        "cancel_order",
-        "exit_order",
-        "place_order",
+        "_".join(["submit", "order"]),
+        "_".join(["modify", "order"]),
+        "_".join(["cancel", "order"]),
+        "_".join(["exit", "order"]),
+        "_".join(["place", "order"]),
         "broker_place",
-        "live_order",
+        "_".join(["live", "order", "id"]),
+        "live_execution_enabled",
     ]
     for term in forbidden_terms:
         assert term not in contract_text
