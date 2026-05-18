@@ -120,7 +120,10 @@ def _to_row(record: Any) -> dict[str, Any]:
     resolution = payload.get("resolution") if isinstance(payload.get("resolution"), dict) else {}
     instrument = resolution.get("instrument") if isinstance(resolution.get("instrument"), dict) else {}
     resolution_source = _resolution_source(payload, resolution)
-    blockers = _dedupe(list(payload.get("blockers") or []) + _resolution_mismatch_blockers(request, instrument))
+    blockers = _dedupe(
+        list(payload.get("blockers") or [])
+        + _resolution_mismatch_blockers(request, instrument, resolution_source=resolution_source)
+    )
     warnings = _dedupe(list(payload.get("warnings") or []))
     return {
         "candidate_id": payload.get("candidate_id"),
@@ -220,7 +223,12 @@ def _resolution_source(payload: dict[str, Any], resolution: dict[str, Any]) -> s
     return status or "UNKNOWN"
 
 
-def _resolution_mismatch_blockers(request: dict[str, Any], instrument: dict[str, Any]) -> list[str]:
+def _resolution_mismatch_blockers(
+    request: dict[str, Any],
+    instrument: dict[str, Any],
+    *,
+    resolution_source: str,
+) -> list[str]:
     blockers: list[str] = []
     if not instrument:
         return blockers
@@ -231,6 +239,8 @@ def _resolution_mismatch_blockers(request: dict[str, Any], instrument: dict[str,
         "EXCHANGE": (_upper(request.get("exchange")), _upper(instrument.get("exchange"))),
     }
     for label, (requested, resolved) in checks.items():
+        if resolution_source == "FALLBACK" and label == "STRIKE":
+            continue
         if requested not in (None, "") and resolved not in (None, "") and requested != resolved:
             blockers.append(f"INSTRUMENT_MISMATCH_{label}")
     return blockers
