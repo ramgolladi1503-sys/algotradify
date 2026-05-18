@@ -1,13 +1,14 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 import json
 from pathlib import Path
 import tempfile
-from typing import Any, Mapping
+from typing import Any
 
-from agent_system.work_contract import AGENT_WORK_SCHEMA_VERSION, build_agent_work_id
+from agent_system.work_contract import build_agent_work_id
 
 
 TASK_STORE_SCHEMA_VERSION = 1
