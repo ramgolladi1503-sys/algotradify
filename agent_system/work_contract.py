@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
 from enum import Enum
 import hashlib
 import json
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 
 AGENT_WORK_SCHEMA_VERSION = 1
@@ -112,16 +113,6 @@ def _required_clean_string(payload: Mapping[str, Any], key: str) -> str:
     if not cleaned:
         raise AgentWorkValidationError(f"{key.upper()}_MISSING")
     return cleaned
-
-
-def _optional_clean_string(payload: Mapping[str, Any], key: str, default: str) -> str:
-    value = payload.get(key, default)
-    if value is None:
-        return default
-    if not isinstance(value, str):
-        raise AgentWorkValidationError(f"{key.upper()}_MUST_BE_STRING")
-    cleaned = value.strip()
-    return cleaned or default
 
 
 def _string_tuple(payload: Mapping[str, Any], key: str, *, required: bool = False) -> tuple[str, ...]:
