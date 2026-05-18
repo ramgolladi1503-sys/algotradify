@@ -4,6 +4,10 @@
 
 GitHub PR #94 / Product PR 89 — Paper Event Ordering and Idempotency Guard
 
+## Current product PR
+
+PR 90 — Paper State Rebuild CLI / Deterministic Rebuild Proof
+
 ## Current posture
 
 mode=paper_truth_foundation
@@ -19,9 +23,17 @@ ml_ranker_work=false
 - PR 88 — Deterministic Paper State Reducer
 - PR 89 — Paper Event Ordering and Idempotency Guard
 
-## Next product PR only
+## Current implementation focus
 
-PR 90 — Paper Journal Rebuild CLI / Deterministic Rebuild Proof
+- Load canonical paper journal events.
+- Guard event ordering and idempotency.
+- Derive state through the deterministic reducer.
+- Expose read-only rebuild result and CLI.
+- Fail closed on corrupt, unsafe, duplicate, or unordered journals.
+
+## Next product PR only after PR 90 merges
+
+PR 91 — Paper State Reconciliation Report
 
 ## Hard rules
 
