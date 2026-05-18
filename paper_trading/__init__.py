@@ -1,8 +1,8 @@
 """Paper trading contracts for Algotradify.
 
 This package builds simulation-only paper intent, lifecycle, fill, position, MTM,
-realized PnL, and slippage evidence. It does not place broker orders and does
-not expose real order actions.
+realized PnL, slippage, and performance snapshot evidence. It does not place
+broker orders and does not expose real order actions.
 """
 
 from paper_trading.fill_simulation import (
@@ -33,6 +33,13 @@ from paper_trading.mtm_pnl import (
     build_paper_mtm_pnl,
     paper_mtm_pnl_schema_contract,
     validate_paper_mtm_pnl_inputs,
+)
+from paper_trading.performance_snapshot import (
+    PaperPerformanceSnapshotResult,
+    PaperPerformanceSnapshotStatus,
+    build_paper_performance_snapshot,
+    paper_performance_snapshot_schema_contract,
+    validate_paper_performance_snapshot_inputs,
 )
 from paper_trading.position_ledger import (
     PaperPositionLedgerResult,
@@ -93,4 +100,9 @@ __all__ = [
     "build_paper_slippage_report",
     "paper_slippage_schema_contract",
     "validate_paper_slippage_inputs",
+    "PaperPerformanceSnapshotResult",
+    "PaperPerformanceSnapshotStatus",
+    "build_paper_performance_snapshot",
+    "paper_performance_snapshot_schema_contract",
+    "validate_paper_performance_snapshot_inputs",
 ]
