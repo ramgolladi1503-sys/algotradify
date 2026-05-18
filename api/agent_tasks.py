@@ -117,7 +117,7 @@ def install_agent_tasks_route(
     @app.post("/agent/tasks")
     async def agent_tasks(request: Request):
         try:
-            payload = await request.json()
+            raw_payload = await request.json()
         except Exception as exc:
             raise HTTPException(
                 status_code=400,
@@ -128,7 +128,7 @@ def install_agent_tasks_route(
                 },
             ) from exc
 
-        if not isinstance(payload, dict):
+        if not isinstance(raw_payload, dict):
             raise HTTPException(
                 status_code=400,
                 detail={
@@ -138,6 +138,7 @@ def install_agent_tasks_route(
                 },
             )
 
+        payload = dict(raw_payload)
         human_approved = bool(payload.pop("human_approved", False))
         approved_by = payload.pop("approved_by", None)
         if approved_by is not None and not isinstance(approved_by, str):
