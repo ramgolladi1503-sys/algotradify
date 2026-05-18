@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 from paper_trading.export_bundle import build_paper_export_bundle, stable_file_hash
 from paper_trading.persistence import write_paper_evidence_record
@@ -11,6 +12,36 @@ from paper_trading.replay_dataset import (
     stable_replay_row_id,
     validate_paper_replay_dataset_rows,
 )
+
+
+SNAPSHOT_PATH = Path(__file__).parent / "snapshots" / "paper_replay_dataset_schema_v1.json"
+
+
+def _valid_replay_row(**overrides):
+    row = {
+        "schema_version": "1.0",
+        "row_type": "PAPER_REPLAY_DATASET_ROW",
+        "row_id": "row-1",
+        "source_bundle_id": "bundle-1",
+        "source_record_id": "record-1",
+        "source_record_type": "PAPER_SCENARIO_RESULT",
+        "source_cycle_id": "cycle-1",
+        "source_candidate_id": "candidate-1",
+        "source_strategy_id": "strategy-1",
+        "source_created_at_epoch": 100.0,
+        "scenario_name": "FULL_FILL_HAPPY_PATH",
+        "event_count": 4,
+        "pipeline_status": "COMPLETED",
+        "session_id": "paper-session-1",
+        "payload_hash": "hash",
+        "paper_only": True,
+        "read_only": True,
+        "is_order_action": False,
+        "broker_api_called": False,
+        "real_order_id": None,
+    }
+    row.update(overrides)
+    return row
 
 
 def _payload(**overrides):
@@ -297,3 +328,158 @@ def test_stable_replay_row_id_is_deterministic():
 
     assert first == second
     assert first.startswith("paper-replay-row-")
+
+
+def test_schema_contract_matches_v1_snapshot_exactly():
+    expected = json.loads(SNAPSHOT_PATH.read_text(encoding="utf-8"))
+
+    assert paper_replay_dataset_schema_contract() == expected
+
+
+def test_schema_snapshot_locks_required_row_keys_order():
+    contract = paper_replay_dataset_schema_contract()
+    snapshot = json.loads(SNAPSHOT_PATH.read_text(encoding="utf-8"))
+
+    assert contract["required_row_keys"] == snapshot["required_row_keys"]
+    assert contract["required_row_keys"] == [
+        "schema_version",
+        "row_type",
+        "row_id",
+        "source_bundle_id",
+        "source_record_id",
+        "source_record_type",
+        "source_cycle_id",
+        "source_candidate_id",
+        "source_strategy_id",
+        "source_created_at_epoch",
+        "scenario_name",
+        "event_count",
+        "pipeline_status",
+        "session_id",
+        "payload_hash",
+        "paper_only",
+        "read_only",
+        "is_order_action",
+        "broker_api_called",
+        "real_order_id",
+    ]
+
+
+def test_schema_snapshot_locks_required_result_keys_order():
+    contract = paper_replay_dataset_schema_contract()
+    snapshot = json.loads(SNAPSHOT_PATH.read_text(encoding="utf-8"))
+
+    assert contract["required_result_keys"] == snapshot["required_result_keys"]
+    assert contract["required_result_keys"] == [
+        "schema_version",
+        "dataset_type",
+        "status",
+        "bundle_root",
+        "output_path",
+        "row_count",
+        "rows",
+        "manifest",
+        "blockers",
+        "warnings",
+        "paper_only",
+        "read_only",
+        "is_order_action",
+        "broker_api_called",
+        "real_order_id",
+    ]
+
+
+def test_schema_snapshot_locks_safe_flags():
+    contract = paper_replay_dataset_schema_contract()
+
+    assert contract["safe_flags"] == {
+        "paper_only": True,
+        "read_only": True,
+        "is_order_action": False,
+        "broker_api_called": False,
+        "real_order_id": None,
+    }
+
+
+def test_schema_snapshot_locks_scope_boundary():
+    contract = paper_replay_dataset_schema_contract()
+
+    assert contract["scope_boundary"] == [
+        "local_replay_dataset_only",
+        "paper_evidence_only",
+        "source_traceable_rows",
+        "no_outcome_scoring",
+        "no_model_features",
+        "no_runtime_wiring",
+        "no_api",
+        "no_ui",
+        "no_broker_execution",
+        "no_live_orders",
+        "no_strategy_work",
+        "no_agent_system_work",
+    ]
+
+
+def test_missing_required_row_key_blocks_validation():
+    row = _valid_replay_row()
+    del row["payload_hash"]
+
+    blockers = validate_paper_replay_dataset_rows([row])
+
+    assert "PAPER_REPLAY_ROW_0_MISSING_PAYLOAD_HASH" in blockers
+
+
+def test_unknown_schema_version_blocks_validation():
+    row = _valid_replay_row(schema_version="2.0")
+
+    blockers = validate_paper_replay_dataset_rows([row])
+
+    assert "PAPER_REPLAY_ROW_0_UNKNOWN_SCHEMA_VERSION" in blockers
+
+
+def test_invalid_row_type_blocks_validation():
+    row = _valid_replay_row(row_type="PAPER_TRAINING_ROW")
+
+    blockers = validate_paper_replay_dataset_rows([row])
+
+    assert "PAPER_REPLAY_ROW_0_TYPE_INVALID" in blockers
+
+
+def test_analysis_field_in_nested_row_blocks_validation():
+    row = _valid_replay_row(nested={"future_return": 0.25})
+
+    blockers = validate_paper_replay_dataset_rows([row])
+
+    assert any("ANALYSIS_FIELD_FORBIDDEN" in blocker for blocker in blockers)
+
+
+def test_real_order_id_blocks_validation():
+    row = _valid_replay_row(real_order_id="real-order-123")
+
+    blockers = validate_paper_replay_dataset_rows([row])
+
+    assert any("REAL_ORDER_ID_PRESENT" in blocker for blocker in blockers)
+
+
+def test_broker_api_called_blocks_validation():
+    row = _valid_replay_row(broker_api_called=True)
+
+    blockers = validate_paper_replay_dataset_rows([row])
+
+    assert any("BROKER_API_CALLED" in blocker for blocker in blockers)
+
+
+def test_schema_contract_contains_no_order_control_actions():
+    contract_text = json.dumps(paper_replay_dataset_schema_contract(), sort_keys=True).lower()
+
+    forbidden_terms = [
+        "submit_order",
+        "modify_order",
+        "cancel_order",
+        "exit_order",
+        "place_order",
+        "broker_place",
+        "live_order",
+    ]
+    for term in forbidden_terms:
+        assert term not in contract_text
