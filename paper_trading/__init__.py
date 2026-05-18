@@ -2,8 +2,9 @@
 
 This package builds simulation-only paper intent, lifecycle, fill, position, MTM,
 realized PnL, slippage, performance snapshot, canonical paper event journal,
-deterministic paper state rebuild evidence, and paper state reconciliation reports.
-It does not place broker orders and does not expose real order actions.
+deterministic paper state rebuild evidence, paper state reconciliation reports,
+and in-memory paper trading pipeline evidence. It does not place broker orders
+and does not expose real order actions.
 """
 
 from paper_trading.event_journal import (
@@ -54,6 +55,13 @@ from paper_trading.performance_snapshot import (
     build_paper_performance_snapshot,
     paper_performance_snapshot_schema_contract,
     validate_paper_performance_snapshot_inputs,
+)
+from paper_trading.pipeline import (
+    PaperTradingPipelineResult,
+    PaperTradingPipelineStatus,
+    paper_trading_pipeline_schema_contract,
+    run_paper_trading_pipeline,
+    validate_paper_trading_pipeline_inputs,
 )
 from paper_trading.position_ledger import (
     PaperPositionLedgerResult,
@@ -152,4 +160,9 @@ __all__ = [
     "paper_state_reconciliation_schema_contract",
     "reconcile_paper_state",
     "validate_paper_state_reconciliation_inputs",
+    "PaperTradingPipelineResult",
+    "PaperTradingPipelineStatus",
+    "paper_trading_pipeline_schema_contract",
+    "run_paper_trading_pipeline",
+    "validate_paper_trading_pipeline_inputs",
 ]
