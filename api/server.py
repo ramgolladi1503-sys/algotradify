@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import redis
 from redis.exceptions import RedisError
 
+from api.agent_tasks import install_agent_tasks_route
 from api.execution_mode_policy import execution_safety_policy_from_query
 from api.schemas import (
     CandidateTruthRecordResponse,
@@ -554,6 +555,7 @@ def _runtime_preflight_payload() -> dict:
 
 app = FastAPI()
 app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"], allow_credentials=False, allow_methods=["GET", "OPTIONS"], allow_headers=["*"])
+install_agent_tasks_route(app)
 
 
 def _build_redis_client():
