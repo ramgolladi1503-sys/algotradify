@@ -2,11 +2,13 @@
 
 PR 97 adds a deterministic local paper replay dataset builder.
 
+PR 98 hardens the replay dataset schema with an exact v1 snapshot contract.
+
 ## Purpose
 
-PR96 packages paper evidence into a local export bundle. PR97 converts validated bundle evidence into minimal replay-ready JSONL rows.
+PR96 packages paper evidence into a local export bundle. PR97 converts validated bundle evidence into minimal replay-ready JSONL rows. PR98 prevents the replay dataset contract from drifting silently before downstream replay, validation, or research tooling consumes it.
 
-This is a data-shaping step only. It does not compute outcomes, rewards, labels, expectancy, profitability, ML features, or trading decisions.
+This is a data-shaping and schema-hardening step only. It does not compute outcomes, rewards, labels, expectancy, profitability, ML features, or trading decisions.
 
 ## Input
 
@@ -52,6 +54,30 @@ broker_api_called
 real_order_id
 ```
 
+## Schema snapshot contract
+
+PR98 locks the v1 dataset schema snapshot at:
+
+```text
+tests/snapshots/paper_replay_dataset_schema_v1.json
+```
+
+The snapshot freezes:
+
+```text
+schema_version
+dataset_type
+row_type
+output_format
+statuses
+required_row_keys
+required_result_keys
+safe_flags
+scope_boundary
+```
+
+Any change to row keys, result keys, safe flags, statuses, or scope boundaries must intentionally update the snapshot and explain why the v1 contract changed. Silent drift is not acceptable.
+
 ## Core operations
 
 ```text
@@ -75,7 +101,7 @@ real_order_id=null
 
 ## Blocking behavior
 
-The builder fails closed on:
+The builder and row validator fail closed on:
 
 ```text
 missing bundle root
@@ -85,6 +111,9 @@ corrupt evidence JSONL
 non-object evidence record
 unsafe evidence flags
 unsafe replay rows
+unknown schema version
+invalid row type
+missing required replay row keys
 output path inside bundle root
 expectancy/profitability/reward/label fields
 broker/live/order-action leakage

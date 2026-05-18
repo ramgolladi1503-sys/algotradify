@@ -2,15 +2,15 @@
 
 ## Latest confirmed merged
 
-GitHub PR #115 / Agent PR 10 — Dashboard Patch Approval Controls
+GitHub PR #116 / Product PR 97 — Paper Replay Dataset Builder
 
 ## Current product PR
 
-PR 97 — Paper Replay Dataset Builder
+PR 98 — Replay Dataset Schema Hardening and Snapshot Contracts
 
 ## Current posture
 
-mode=paper_replay_dataset_foundation
+mode=paper_replay_dataset_schema_hardening
 live_execution=false
 broker_order_placement=false
 dashboard_changes=false
@@ -30,6 +30,7 @@ agent_scope_expansion=false
 - PR 94 — Paper Session Boundary and Reset Controls
 - PR 95 — End-to-End Paper Scenario Suite
 - PR 96 — Paper Evidence Export Bundle
+- PR 97 — Paper Replay Dataset Builder
 
 ## Completed agent mini-scope
 
@@ -46,16 +47,16 @@ agent_scope_expansion=false
 
 ## Current implementation focus
 
-- Build deterministic paper replay dataset rows from validated PR96 export bundles.
-- Preserve source bundle and evidence record identifiers.
-- Preserve paper-only safe flags.
-- Write JSONL replay rows locally only when requested.
-- Block unsafe evidence, unsafe rows, and analysis/profitability leakage.
-- Keep replay dataset building disconnected from runtime/live/API/UI/broker/agent-system work.
+- Lock the paper replay dataset schema contract with an exact v1 snapshot.
+- Prove required replay row keys cannot drift silently.
+- Prove required replay result keys cannot drift silently.
+- Prove safe flags and scope boundaries cannot drift silently.
+- Prove unsafe replay rows, unknown schema versions, invalid row types, and analysis/profitability leakage are rejected.
+- Keep replay dataset schema hardening disconnected from runtime/live/API/UI/broker/agent-system work.
 
-## Next product PR only after PR 97 merges
+## Next product PR only after PR 98 merges
 
-PR 98 — Replay Dataset Schema Hardening and Snapshot Contracts
+PR 99 — Replay Dataset Validation CLI
 
 ## Hard rules
 
@@ -73,6 +74,7 @@ PR 98 — Replay Dataset Schema Hardening and Snapshot Contracts
 - Scenario suite proves controlled paper paths only; it is not runtime execution.
 - Export bundle packages evidence only; it does not generate replay datasets or profitability proof.
 - Replay dataset builder shapes source-traceable rows only; it does not compute labels, rewards, expectancy, profitability, or ML features.
+- Replay dataset schema hardening locks the v1 contract only; it does not add runtime wiring, API/UI, broker/live execution, strategy work, or agent-system work.
 - Agent mini-scope is complete. Do not add more agent PRs unless a real blocker exists.
 - Every PR must include Grill, GSD, and Hermes handoff artifacts.
 - Every PR must include acceptance proof.

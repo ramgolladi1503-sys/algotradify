@@ -1,0 +1,72 @@
+{
+  "dataset_type": "PAPER_REPLAY_DATASET",
+  "output_format": "JSONL",
+  "required_result_keys": [
+    "schema_version",
+    "dataset_type",
+    "status",
+    "bundle_root",
+    "output_path",
+    "row_count",
+    "rows",
+    "manifest",
+    "blockers",
+    "warnings",
+    "paper_only",
+    "read_only",
+    "is_order_action",
+    "broker_api_called",
+    "real_order_id"
+  ],
+  "required_row_keys": [
+    "schema_version",
+    "row_type",
+    "row_id",
+    "source_bundle_id",
+    "source_record_id",
+    "source_record_type",
+    "source_cycle_id",
+    "source_candidate_id",
+    "source_strategy_id",
+    "source_created_at_epoch",
+    "scenario_name",
+    "event_count",
+    "pipeline_status",
+    "session_id",
+    "payload_hash",
+    "paper_only",
+    "read_only",
+    "is_order_action",
+    "broker_api_called",
+    "real_order_id"
+  ],
+  "row_type": "PAPER_REPLAY_DATASET_ROW",
+  "safe_flags": {
+    "broker_api_called": false,
+    "is_order_action": false,
+    "paper_only": true,
+    "read_only": true,
+    "real_order_id": null
+  },
+  "schema_version": "1.0",
+  "scope_boundary": [
+    "local_replay_dataset_only",
+    "paper_evidence_only",
+    "source_traceable_rows",
+    "no_outcome_scoring",
+    "no_model_features",
+    "no_runtime_wiring",
+    "no_api",
+    "no_ui",
+    "no_broker_execution",
+    "no_live_orders",
+    "no_strategy_work",
+    "no_agent_system_work"
+  ],
+  "statuses": [
+    "BUILT",
+    "VALID",
+    "EMPTY",
+    "BLOCKED"
+  ]
+}
