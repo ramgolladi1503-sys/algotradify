@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "source_agent": "hermes",
+  "action": "DEFINE_CONTRACT",
+  "title": "Define local agent CLI contract",
+  "scope": "Document the local-only agent work CLI contract and safety boundary.",
+  "allowed_paths": ["docs/"],
+  "requested_paths": ["docs/local-agent-work-cli.md"],
+  "forbidden_paths": [".env", "credentials.py", "broker_contract/", "runtime/live"],
+  "requires_human_approval": false,
+  "metadata": {
+    "sample": true,
+    "project": "algotradify"
+  }
+}
