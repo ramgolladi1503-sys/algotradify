@@ -2,35 +2,36 @@
 
 ## Latest confirmed merged
 
-GitHub PR #126 — Runtime Correction PR 8 — Broker Auth Visibility and Startup UX: MERGED
+GitHub PR #127 — Runtime Correction PR 9 — Compatibility Cleanup and External Runtime Deprecation: MERGED
 
 ## Current correction PR
 
-Runtime Correction PR 9 — Compatibility Cleanup and External Runtime Deprecation
+Runtime Correction PR 10 — Full Regression Gate and Migration Lock
 
 ## Current posture
 
-mode=external_runtime_deprecation_native_default
+mode=runtime_migration_lock_final_gate
 live_execution=guarded_explicit_only
 broker_order_placement=false
 dashboard_changes=false
 strategy_provider_expansion=false
 ml_ranker_work=false
 agent_scope_expansion=false
-runtime_behavior_changes=external_fallback_disabled_by_default
+runtime_behavior_changes=none_lock_only
 source_import=true
 import_planning_only=false
 root_main_promotion=true
 root_run_live_promotion=guarded_live_entrypoint
 external_runtime_fallback=deprecated_explicit_opt_in_only
+migration_lock=active
 
 ## Why normal product work is paused
 
-Normal Product PR 98 work is paused until runtime ownership is made explicit and corrected.
+Normal Product PR 98 work is paused until runtime ownership correction is locked.
 
-The current correction wave exists because algotradify has built valuable product layers around API, Control Tower, paper trading, replay evidence, dry-run safety, and agent workflow, but the runtime ownership boundary is still not strict enough.
+The current correction wave exists because algotradify had built valuable product layers around API, Control Tower, paper trading, replay evidence, dry-run safety, and agent workflow, but the runtime ownership boundary was not strict enough.
 
-The immediate goal is not to add features. The immediate goal is to prove whether algotradify is operating as a native runtime owner or as a wrapper/external-compatible launcher, then migrate in controlled PRs only.
+The immediate goal is not to add features. The immediate goal is to lock the corrected native-runtime posture so future product work cannot silently drift back into wrapper/external-runtime ambiguity.
 
 ## Runtime correction wave
 
@@ -42,8 +43,8 @@ The immediate goal is not to add features. The immediate goal is to prove whethe
 - Runtime Correction PR 6 — Native run_live / Operator Boot Commands: DONE
 - Runtime Correction PR 7 — API and Control Tower Runtime Ownership Wiring: DONE
 - Runtime Correction PR 8 — Broker Auth Visibility and Startup UX: DONE
-- Runtime Correction PR 9 — Compatibility Cleanup and External Runtime Deprecation: IN PROGRESS
-- Runtime Correction PR 10 — Full Regression Gate and Migration Lock: PLANNED
+- Runtime Correction PR 9 — Compatibility Cleanup and External Runtime Deprecation: DONE
+- Runtime Correction PR 10 — Full Regression Gate and Migration Lock: IN PROGRESS
 
 ## Runtime Correction PR 2 boundary
 
@@ -258,6 +259,30 @@ It must not:
 - remove explicit external opt-in before PR 10
 - make LIVE the default
 
+## Runtime Correction PR 10 boundary
+
+PR 10 locks the completed correction wave with a deterministic regression gate.
+
+It may add/change:
+
+- read-only runtime migration lock checker
+- migration lock tests with injected regression cases
+- migration lock documentation
+- Grill, GSD, and Hermes handoff artifacts
+- project-state metadata
+
+It must not:
+
+- change root `main.py` behavior
+- change root `run_live.sh` behavior
+- change operator boot behavior
+- change runtime contract behavior
+- add broker/auth/order behavior
+- add dashboard action controls
+- change paper/agent internals
+- make LIVE the default
+- add new product features
+
 ## Runtime correction discipline
 
 - Do not expand beyond the 10 correction PRs unless a real blocker is discovered.
@@ -336,4 +361,4 @@ Agent workflow discipline is process-level only. It must not add new agent featu
 
 ## Process note
 
-This correction wave fixes runtime ownership. It must not become a generic product expansion wave.
+Runtime Correction PR 10 locks runtime ownership. After it merges, resume normal product roadmap deliberately; do not reopen correction work unless the lock catches a real regression.
