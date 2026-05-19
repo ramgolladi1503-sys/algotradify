@@ -9,6 +9,13 @@ from agent_system.approval import (
     agent_approval_schema_contract,
     approve_agent_work,
 )
+from agent_system.architecture_gate import (
+    AGENT_ARCHITECTURE_GATE_CONTRACT,
+    AgentArchitectureGateReport,
+    agent_architecture_gate_schema_contract,
+    resolve_agent_task_id,
+    run_agent_architecture_gate,
+)
 from agent_system.evidence import (
     AgentEvidenceError,
     agent_evidence_schema_contract,
@@ -111,6 +118,7 @@ from agent_system.work_contract import (
 )
 
 __all__ = [
+    "AGENT_ARCHITECTURE_GATE_CONTRACT",
     "AGENT_HANDOFF_CONTRACT",
     "AGENT_HANDOFF_VALIDATOR_CONTRACT",
     "AGENT_PATCH_APPROVAL_CONTRACT",
@@ -138,6 +146,7 @@ __all__ = [
     "TERMINAL_BLOCKED_STATES",
     "AgentAction",
     "AgentApprovalDecision",
+    "AgentArchitectureGateReport",
     "AgentEvidenceError",
     "AgentHandoffArtifact",
     "AgentHandoffValidationError",
@@ -157,6 +166,7 @@ __all__ = [
     "HandoffFileResult",
     "HandoffValidationReport",
     "agent_approval_schema_contract",
+    "agent_architecture_gate_schema_contract",
     "agent_evidence_schema_contract",
     "agent_handoff_schema_contract",
     "agent_handoff_validator_schema_contract",
@@ -191,6 +201,8 @@ __all__ = [
     "rebuild_agent_task_index",
     "replay_agent_workflow",
     "report_to_json",
+    "resolve_agent_task_id",
+    "run_agent_architecture_gate",
     "validate_agent_handoff_payload",
     "validate_agent_role_registry",
     "validate_agent_workflow_state_machine",
