@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import importlib
+import sys
+import types
 from pathlib import Path
 
 
 def _write_file(path: Path, text: str = "x") -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
+    path.parent.mkdir(parents=True)
     path.write_text(text, encoding="utf-8")
 
 
@@ -48,7 +50,6 @@ def test_api_uses_native_repo_root_by_default_after_main_promotion(tmp_path, mon
     _make_runtime_root(home_dir / "tradebot")
 
     monkeypatch.setattr(server, "_repo_root", lambda: repo_root)
-    monkeypatch.setattr(contract, "repo_root", lambda: repo_root)
     monkeypatch.setattr(Path, "home", lambda: home_dir)
 
     assert contract.resolve_runtime_root(base_repo_root=repo_root) == repo_root
@@ -67,7 +68,6 @@ def test_api_and_contract_honor_explicit_external_runtime_when_allowed(tmp_path,
     core_bot_root = _make_runtime_root(tmp_path / "core_bot_engine")
 
     monkeypatch.setattr(server, "_repo_root", lambda: repo_root)
-    monkeypatch.setattr(contract, "repo_root", lambda: repo_root)
     monkeypatch.setenv("ALGOTRADIFY_ENGINE_ROOT", str(algotradify_root))
     monkeypatch.setenv("TRADEBOT_ROOT", str(tradebot_root))
     monkeypatch.setenv("CORE_BOT_ROOT", str(core_bot_root))
@@ -92,7 +92,6 @@ def test_strict_native_mode_blocks_explicit_external_runtime_for_api(tmp_path, m
     repo_root = _make_native_runtime_root(tmp_path / "algotradify")
     external_root = _make_runtime_root(tmp_path / "tradebot_engine")
     monkeypatch.setattr(server, "_repo_root", lambda: repo_root)
-    monkeypatch.setattr(contract, "repo_root", lambda: repo_root)
     monkeypatch.setenv("ALGOTRADIFY_REQUIRE_NATIVE_RUNTIME", "true")
     monkeypatch.setenv("TRADEBOT_ROOT", str(external_root))
 
@@ -111,15 +110,17 @@ def test_core_bot_runtime_root_override_wins_for_api_runtime_artifacts(tmp_path,
     assert server._runtime_root() == runtime_artifact_root.resolve()
 
 
-def test_live_wrapper_delegates_to_algotradify_main(monkeypatch):
-    runtime_main = importlib.import_module("main")
+def test_live_wrapper_delegates_to_algotradify_main_without_importing_real_runtime(monkeypatch):
     live_wrapper = importlib.import_module("runner.live_wrapper")
 
     calls: list[str] = []
+    fake_main_module = types.ModuleType("main")
 
     def fake_main():
         calls.append("main_called")
         return "started"
+
+    fake_main_module.main = fake_main
 
     class DummyThread:
         def __init__(self, *args, **kwargs):
@@ -128,7 +129,7 @@ def test_live_wrapper_delegates_to_algotradify_main(monkeypatch):
         def start(self):
             calls.append("heartbeat_started")
 
-    monkeypatch.setattr(runtime_main, "main", fake_main)
+    monkeypatch.setitem(sys.modules, "main", fake_main_module)
     monkeypatch.setattr(live_wrapper.threading, "Thread", DummyThread)
 
     assert live_wrapper.start() == "started"
