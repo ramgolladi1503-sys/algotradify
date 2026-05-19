@@ -105,6 +105,7 @@ def run_lock_checks(root: Path = ROOT) -> dict:
         ROOT / "RUNTIME_SOURCE_MANIFEST.json",
         ROOT / "runtime_native" / "tradebot_main.py",
         ROOT / "scripts" / "operator_boot.py",
+        ROOT / "scripts" / "kite_autologin_localhost.py",
         ROOT / "api" / "runtime_ownership.py",
         ROOT / "api" / "auth_visibility.py",
         ROOT / "dashboard" / "runtime_ownership_panel.py",
@@ -114,6 +115,7 @@ def run_lock_checks(root: Path = ROOT) -> dict:
         ROOT / "docs" / "runtime-ownership-api.md",
         ROOT / "docs" / "operator-boot-commands.md",
         ROOT / "docs" / "native-main-boot.md",
+        ROOT / "docs" / "kite-local-login-helper.md",
     ]
     required_dirs = [ROOT / "core", ROOT / "config"]
     checks.extend(_exists(path) for path in required_paths)
@@ -157,6 +159,7 @@ def run_lock_checks(root: Path = ROOT) -> dict:
                 'export TRADING_MODE="LIVE"',
                 'export EXECUTION_MODE="LIVE"',
                 'export ALGOTRADIFY_REQUIRE_NATIVE_RUNTIME="true"',
+                "scripts/kite_autologin_localhost.py",
             ],
             name="run_live.guarded_live_lock",
         )
@@ -166,6 +169,37 @@ def run_lock_checks(root: Path = ROOT) -> dict:
             run_live,
             r"selected_count=\$\(\(START \+ VALIDATE_ONLY \+ LOGIN_ONLY\)\)",
             name="run_live.requires_single_action",
+        )
+    )
+
+    login_helper = ROOT / "scripts" / "kite_autologin_localhost.py"
+    checks.extend(
+        _contains_all(
+            login_helper,
+            [
+                "KiteConnect",
+                "generate_session",
+                "kite_access_token",
+                "chmod(stat.S_IRUSR | stat.S_IWUSR)",
+                "--print-login-url-only",
+            ],
+            name="kite_login_helper.local_token_flow",
+        )
+    )
+    checks.extend(
+        _contains_none(
+            login_helper,
+            [
+                "submit_order",
+                "place_order",
+                "modify_order",
+                "cancel_order",
+                "EXECUTION_MODE",
+                "TRADING_MODE",
+                "print(api_secret",
+                "print(access_token",
+            ],
+            name="kite_login_helper.no_order_or_secret_output",
         )
     )
 
