@@ -1,8 +1,7 @@
 """Agent intake foundation contracts, guards, approval, evidence, and local task storage.
 
 This package is intentionally isolated from API, dashboard, broker, live, and paper-trading
-runtime code. Agent PR 5 adds local task persistence/query only; it still performs no
-execution and exposes no API surface.
+runtime code. Agent governance contracts remain non-executing and patch-review oriented.
 """
 
 from agent_system.approval import (
@@ -25,6 +24,20 @@ from agent_system.patch_approval import (
     build_agent_patch_rejection_record,
     load_agent_patch_approval,
     persist_agent_patch_approval,
+)
+from agent_system.role_registry import (
+    AGENT_ROLE_REGISTRY_CONTRACT,
+    FORBIDDEN_ROLE_ACTIONS,
+    FORBIDDEN_ROLE_PATH_PREFIXES,
+    HIGH_RISK_ROLE_PATH_PREFIXES,
+    SAFE_ROLE_FLAGS,
+    AgentRole,
+    AgentRoleContract,
+    agent_role_registry_schema_contract,
+    assess_role_request,
+    build_agent_role_registry,
+    get_agent_role_contract,
+    validate_agent_role_registry,
 )
 from agent_system.scope_guard import (
     FORBIDDEN_PATH_PREFIXES,
@@ -63,12 +76,17 @@ from agent_system.work_contract import (
 __all__ = [
     "AGENT_PATCH_APPROVAL_CONTRACT",
     "AGENT_PATCH_APPROVAL_SCHEMA_VERSION",
+    "AGENT_ROLE_REGISTRY_CONTRACT",
     "AGENT_WORK_SCHEMA_VERSION",
     "FORBIDDEN_AGENT_ACTIONS",
     "FORBIDDEN_PATH_PREFIXES",
+    "FORBIDDEN_ROLE_ACTIONS",
+    "FORBIDDEN_ROLE_PATH_PREFIXES",
     "HIGH_RISK_PATH_PREFIXES",
+    "HIGH_RISK_ROLE_PATH_PREFIXES",
     "LOW_RISK_PATH_PREFIXES",
     "SAFE_AGENT_ACTIONS",
+    "SAFE_ROLE_FLAGS",
     "SOURCE_ALLOWED_ACTIONS",
     "TASK_STORE_SCHEMA_VERSION",
     "AgentAction",
@@ -76,6 +94,8 @@ __all__ = [
     "AgentEvidenceError",
     "AgentPatchApprovalError",
     "AgentRiskLevel",
+    "AgentRole",
+    "AgentRoleContract",
     "AgentScopeDecision",
     "AgentSource",
     "AgentTaskRecord",
@@ -85,16 +105,20 @@ __all__ = [
     "agent_approval_schema_contract",
     "agent_evidence_schema_contract",
     "agent_patch_approval_schema_contract",
+    "agent_role_registry_schema_contract",
     "agent_scope_guard_schema_contract",
     "agent_task_store_schema_contract",
     "agent_work_schema_contract",
     "approve_agent_work",
     "assess_agent_scope",
+    "assess_role_request",
     "build_agent_evidence_payload",
     "build_agent_patch_approval_record",
     "build_agent_patch_rejection_record",
+    "build_agent_role_registry",
     "build_agent_task_record",
     "build_agent_work_id",
+    "get_agent_role_contract",
     "load_agent_patch_approval",
     "load_agent_task",
     "normalize_agent_work_request",
@@ -102,5 +126,6 @@ __all__ = [
     "persist_agent_task",
     "query_agent_tasks",
     "rebuild_agent_task_index",
+    "validate_agent_role_registry",
     "write_agent_evidence",
 ]
