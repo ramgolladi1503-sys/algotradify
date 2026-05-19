@@ -46,6 +46,33 @@ class RuntimePreflightResponse(BaseModel):
     checks: list[RuntimePreflightCheck]
 
 
+class RuntimeOwnershipResponse(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    contract: str
+    status: str | None = None
+    runtime_ownership: str
+    native_source_present: bool
+    native_main_promoted: bool
+    native_required: bool
+    external_runtime_allowed: bool
+    external_runtime_used: bool
+    runtime_root: str | None = None
+    runtime_artifact_root: str | None = None
+    can_start_native_runtime: bool
+    warnings: list[str]
+    blockers: list[str]
+    summary: dict[str, int]
+    checked_at_source: str
+    preflight_checked_at_source: str | None = None
+    read_only: bool
+    audit_only: bool
+    is_order_action: bool
+    broker_api_called: bool
+    real_order_id: str | None = None
+    live_mode_touched: bool
+
+
 class RuntimeSnapshotResponse(BaseModel):
     runtime_root: str
     tradebot_root: str | None = None
