@@ -11,6 +11,10 @@ REQUIRE_NATIVE_ENV = "ALGOTRADIFY_REQUIRE_NATIVE_RUNTIME"
 ALLOW_EXTERNAL_ENV = "ALGOTRADIFY_ALLOW_EXTERNAL_RUNTIME"
 NATIVE_MANIFEST = "RUNTIME_SOURCE_MANIFEST.json"
 NATIVE_ENTRYPOINT_SNAPSHOT = "runtime_native/tradebot_main.py"
+EXTERNAL_RUNTIME_DEPRECATION_MESSAGE = (
+    "external runtime fallback is deprecated; use native algotradify runtime or set "
+    "ALGOTRADIFY_ALLOW_EXTERNAL_RUNTIME=true for temporary compatibility"
+)
 
 
 @dataclass(frozen=True)
@@ -49,10 +53,14 @@ def native_runtime_required() -> bool:
     return _env_flag(REQUIRE_NATIVE_ENV)
 
 
-def external_runtime_allowed(*, default: bool = True) -> bool:
+def external_runtime_allowed(*, default: bool = False) -> bool:
     if native_runtime_required():
         return False
     return _env_flag(ALLOW_EXTERNAL_ENV, default=default)
+
+
+def external_runtime_deprecated() -> bool:
+    return True
 
 
 def is_tradebot_compatible_root(path: Path) -> bool:
@@ -110,23 +118,20 @@ def candidate_runtime_roots(
     root = (base_repo_root or repo_root()).expanduser().resolve()
     home_root = (home or Path.home()).expanduser().resolve()
     include_native = is_native_runtime_source_root(root) if include_native_root is None else include_native_root
-    external_ok = external_runtime_allowed(default=True) if allow_external is None else allow_external
+    external_ok = external_runtime_allowed(default=False) if allow_external is None else allow_external
     candidates: list[Path] = []
+
+    if include_native:
+        candidates.append(root)
 
     if external_ok:
         for env_name in ENGINE_ROOT_ENV_VARS:
             configured = str(os.getenv(env_name, "")).strip()
             if configured:
                 candidates.append(Path(configured))
-
-    if include_native:
-        candidates.append(root)
-
-    candidates.append(root / "core_bot")
-
-    if external_ok:
         candidates.extend(
             [
+                root / "core_bot",
                 root.parent / "tradebot",
                 home_root / "tradebot",
             ]
@@ -177,7 +182,7 @@ def runtime_artifact_root(*, engine_root: Path | None = None, base_repo_root: Pa
     root = (base_repo_root or repo_root()).expanduser().resolve()
     selected_engine = engine_root or resolve_runtime_root(base_repo_root=root)
     if selected_engine is None:
-        selected_engine = root if is_native_runtime_source_root(root) else root / "core_bot"
+        selected_engine = root if is_native_runtime_source_root(root) else root / ".runtime"
     selected_engine = selected_engine.expanduser().resolve()
 
     if selected_engine == root and is_native_runtime_source_root(root):
@@ -186,8 +191,7 @@ def runtime_artifact_root(*, engine_root: Path | None = None, base_repo_root: Pa
     candidates = [
         selected_engine / ".runtime",
         selected_engine / "runtime",
-        root / "core_bot" / ".runtime",
-        root / "core_bot" / "runtime",
+        root / ".runtime",
     ]
     for candidate in candidates:
         if candidate.exists():
@@ -241,6 +245,31 @@ def _check_native_source(root: Path) -> list[PreflightCheck]:
             metadata={"root_main_is_wrapper": main_wrapper},
         ),
     ]
+
+
+def _check_external_runtime_deprecation(*, external_ok: bool, runtime_root: Path | None, root: Path) -> PreflightCheck:
+    external_used = bool(runtime_root and runtime_root.expanduser().resolve() != root.expanduser().resolve())
+    if external_used:
+        status = "WARN"
+        message = "external runtime fallback is enabled and currently selected; this is temporary compatibility only"
+    elif external_ok:
+        status = "WARN"
+        message = "external runtime fallback is explicitly enabled but native runtime is selected"
+    else:
+        status = "PASS"
+        message = "external runtime fallback disabled by default"
+    return PreflightCheck(
+        name="external_runtime_fallback.deprecated",
+        status=status,
+        message=message,
+        metadata={
+            "deprecated": True,
+            "external_runtime_allowed": bool(external_ok),
+            "external_runtime_used": external_used,
+            "opt_in_env": ALLOW_EXTERNAL_ENV,
+            "deprecation_message": EXTERNAL_RUNTIME_DEPRECATION_MESSAGE,
+        },
+    )
 
 
 def _check_runtime_artifact_root(path: Path) -> list[PreflightCheck]:
@@ -339,7 +368,7 @@ def run_preflight(*, base_repo_root: Path | None = None, home: Path | None = Non
     root = (base_repo_root or repo_root()).expanduser().resolve()
     checks: list[PreflightCheck] = []
     native_required = native_runtime_required()
-    external_ok = external_runtime_allowed(default=True)
+    external_ok = external_runtime_allowed(default=False)
     ownership = runtime_ownership_for_root(root)
     native_source_present = is_native_runtime_source_root(root)
     candidates = candidate_runtime_roots(
@@ -356,6 +385,8 @@ def run_preflight(*, base_repo_root: Path | None = None, home: Path | None = Non
         allow_external=external_ok,
     )
 
+    checks.append(_check_external_runtime_deprecation(external_ok=external_ok, runtime_root=runtime_root, root=root))
+
     if native_required or native_source_present:
         checks.extend(_check_native_source(root))
 
@@ -367,12 +398,12 @@ def run_preflight(*, base_repo_root: Path | None = None, home: Path | None = Non
                 message=(
                     "native runtime source root required but missing"
                     if native_required
-                    else "no Tradebot-compatible runtime root found"
+                    else "no native runtime root found; external fallback is disabled unless explicitly enabled"
                 ),
                 metadata={"checked_paths": [str(path.expanduser()) for path in candidates]},
             )
         )
-        artifact_root = runtime_artifact_root(engine_root=root if native_source_present else root / "core_bot", base_repo_root=root)
+        artifact_root = runtime_artifact_root(engine_root=root if native_source_present else root / ".runtime", base_repo_root=root)
     else:
         external_runtime_used = runtime_root != root
         checks.append(
@@ -382,7 +413,7 @@ def run_preflight(*, base_repo_root: Path | None = None, home: Path | None = Non
                 message=(
                     "native runtime source root selected"
                     if runtime_root == root
-                    else "Tradebot-compatible runtime root found"
+                    else "deprecated external Tradebot-compatible runtime root selected"
                 ),
                 path=str(runtime_root),
                 metadata={
@@ -422,6 +453,8 @@ def run_preflight(*, base_repo_root: Path | None = None, home: Path | None = Non
         "native_source_present": native_source_present,
         "native_main_promoted": native_source_present and not _root_main_is_wrapper(root),
         "external_runtime_allowed": external_ok,
+        "external_runtime_deprecated": True,
+        "external_runtime_deprecation_message": EXTERNAL_RUNTIME_DEPRECATION_MESSAGE,
         "external_runtime_used": external_runtime_used,
         "checked_at_source": "runtime_contract.run_preflight",
         "summary": {
