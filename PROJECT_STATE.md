@@ -2,21 +2,69 @@
 
 ## Latest confirmed merged
 
-GitHub PR #116 / Product PR 97 — Paper Replay Dataset Builder
+GitHub PR #118 — Runtime Native Migration / Mitigation Plan: MERGED
 
-## Current product PR
+## Current correction PR
 
-PR 98 — Replay Dataset Schema Hardening and Snapshot Contracts
+Runtime Correction PR 1 — Runtime Ownership Audit
 
 ## Current posture
 
-mode=paper_replay_dataset_schema_hardening
+mode=runtime_ownership_correction
 live_execution=false
 broker_order_placement=false
 dashboard_changes=false
 strategy_provider_expansion=false
 ml_ranker_work=false
 agent_scope_expansion=false
+runtime_behavior_changes=false
+source_import=false
+
+## Why normal product work is paused
+
+Normal Product PR 98 work is paused until runtime ownership is made explicit and corrected.
+
+The current correction wave exists because algotradify has built valuable product layers around API, Control Tower, paper trading, replay evidence, dry-run safety, and agent workflow, but the runtime ownership boundary is still not strict enough.
+
+The immediate goal is not to add features. The immediate goal is to prove whether algotradify is operating as a native runtime owner or as a wrapper/external-compatible launcher, then migrate in controlled PRs only.
+
+## Runtime correction wave
+
+- Runtime Correction PR 1 — Runtime Ownership Audit: IN PROGRESS
+- Runtime Correction PR 2 — Tradebot Source Import Manifest and Collision Report: PLANNED
+- Runtime Correction PR 3 — Native Runtime Source Import: PLANNED
+- Runtime Correction PR 4 — Native Runtime Contract and Preflight Hardening: PLANNED
+- Runtime Correction PR 5 — Root Native main.py Promotion: PLANNED
+- Runtime Correction PR 6 — Native run_live / Operator Boot Commands: PLANNED
+- Runtime Correction PR 7 — API and Control Tower Runtime Ownership Wiring: PLANNED
+- Runtime Correction PR 8 — Broker Auth Visibility and Startup UX: PLANNED
+- Runtime Correction PR 9 — Compatibility Cleanup and External Runtime Deprecation: PLANNED
+- Runtime Correction PR 10 — Full Regression Gate and Migration Lock: PLANNED
+
+## Runtime correction discipline
+
+- Do not expand beyond the 10 correction PRs unless a real blocker is discovered.
+- Do not add unrelated product features during this wave.
+- Do not rewrite Tradebot main from scratch.
+- Do not silently fall back to external Tradebot once native ownership is required.
+- Do not import secrets, tokens, logs, databases, `.env`, or runtime artifacts.
+- Do not weaken existing paper/replay/agent/safety contracts.
+- Do not add broker order controls or make LIVE the default.
+
+## Mini-agent process gate
+
+The completed mini-agent architecture is used as a process gate for every correction PR.
+
+Each correction PR must include:
+
+- Grill handoff artifact — challenges scope, rejects drift, and defines hard rejection conditions.
+- GSD handoff artifact — defines the minimal execution plan and exact files allowed.
+- Hermes handoff artifact — reviews final diff boundaries and confirms the PR did not expand.
+- Acceptance proof — commands/tests/evidence proving the PR did exactly what it claimed.
+
+Important boundary:
+
+Agent workflow discipline is process-level only. It must not add new agent features, runtime workers, auto-merge behavior, mobile approvals, broker actions, paper orders, live config mutation, or execution behavior during this correction wave.
 
 ## Completed paper truth foundation
 
@@ -45,26 +93,18 @@ agent_scope_expansion=false
 - Agent PR 9 — Patch-only Approval API
 - Agent PR 10 — Dashboard Patch Approval Controls
 
-## Current implementation focus
+## Paused product work
 
-- Lock the paper replay dataset schema contract with an exact v1 snapshot.
-- Prove required replay row keys cannot drift silently.
-- Prove required replay result keys cannot drift silently.
-- Prove safe flags and scope boundaries cannot drift silently.
-- Prove unsafe replay rows, unknown schema versions, invalid row types, and analysis/profitability leakage are rejected.
-- Keep replay dataset schema hardening disconnected from runtime/live/API/UI/broker/agent-system work.
-
-## Next product PR only after PR 98 merges
-
-PR 99 — Replay Dataset Validation CLI
+- PR 98 — Replay Dataset Schema Hardening and Snapshot Contracts: PAUSED until runtime correction wave completes or explicitly resumes.
+- PR 99 — Replay Dataset Validation CLI: PAUSED.
 
 ## Hard rules
 
-- No live execution before PR 115.
-- No dashboard before PR 113.
-- No new strategy providers before PR 100.
-- No ML ranker before expectancy is proven.
-- No broker adapter work in this wave.
+- No live execution before the approved runtime/live safety gate.
+- No broker adapter work during this correction wave except read-only auth visibility in Runtime Correction PR 8.
+- No new strategy providers during this correction wave.
+- No ML ranker during this correction wave.
+- No agent scope expansion during this correction wave.
 - Journal is truth.
 - Reducer derives state.
 - Reconciliation reports drift; it does not become truth.
@@ -74,11 +114,9 @@ PR 99 — Replay Dataset Validation CLI
 - Scenario suite proves controlled paper paths only; it is not runtime execution.
 - Export bundle packages evidence only; it does not generate replay datasets or profitability proof.
 - Replay dataset builder shapes source-traceable rows only; it does not compute labels, rewards, expectancy, profitability, or ML features.
-- Replay dataset schema hardening locks the v1 contract only; it does not add runtime wiring, API/UI, broker/live execution, strategy work, or agent-system work.
 - Agent mini-scope is complete. Do not add more agent PRs unless a real blocker exists.
-- Every PR must include Grill, GSD, and Hermes handoff artifacts.
-- Every PR must include acceptance proof.
+- Every correction PR must pass through Grill, GSD, Hermes, and acceptance proof.
 
 ## Process note
 
-Agent workflow discipline is process-level only. It must not change runtime trading behavior.
+This correction wave fixes runtime ownership. It must not become a generic product expansion wave.
