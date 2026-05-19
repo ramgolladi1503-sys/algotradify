@@ -1,0 +1,163 @@
+"""Runtime health snapshot helper.
+
+Produces a compact JSON snapshot for operator dashboards and CLI checks.
+"""
+
+from __future__ import annotations
+
+from core.paths import data_root, logs_dir
+import json
+from pathlib import Path
+from typing import Any
+
+from config import config as cfg
+from core.feed_debug import get_feed_debug
+from core.freshness_sla import get_freshness_status
+from core.time_utils import is_market_open_ist, now_utc_epoch
+
+
+def _atomic_write(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(payload, indent=2, sort_keys=True))
+    tmp.replace(path)
+
+
+def get_runtime_health(orchestrator: Any | None = None, now_epoch: float | None = None) -> dict[str, Any]:
+    ts_epoch = float(now_epoch if now_epoch is not None else now_utc_epoch())
+    freshness = dict(get_freshness_status(force=False) or {})
+    feed_debug = dict(get_feed_debug(now_epoch=ts_epoch) or {})
+
+    market_open = bool(freshness.get("market_open", is_market_open_ist()))
+    mode = str(
+        freshness.get("mode")
+        or freshness.get("execution_mode")
+        or getattr(cfg, "EXECUTION_MODE", "SIM")
+    ).upper()
+    raw_sla_status = str(freshness.get("state") or "").upper()
+    sla_state = "LIVE" if (market_open and not bool(freshness.get("allow_stale_quotes", False))) else "PLANNING"
+
+    ltp_age = None
+    depth_age = None
+    ltp_block = freshness.get("ltp") or {}
+    depth_block = freshness.get("depth") or {}
+    allow_stale_quotes = bool(freshness.get("allow_stale_quotes", False))
+    ltp_required = bool(market_open and (not allow_stale_quotes))
+    depth_required = bool(market_open and bool((depth_block or {}).get("required", False)))
+    ltp_max_age_sec = None
+    depth_max_age_sec = None
+    if isinstance(ltp_block, dict):
+        ltp_age = ltp_block.get("age_sec")
+        if "required" in ltp_block:
+            ltp_required = bool(ltp_block.get("required"))
+        ltp_max_age_sec = ltp_block.get("max_age_sec")
+    if isinstance(depth_block, dict):
+        depth_age = depth_block.get("age_sec")
+        if "required" in depth_block:
+            depth_required = bool(depth_block.get("required"))
+        depth_max_age_sec = depth_block.get("max_age_sec")
+
+    feed = {
+        "ws_connected": feed_debug.get("ws_connected"),
+        "subscriptions_count": feed_debug.get("subscribed_tokens_count"),
+        "subscribed_tokens_count": feed_debug.get("subscribed_tokens_count"),
+        "intended_tokens_count": feed_debug.get("intended_tokens_count"),
+        "subscribed_tokens_count_by_symbol": feed_debug.get("subscribed_tokens_count_by_symbol"),
+        "missing_option_tokens_count": feed_debug.get("missing_option_tokens_count"),
+        "missing_option_tokens_count_by_symbol": feed_debug.get("missing_option_tokens_count_by_symbol"),
+        "subscribed_option_tokens_count": feed_debug.get("subscribed_option_tokens_count"),
+        "option_tokens_resolved_count_by_symbol": feed_debug.get("option_tokens_resolved_count_by_symbol"),
+        "option_tokens_subscribed_count_by_symbol": feed_debug.get("option_tokens_subscribed_count_by_symbol"),
+        "option_ticks_received_count_by_symbol": feed_debug.get("option_ticks_received_count_by_symbol"),
+        "last_option_tick_ts_by_symbol": feed_debug.get("last_option_tick_ts_by_symbol"),
+        "option_last_tick_age_by_symbol": feed_debug.get("option_last_tick_age_by_symbol"),
+        "option_feed_block_reason_by_symbol": feed_debug.get("option_feed_block_reason_by_symbol"),
+        "option_active_blockers_by_symbol": feed_debug.get("option_active_blockers_by_symbol"),
+        "runtime_state": feed_debug.get("feed_runtime_state"),
+        "last_error": feed_debug.get("feed_runtime_last_error"),
+        "last_tick_age_sec": feed_debug.get("last_tick_age_sec"),
+        "ltp_age_sec": ltp_age,
+        "depth_age_sec": depth_age,
+        "allow_stale_quotes": allow_stale_quotes,
+        "ltp_required": bool(ltp_required),
+        "ltp_max_age_sec": ltp_max_age_sec,
+        "depth_required": bool(depth_required),
+        "depth_max_age_sec": depth_max_age_sec,
+        "sla_state": sla_state,
+        "sla_status": raw_sla_status or freshness.get("state"),
+        "reasons": list(freshness.get("reasons") or []),
+    }
+    blockers = list(feed.get("reasons") or [])
+    if feed.get("runtime_state") in {"IMPORT_MISSING", "AUTH_BLOCKED", "SUBSCRIBE_FAILED"}:
+        blockers.append(f"ws_runtime:{feed.get('runtime_state')}")
+    if feed.get("last_error"):
+        blockers.append(f"ws_error:{feed.get('last_error')}")
+    feed["blockers"] = blockers
+
+    execution_engine = getattr(orchestrator, "execution_engine", None)
+    kill_switch_triggered = None
+    kill_switch_reason = None
+    last_spread_decision = None
+    recon = {"daemon_running": None, "last_cycle_ts_epoch": None}
+    if execution_engine is not None:
+        kill_switch_triggered = getattr(execution_engine, "kill_switch_triggered", None)
+        kill_switch_reason = getattr(execution_engine, "kill_switch_reason", None)
+        try:
+            last_spread_decision = execution_engine.get_last_spread_decision()
+        except Exception:
+            last_spread_decision = None
+        try:
+            recon = execution_engine.get_reconciliation_status()
+        except Exception:
+            recon = {"daemon_running": None, "last_cycle_ts_epoch": None}
+
+    risk_state = getattr(orchestrator, "risk_state", None)
+    risk = {
+        "hard_halt": None,
+        "daily_pnl_pct": None,
+        "open_risk_pct": None,
+    }
+    if risk_state is not None:
+        try:
+            risk["hard_halt"] = bool(getattr(risk_state, "mode", "") == "HARD_HALT")
+        except Exception:
+            risk["hard_halt"] = None
+        try:
+            risk["daily_pnl_pct"] = float(getattr(risk_state, "daily_pnl_pct", 0.0))
+        except Exception:
+            risk["daily_pnl_pct"] = None
+        try:
+            risk["open_risk_pct"] = float(getattr(risk_state, "open_risk_pct", 0.0))
+        except Exception:
+            risk["open_risk_pct"] = None
+
+    execution = {
+        "kill_switch_triggered": kill_switch_triggered,
+        "kill_switch_reason": kill_switch_reason,
+        "last_spread_decision": last_spread_decision,
+    }
+    try:
+        decision_breakers = getattr(orchestrator, "decision_breakers", None)
+        if decision_breakers is not None:
+            execution["decision_breakers"] = decision_breakers.snapshot(now_ts=ts_epoch)
+    except Exception:
+        execution["decision_breakers"] = {"error": "decision_breakers_snapshot_failed"}
+
+    return {
+        "ts_epoch": ts_epoch,
+        "snapshot_ts_epoch": ts_epoch,
+        "snapshot_age_sec": 0.0,
+        "mode": mode,
+        "market_open": market_open,
+        "feed": feed,
+        "execution": execution,
+        "risk": risk,
+        "recon": recon,
+    }
+
+
+def write_runtime_health_snapshot(orchestrator: Any | None = None, path: str | Path | None = None) -> dict[str, Any]:
+    payload = get_runtime_health(orchestrator=orchestrator)
+    target = Path(path or getattr(cfg, "RUNTIME_HEALTH_PATH", str(logs_dir() / "runtime_health_latest.json")))
+    _atomic_write(target, payload)
+    return payload

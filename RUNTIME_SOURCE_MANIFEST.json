@@ -1,0 +1,69 @@
+{
+  "deferred_paths": [
+    "root main.py replacement deferred to Runtime Correction PR 5",
+    "root run_live.sh promotion deferred to Runtime Correction PR 6",
+    "existing strategies/ files preserved; only missing files imported"
+  ],
+  "excluded_patterns": [
+    ".git",
+    ".github/workflows",
+    ".env",
+    ".env.*",
+    ".runtime",
+    "runtime",
+    "logs",
+    "*.token",
+    "*.secret",
+    "*.db",
+    "*.sqlite",
+    "*.sqlite3",
+    "*.parquet",
+    "__pycache__",
+    "*.pyc",
+    ".pytest_cache",
+    ".mypy_cache",
+    ".ruff_cache"
+  ],
+  "import_mode": "native_tracked_source",
+  "imported_at_utc": "2026-05-19T05:30:15Z",
+  "imported_paths": [
+    "core/",
+    "config/",
+    "dashboard/",
+    "ml/",
+    "models/",
+    "rl/",
+    "fixtures/",
+    "strategies/ missing files only",
+    "runtime_native/tradebot_main.py",
+    "runtime_native/tradebot_run_live.sh",
+    "runtime_native/tradebot_requirements.txt"
+  ],
+  "imported_required_markers": {
+    "config": true,
+    "core": true,
+    "main.py": true
+  },
+  "not_imported": [
+    ".env",
+    ".runtime",
+    "runtime",
+    "logs",
+    "tokens",
+    "databases",
+    "generated caches",
+    "root main.py",
+    "root run_live.sh"
+  ],
+  "safe_flags": {
+    "broker_api_called": false,
+    "is_order_action": false,
+    "live_mode_touched": false,
+    "real_order_id": null,
+    "runtime_behavior_changed": false,
+    "source_imported": true
+  },
+  "source_branch": "main",
+  "source_commit": "692179426ac0b96cc24ecd649ed9678788a60fcd",
+  "source_repo": "https://github.com/ramgolladi1503-sys/tradebot.git"
+}
