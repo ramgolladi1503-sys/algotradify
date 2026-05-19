@@ -1,0 +1,50 @@
+name: Agent Architecture CI
+
+on:
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      task_ref:
+        description: Agent task reference, for example AGENT-PR15
+        required: true
+        default: AGENT-PR15
+
+jobs:
+  agent-architecture-gate:
+    name: Validate role-based agent architecture
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest
+
+      - name: Run agent governance tests
+        run: |
+          python -m pytest \
+            tests/test_agent_role_registry.py \
+            tests/test_agent_workflow_state.py \
+            tests/test_agent_handoff_contract.py \
+            tests/test_agent_handoff_validator.py \
+            tests/test_agent_architecture_gate.py \
+            -q
+
+      - name: Run architecture gate for pull request
+        if: github.event_name == 'pull_request'
+        run: |
+          python scripts/run_agent_architecture_gate.py --task-ref "${{ github.event.pull_request.title }}" --json
+
+      - name: Run architecture gate for manual dispatch
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          python scripts/run_agent_architecture_gate.py --task-ref "${{ github.event.inputs.task_ref }}" --json

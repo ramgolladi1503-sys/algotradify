@@ -2,7 +2,7 @@
 
 ## Latest confirmed merged
 
-GitHub PR #134 — Agent PR 13 — Role Handoff Artifact Contract: MERGED
+GitHub PR #135 — Agent PR 14 — PR Handoff Evidence Validator: MERGED
 
 ## Current locked implementation wave
 
@@ -11,17 +11,17 @@ Agent Governance + Role-Based Mini-Agent Enforcement Wave
 Current PR:
 
 ```text
-Agent PR 14 — PR Handoff Evidence Validator
+Agent PR 15 — CI Agent Architecture Gate
 ```
 
 ## Current posture
 
 ```text
-mode=agent_governance_pr14_handoff_evidence_validator
+mode=agent_governance_pr15_ci_architecture_gate
 runtime_correction_wave=complete
 agent_governance_wave=active
-current_agent_governance_pr=14
-next_allowed_work=Agent PR 14 only
+current_agent_governance_pr=15
+next_allowed_work=Agent PR 15 only
 live_execution=guarded_explicit_only
 broker_order_placement=false
 dashboard_changes=false
@@ -31,8 +31,8 @@ runtime_behavior_changes=none
 role_registry=complete
 workflow_state_machine=complete
 handoff_artifact_contract=complete
-handoff_validator=true
-ci_architecture_gate=false
+handoff_validator=complete
+ci_architecture_gate=true
 changed_file_auditor=false
 architecture_audit_report=false
 ```
@@ -43,32 +43,32 @@ architecture_audit_report=false
 PR 11 — Agent Role Registry Contract: DONE
 PR 12 — Role-Based Workflow State Machine: DONE
 PR 13 — Role Handoff Artifact Contract: DONE
-PR 14 — PR Handoff Evidence Validator: IN PROGRESS
-PR 15 — CI Agent Architecture Gate: LOCKED NEXT
-PR 16 — Changed-File Scope Auditor: LOCKED
+PR 14 — PR Handoff Evidence Validator: DONE
+PR 15 — CI Agent Architecture Gate: IN PROGRESS
+PR 16 — Changed-File Scope Auditor: LOCKED NEXT
 PR 17 — PR Template and Local Developer Gate: LOCKED
 PR 18 — Architecture Replay / Audit Report: LOCKED
 ```
 
 No deviation until PR 18 is complete.
 
-## Agent PR 14 boundary
+## Agent PR 15 boundary
 
-PR 14 adds a repo-local handoff evidence validator only.
+PR 15 adds the CI architecture gate only.
 
 It may add/change:
 
-- `agent_system/handoff_validator.py`
-- `agent_system/__init__.py` exports for handoff evidence validator
-- `scripts/validate_agent_handoffs.py`
-- `tests/test_agent_handoff_validator.py`
-- `docs/agent-handoff-evidence-validator.md`
-- Agent PR 14 Grill/GSD/Hermes handoff artifacts
+- `agent_system/architecture_gate.py`
+- `agent_system/__init__.py` exports for architecture gate
+- `scripts/run_agent_architecture_gate.py`
+- `tests/test_agent_architecture_gate.py`
+- `.github/workflows/agent-architecture-ci.yml`
+- `docs/agent-architecture-ci-gate.md`
+- Agent PR 15 role handoff artifacts
 - project-state metadata
 
 It must not add/change:
 
-- CI architecture gate
 - changed-file auditor
 - PR template gate
 - architecture audit report
@@ -138,9 +138,9 @@ The immediate goal is not to add trading features. The immediate goal is to stop
 - Agent PR 11 — Agent Role Registry Contract: DONE
 - Agent PR 12 — Role-Based Workflow State Machine: DONE
 - Agent PR 13 — Role Handoff Artifact Contract: DONE
-- Agent PR 14 — PR Handoff Evidence Validator: IN PROGRESS
-- Agent PR 15 — CI Agent Architecture Gate: LOCKED NEXT
-- Agent PR 16 — Changed-File Scope Auditor: LOCKED
+- Agent PR 14 — PR Handoff Evidence Validator: DONE
+- Agent PR 15 — CI Agent Architecture Gate: IN PROGRESS
+- Agent PR 16 — Changed-File Scope Auditor: LOCKED NEXT
 - Agent PR 17 — PR Template and Local Developer Gate: LOCKED
 - Agent PR 18 — Architecture Replay / Audit Report: LOCKED
 
@@ -173,4 +173,4 @@ The immediate goal is not to add trading features. The immediate goal is to stop
 
 ## Process note
 
-Proceed only with Agent PR 14 until it is merged. After PR 14 merges, proceed only to PR 15. Do not skip or reorder PR 11–18.
+Proceed only with Agent PR 15 until it is merged. After PR 15 merges, proceed only to PR 16. Do not skip or reorder PR 11–18.

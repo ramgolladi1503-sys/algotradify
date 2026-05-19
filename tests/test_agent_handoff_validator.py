@@ -15,17 +15,25 @@ from agent_system.handoff_validator import (
     report_to_json,
     validate_handoff_evidence,
 )
+from agent_system.role_registry import get_agent_role_contract
 
 
-def _write_handoff(root: Path, task_id: str, role_id: str, workflow_state: str, target_state: str, **overrides):
+def _write_handoff(
+    root: Path,
+    file_task_id: str,
+    file_role_id: str,
+    workflow_state: str,
+    target_state: str,
+    **payload_overrides,
+):
     payload = build_minimal_handoff_payload(
-        task_id=task_id,
-        role_id=role_id,
+        task_id=file_task_id,
+        role_id=file_role_id,
         workflow_state=workflow_state,
         target_state=target_state,
     )
-    payload.update(overrides)
-    path = root / f"{task_id}-{ROLE_FILE_SUFFIXES[role_id]}.md"
+    payload.update(payload_overrides)
+    path = root / f"{file_task_id}-{ROLE_FILE_SUFFIXES[file_role_id]}.md"
     path.write_text(
         "# Handoff\n\n"
         "```json\n"
@@ -142,6 +150,7 @@ def test_validate_detects_task_id_mismatch(tmp_path):
 
 def test_validate_detects_role_id_mismatch(tmp_path):
     _write_all_required(tmp_path, "AGENT-PR14")
+    hermes_outputs = list(get_agent_role_contract("hermes_architect").required_outputs)
     _write_handoff(
         tmp_path,
         "AGENT-PR14",
@@ -149,6 +158,7 @@ def test_validate_detects_role_id_mismatch(tmp_path):
         "DESIGNED_BY_HERMES",
         "IMPLEMENTED_BY_GSD",
         role_id="hermes_architect",
+        required_outputs=hermes_outputs,
     )
 
     report = validate_handoff_evidence(task_id="AGENT-PR14", handoff_dir=tmp_path)
