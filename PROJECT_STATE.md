@@ -2,7 +2,7 @@
 
 ## Latest confirmed merged
 
-GitHub PR #131 — Fix auth boot local Kite login helper: MERGED
+GitHub PR #132 — Agent PR 11 — Agent Role Registry Contract: MERGED
 
 ## Current locked implementation wave
 
@@ -11,25 +11,25 @@ Agent Governance + Role-Based Mini-Agent Enforcement Wave
 Current PR:
 
 ```text
-Agent PR 11 — Agent Role Registry Contract
+Agent PR 12 — Role-Based Workflow State Machine
 ```
 
 ## Current posture
 
 ```text
-mode=agent_governance_pr11_role_registry
+mode=agent_governance_pr12_workflow_state_machine
 runtime_correction_wave=complete
 agent_governance_wave=active
-current_agent_governance_pr=11
-next_allowed_work=Agent PR 11 only
+current_agent_governance_pr=12
+next_allowed_work=Agent PR 12 only
 live_execution=guarded_explicit_only
 broker_order_placement=false
 dashboard_changes=false
 strategy_provider_expansion=false
 ml_ranker_work=false
 runtime_behavior_changes=none
-role_registry_only=true
-workflow_state_machine=false
+role_registry=complete
+workflow_state_machine=true
 handoff_validator=false
 ci_architecture_gate=false
 changed_file_auditor=false
@@ -39,35 +39,33 @@ architecture_audit_report=false
 ## Locked Agent Governance PR 11–18 order
 
 ```text
-PR 11 — Agent Role Registry Contract
-PR 12 — Role-Based Workflow State Machine
-PR 13 — Role Handoff Artifact Contract
-PR 14 — PR Handoff Evidence Validator
-PR 15 — CI Agent Architecture Gate
-PR 16 — Changed-File Scope Auditor
-PR 17 — PR Template and Local Developer Gate
-PR 18 — Architecture Replay / Audit Report
+PR 11 — Agent Role Registry Contract: DONE
+PR 12 — Role-Based Workflow State Machine: IN PROGRESS
+PR 13 — Role Handoff Artifact Contract: LOCKED NEXT
+PR 14 — PR Handoff Evidence Validator: LOCKED
+PR 15 — CI Agent Architecture Gate: LOCKED
+PR 16 — Changed-File Scope Auditor: LOCKED
+PR 17 — PR Template and Local Developer Gate: LOCKED
+PR 18 — Architecture Replay / Audit Report: LOCKED
 ```
 
 No deviation until PR 18 is complete.
 
-## Agent PR 11 boundary
+## Agent PR 12 boundary
 
-PR 11 adds the role registry contract only.
+PR 12 adds the role-based workflow state machine only.
 
 It may add/change:
 
-- `agent_system/role_registry.py`
-- `agent_system/role_contracts.py`
-- `agent_system/__init__.py` exports for the role registry
-- `tests/test_agent_role_registry.py`
-- `docs/agent-role-registry.md`
-- Agent PR 11 Grill/GSD/Hermes handoff artifacts
+- `agent_system/workflow_state.py`
+- `agent_system/__init__.py` exports for workflow state machine
+- `tests/test_agent_workflow_state.py`
+- `docs/agent-workflow-state-machine.md`
+- Agent PR 12 Grill/GSD/Hermes handoff artifacts
 - project-state metadata
 
 It must not add/change:
 
-- workflow state machine
 - handoff artifact validator
 - CI architecture gate
 - changed-file auditor
@@ -136,9 +134,9 @@ The immediate goal is not to add trading features. The immediate goal is to stop
 
 ## Active role-based governance wave
 
-- Agent PR 11 — Agent Role Registry Contract: IN PROGRESS
-- Agent PR 12 — Role-Based Workflow State Machine: LOCKED NEXT
-- Agent PR 13 — Role Handoff Artifact Contract: LOCKED
+- Agent PR 11 — Agent Role Registry Contract: DONE
+- Agent PR 12 — Role-Based Workflow State Machine: IN PROGRESS
+- Agent PR 13 — Role Handoff Artifact Contract: LOCKED NEXT
 - Agent PR 14 — PR Handoff Evidence Validator: LOCKED
 - Agent PR 15 — CI Agent Architecture Gate: LOCKED
 - Agent PR 16 — Changed-File Scope Auditor: LOCKED
@@ -174,4 +172,4 @@ The immediate goal is not to add trading features. The immediate goal is to stop
 
 ## Process note
 
-Proceed only with Agent PR 11 until it is merged. After PR 11 merges, proceed only to PR 12. Do not skip or reorder PR 11–18.
+Proceed only with Agent PR 12 until it is merged. After PR 12 merges, proceed only to PR 13. Do not skip or reorder PR 11–18.
