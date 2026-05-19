@@ -24,7 +24,13 @@ def _make_native_repo(root: Path) -> Path:
 
 def test_runtime_ownership_payload_is_read_only_native(tmp_path, monkeypatch):
     root = _make_native_repo(tmp_path / "algotradify")
-    for name in ("ALGOTRADIFY_ENGINE_ROOT", "TRADEBOT_ROOT", "CORE_BOT_ROOT", "CORE_BOT_RUNTIME_ROOT"):
+    for name in (
+        "ALGOTRADIFY_ENGINE_ROOT",
+        "TRADEBOT_ROOT",
+        "CORE_BOT_ROOT",
+        "CORE_BOT_RUNTIME_ROOT",
+        "ALGOTRADIFY_ALLOW_EXTERNAL_RUNTIME",
+    ):
         monkeypatch.delenv(name, raising=False)
 
     payload = build_runtime_ownership_payload(base_repo_root=root)
@@ -33,6 +39,9 @@ def test_runtime_ownership_payload_is_read_only_native(tmp_path, monkeypatch):
     assert payload["runtime_ownership"] == "NATIVE"
     assert payload["native_source_present"] is True
     assert payload["native_main_promoted"] is True
+    assert payload["external_runtime_allowed"] is False
+    assert payload["external_runtime_deprecated"] is True
+    assert "deprecated" in payload["external_runtime_deprecation_message"]
     assert payload["external_runtime_used"] is False
     assert payload["can_start_native_runtime"] is True
     assert payload["read_only"] is True
@@ -41,6 +50,21 @@ def test_runtime_ownership_payload_is_read_only_native(tmp_path, monkeypatch):
     assert payload["broker_api_called"] is False
     assert payload["real_order_id"] is None
     assert payload["live_mode_touched"] is False
+
+
+def test_runtime_ownership_payload_reports_explicit_external_opt_in_warning(tmp_path, monkeypatch):
+    root = _make_native_repo(tmp_path / "algotradify")
+    monkeypatch.setenv("ALGOTRADIFY_ALLOW_EXTERNAL_RUNTIME", "true")
+
+    payload = build_runtime_ownership_payload(base_repo_root=root)
+
+    assert payload["runtime_ownership"] == "NATIVE"
+    assert payload["external_runtime_allowed"] is True
+    assert payload["external_runtime_deprecated"] is True
+    assert payload["external_runtime_used"] is False
+    assert any("external_runtime_fallback.deprecated" in warning for warning in payload["warnings"])
+    assert payload["is_order_action"] is False
+    assert payload["broker_api_called"] is False
 
 
 def test_runtime_ownership_payload_reports_blockers_without_mutation(tmp_path, monkeypatch):
@@ -53,6 +77,7 @@ def test_runtime_ownership_payload_reports_blockers_without_mutation(tmp_path, m
     assert payload["runtime_ownership"] == "WRAPPER_OR_EXTERNAL_COMPATIBLE"
     assert payload["can_start_native_runtime"] is False
     assert payload["blockers"]
+    assert payload["external_runtime_deprecated"] is True
     assert payload["read_only"] is True
     assert payload["is_order_action"] is False
     assert payload["broker_api_called"] is False

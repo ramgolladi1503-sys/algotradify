@@ -39,7 +39,7 @@ def _clear_runtime_env(monkeypatch) -> None:
         monkeypatch.delenv(name, raising=False)
 
 
-def test_api_uses_native_repo_root_by_default_after_main_promotion(tmp_path, monkeypatch):
+def test_api_uses_native_repo_root_by_default_after_external_fallback_deprecation(tmp_path, monkeypatch):
     contract = importlib.import_module("runtime_contract")
     server = importlib.import_module("api.server")
     _clear_runtime_env(monkeypatch)
@@ -52,12 +52,13 @@ def test_api_uses_native_repo_root_by_default_after_main_promotion(tmp_path, mon
     monkeypatch.setattr(server, "_repo_root", lambda: repo_root)
     monkeypatch.setattr(Path, "home", lambda: home_dir)
 
+    assert contract.external_runtime_allowed() is False
     assert contract.resolve_runtime_root(base_repo_root=repo_root) == repo_root
     assert server._tradebot_root() == repo_root
     assert external_root != server._tradebot_root()
 
 
-def test_api_and_contract_honor_explicit_external_runtime_when_allowed(tmp_path, monkeypatch):
+def test_explicit_external_runtime_opt_in_still_temporarily_works(tmp_path, monkeypatch):
     contract = importlib.import_module("runtime_contract")
     server = importlib.import_module("api.server")
     _clear_runtime_env(monkeypatch)
@@ -68,20 +69,36 @@ def test_api_and_contract_honor_explicit_external_runtime_when_allowed(tmp_path,
     core_bot_root = _make_runtime_root(tmp_path / "core_bot_engine")
 
     monkeypatch.setattr(server, "_repo_root", lambda: repo_root)
+    monkeypatch.setenv("ALGOTRADIFY_ALLOW_EXTERNAL_RUNTIME", "true")
     monkeypatch.setenv("ALGOTRADIFY_ENGINE_ROOT", str(algotradify_root))
     monkeypatch.setenv("TRADEBOT_ROOT", str(tradebot_root))
     monkeypatch.setenv("CORE_BOT_ROOT", str(core_bot_root))
 
-    assert contract.resolve_runtime_root(base_repo_root=repo_root) == algotradify_root
-    assert server._tradebot_root() == algotradify_root
+    assert contract.external_runtime_allowed() is True
+    assert contract.resolve_runtime_root(base_repo_root=repo_root) == repo_root
+
+    assert contract.resolve_runtime_root(base_repo_root=repo_root, include_native_root=False) == algotradify_root
+    assert server._tradebot_root() == repo_root
 
     monkeypatch.delenv("ALGOTRADIFY_ENGINE_ROOT")
-    assert contract.resolve_runtime_root(base_repo_root=repo_root) == tradebot_root
-    assert server._tradebot_root() == tradebot_root
+    assert contract.resolve_runtime_root(base_repo_root=repo_root, include_native_root=False) == tradebot_root
 
     monkeypatch.delenv("TRADEBOT_ROOT")
-    assert contract.resolve_runtime_root(base_repo_root=repo_root) == core_bot_root
-    assert server._tradebot_root() == core_bot_root
+    assert contract.resolve_runtime_root(base_repo_root=repo_root, include_native_root=False) == core_bot_root
+
+
+def test_external_env_roots_ignored_by_default_even_when_configured(tmp_path, monkeypatch):
+    contract = importlib.import_module("runtime_contract")
+    _clear_runtime_env(monkeypatch)
+
+    repo_root = tmp_path / "algotradify"
+    repo_root.mkdir()
+    external_root = _make_runtime_root(tmp_path / "tradebot_engine")
+    monkeypatch.setenv("TRADEBOT_ROOT", str(external_root))
+
+    assert contract.resolve_runtime_root(base_repo_root=repo_root) is None
+    candidates = [candidate.expanduser().resolve() for candidate in contract.candidate_runtime_roots(base_repo_root=repo_root)]
+    assert external_root not in candidates
 
 
 def test_strict_native_mode_blocks_explicit_external_runtime_for_api(tmp_path, monkeypatch):
@@ -93,10 +110,30 @@ def test_strict_native_mode_blocks_explicit_external_runtime_for_api(tmp_path, m
     external_root = _make_runtime_root(tmp_path / "tradebot_engine")
     monkeypatch.setattr(server, "_repo_root", lambda: repo_root)
     monkeypatch.setenv("ALGOTRADIFY_REQUIRE_NATIVE_RUNTIME", "true")
+    monkeypatch.setenv("ALGOTRADIFY_ALLOW_EXTERNAL_RUNTIME", "true")
     monkeypatch.setenv("TRADEBOT_ROOT", str(external_root))
 
     assert contract.resolve_runtime_root(base_repo_root=repo_root) == repo_root
     assert server._tradebot_root() == repo_root
+    assert contract.external_runtime_allowed() is False
+
+
+def test_preflight_reports_external_fallback_deprecation_metadata(tmp_path, monkeypatch):
+    contract = importlib.import_module("runtime_contract")
+    _clear_runtime_env(monkeypatch)
+    repo_root = _make_native_runtime_root(tmp_path / "algotradify")
+
+    result = contract.run_preflight(base_repo_root=repo_root, create_runtime_dirs=False)
+
+    assert result["external_runtime_allowed"] is False
+    assert result["external_runtime_deprecated"] is True
+    assert "deprecated" in result["external_runtime_deprecation_message"]
+    assert any(
+        check["name"] == "external_runtime_fallback.deprecated"
+        and check["status"] == "PASS"
+        and check["metadata"]["deprecated"] is True
+        for check in result["checks"]
+    )
 
 
 def test_core_bot_runtime_root_override_wins_for_api_runtime_artifacts(tmp_path, monkeypatch):

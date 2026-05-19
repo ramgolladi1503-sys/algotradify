@@ -8,6 +8,11 @@ from fastapi.testclient import TestClient
 from runtime_contract import run_preflight
 
 
+def _write_file(path: Path, text: str = "x") -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+
+
 def _make_runtime_root(path: Path, *, requirements: bool = True) -> Path:
     path.mkdir(parents=True, exist_ok=True)
     (path / "main.py").write_text("def main():\n    return 'ok'\n", encoding="utf-8")
@@ -18,12 +23,21 @@ def _make_runtime_root(path: Path, *, requirements: bool = True) -> Path:
     return path.resolve()
 
 
+def _make_native_runtime_root(path: Path, *, requirements: bool = True) -> Path:
+    root = _make_runtime_root(path, requirements=requirements)
+    _write_file(root / "RUNTIME_SOURCE_MANIFEST.json", "{}\n")
+    _write_file(root / "runtime_native" / "tradebot_main.py", "def main(): pass\n")
+    return root
+
+
 def _clear_runtime_env(monkeypatch) -> None:
     for name in (
         "ALGOTRADIFY_ENGINE_ROOT",
         "TRADEBOT_ROOT",
         "CORE_BOT_ROOT",
         "CORE_BOT_RUNTIME_ROOT",
+        "ALGOTRADIFY_REQUIRE_NATIVE_RUNTIME",
+        "ALGOTRADIFY_ALLOW_EXTERNAL_RUNTIME",
         "EXECUTION_MODE",
         "TRADING_MODE",
     ):
@@ -45,6 +59,8 @@ def test_preflight_fails_when_no_runtime_root_exists(tmp_path, monkeypatch):
 
     assert result["status"] == "FAIL"
     assert result["runtime_root"] is None
+    assert result["external_runtime_allowed"] is False
+    assert result["external_runtime_deprecated"] is True
     checks = _check_map(result)
     assert checks["runtime_root.resolved"]["status"] == "FAIL"
     assert "checked_paths" in checks["runtime_root.resolved"]["metadata"]
@@ -52,14 +68,15 @@ def test_preflight_fails_when_no_runtime_root_exists(tmp_path, monkeypatch):
 
 def test_preflight_warns_for_missing_token_in_sim_mode(tmp_path, monkeypatch):
     _clear_runtime_env(monkeypatch)
-    repo_root = tmp_path / "algotradify"
-    runtime_root = _make_runtime_root(repo_root / "core_bot")
+    repo_root = _make_native_runtime_root(tmp_path / "algotradify")
 
     result = run_preflight(base_repo_root=repo_root, create_runtime_dirs=True)
 
     assert result["status"] == "WARN"
-    assert result["runtime_root"] == str(runtime_root)
+    assert result["runtime_root"] == str(repo_root)
+    assert result["external_runtime_allowed"] is False
     checks = _check_map(result)
+    assert checks["external_runtime_fallback.deprecated"]["status"] == "PASS"
     assert checks["runtime_root.main.py"]["status"] == "PASS"
     assert checks["runtime_root.core"]["status"] == "PASS"
     assert checks["runtime_root.config"]["status"] == "PASS"
@@ -72,8 +89,7 @@ def test_preflight_warns_for_missing_token_in_sim_mode(tmp_path, monkeypatch):
 
 def test_preflight_fails_for_invalid_execution_mode(tmp_path, monkeypatch):
     _clear_runtime_env(monkeypatch)
-    repo_root = tmp_path / "algotradify"
-    _make_runtime_root(repo_root / "core_bot")
+    repo_root = _make_native_runtime_root(tmp_path / "algotradify")
     monkeypatch.setenv("EXECUTION_MODE", "DANGEROUS")
 
     result = run_preflight(base_repo_root=repo_root, create_runtime_dirs=True)
@@ -85,8 +101,7 @@ def test_preflight_fails_for_invalid_execution_mode(tmp_path, monkeypatch):
 
 def test_preflight_requires_token_for_paper_or_live(tmp_path, monkeypatch):
     _clear_runtime_env(monkeypatch)
-    repo_root = tmp_path / "algotradify"
-    _make_runtime_root(repo_root / "core_bot")
+    repo_root = _make_native_runtime_root(tmp_path / "algotradify")
     monkeypatch.setenv("EXECUTION_MODE", "PAPER")
 
     result = run_preflight(base_repo_root=repo_root, create_runtime_dirs=True)
@@ -98,9 +113,8 @@ def test_preflight_requires_token_for_paper_or_live(tmp_path, monkeypatch):
 
 def test_preflight_passes_for_paper_when_token_candidate_exists(tmp_path, monkeypatch):
     _clear_runtime_env(monkeypatch)
-    repo_root = tmp_path / "algotradify"
-    runtime_root = _make_runtime_root(repo_root / "core_bot")
-    artifact_root = runtime_root / ".runtime"
+    repo_root = _make_native_runtime_root(tmp_path / "algotradify")
+    artifact_root = repo_root / ".runtime"
     artifact_root.mkdir(parents=True)
     (artifact_root / "kite_access_token").write_text("token", encoding="utf-8")
     monkeypatch.setenv("EXECUTION_MODE", "PAPER")
@@ -117,8 +131,7 @@ def test_runtime_preflight_api_returns_contract_payload(tmp_path, monkeypatch):
     client = TestClient(server.app)
     _clear_runtime_env(monkeypatch)
 
-    repo_root = tmp_path / "algotradify"
-    runtime_root = _make_runtime_root(repo_root / "core_bot")
+    repo_root = _make_native_runtime_root(tmp_path / "algotradify")
     monkeypatch.setattr(server, "_repo_root", lambda: repo_root)
 
     response = client.get("/runtime/preflight")
@@ -126,7 +139,29 @@ def test_runtime_preflight_api_returns_contract_payload(tmp_path, monkeypatch):
     assert response.status_code == 200
     payload = response.json()
     assert payload["status"] == "WARN"
-    assert payload["runtime_root"] == str(runtime_root)
+    assert payload["runtime_root"] == str(repo_root)
+    assert payload["external_runtime_allowed"] is False
+    assert payload["external_runtime_deprecated"] is True
     assert payload["checked_at_source"] == "runtime_contract.run_preflight"
     assert isinstance(payload["checks"], list)
     assert payload["summary"]["warn_count"] >= 1
+
+
+def test_legacy_core_bot_preflight_requires_explicit_external_opt_in(tmp_path, monkeypatch):
+    _clear_runtime_env(monkeypatch)
+    repo_root = tmp_path / "algotradify"
+    runtime_root = _make_runtime_root(repo_root / "core_bot")
+
+    result_without_opt_in = run_preflight(base_repo_root=repo_root, create_runtime_dirs=False)
+    assert result_without_opt_in["status"] == "FAIL"
+    assert result_without_opt_in["runtime_root"] is None
+
+    monkeypatch.setenv("ALGOTRADIFY_ALLOW_EXTERNAL_RUNTIME", "true")
+    result_with_opt_in = run_preflight(base_repo_root=repo_root, create_runtime_dirs=False)
+
+    assert result_with_opt_in["status"] == "WARN"
+    assert result_with_opt_in["runtime_root"] == str(runtime_root)
+    assert result_with_opt_in["external_runtime_allowed"] is True
+    assert result_with_opt_in["external_runtime_used"] is True
+    checks = _check_map(result_with_opt_in)
+    assert checks["external_runtime_fallback.deprecated"]["status"] == "WARN"
