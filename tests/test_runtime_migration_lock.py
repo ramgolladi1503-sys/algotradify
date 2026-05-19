@@ -30,6 +30,8 @@ def test_runtime_migration_lock_contains_critical_gate_names():
         "root_main.native_lock",
         "root_main.safety_markers",
         "run_live.guarded_live_lock",
+        "kite_login_helper.local_token_flow",
+        "kite_login_helper.no_order_or_secret_output",
         "operator_boot.no_live_command",
         "runtime_contract.external_deprecation_lock",
         "runtime_contract.native_lock",
@@ -72,6 +74,20 @@ def test_runtime_migration_lock_fails_if_run_live_loses_confirmation_gate(tmp_pa
     assert payload["status"] == "FAIL"
     assert any(
         check["status"] == "FAIL" and "run_live.guarded_live_lock" in check["name"]
+        for check in payload["checks"]
+    )
+
+
+def test_runtime_migration_lock_fails_if_kite_login_helper_is_missing(tmp_path):
+    work = tmp_path / "repo"
+    shutil.copytree(ROOT, work, ignore=shutil.ignore_patterns(".git", ".pytest_cache", "__pycache__", "*.pyc"))
+    (work / "scripts" / "kite_autologin_localhost.py").unlink()
+
+    payload = run_lock_checks(work)
+
+    assert payload["status"] == "FAIL"
+    assert any(
+        check["status"] == "FAIL" and "kite_autologin_localhost.py" in check["name"]
         for check in payload["checks"]
     )
 
