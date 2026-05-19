@@ -2,26 +2,27 @@
 
 ## Latest confirmed merged
 
-GitHub PR #125 — Runtime Correction PR 7 — API and Control Tower Runtime Ownership Wiring: MERGED
+GitHub PR #126 — Runtime Correction PR 8 — Broker Auth Visibility and Startup UX: MERGED
 
 ## Current correction PR
 
-Runtime Correction PR 8 — Broker Auth Visibility and Startup UX
+Runtime Correction PR 9 — Compatibility Cleanup and External Runtime Deprecation
 
 ## Current posture
 
-mode=broker_auth_visibility_startup_ux
+mode=external_runtime_deprecation_native_default
 live_execution=guarded_explicit_only
 broker_order_placement=false
-dashboard_changes=read_only_auth_visibility_panel_only
+dashboard_changes=false
 strategy_provider_expansion=false
 ml_ranker_work=false
 agent_scope_expansion=false
-runtime_behavior_changes=read_only_auth_visibility_only
+runtime_behavior_changes=external_fallback_disabled_by_default
 source_import=true
 import_planning_only=false
 root_main_promotion=true
 root_run_live_promotion=guarded_live_entrypoint
+external_runtime_fallback=deprecated_explicit_opt_in_only
 
 ## Why normal product work is paused
 
@@ -40,8 +41,8 @@ The immediate goal is not to add features. The immediate goal is to prove whethe
 - Runtime Correction PR 5 — Root Native main.py Promotion: DONE
 - Runtime Correction PR 6 — Native run_live / Operator Boot Commands: DONE
 - Runtime Correction PR 7 — API and Control Tower Runtime Ownership Wiring: DONE
-- Runtime Correction PR 8 — Broker Auth Visibility and Startup UX: IN PROGRESS
-- Runtime Correction PR 9 — Compatibility Cleanup and External Runtime Deprecation: PLANNED
+- Runtime Correction PR 8 — Broker Auth Visibility and Startup UX: DONE
+- Runtime Correction PR 9 — Compatibility Cleanup and External Runtime Deprecation: IN PROGRESS
 - Runtime Correction PR 10 — Full Regression Gate and Migration Lock: PLANNED
 
 ## Runtime Correction PR 2 boundary
@@ -230,6 +231,32 @@ It must not:
 - change paper/agent internals
 - make LIVE the default
 - start runtime workers
+
+## Runtime Correction PR 9 boundary
+
+PR 9 deprecates external runtime compatibility and disables silent fallback by default.
+
+It may add/change:
+
+- `runtime_contract.py` default external fallback behavior
+- explicit temporary opt-in with `ALGOTRADIFY_ALLOW_EXTERNAL_RUNTIME=true`
+- preflight deprecation metadata for external fallback
+- runtime ownership API deprecation fields
+- tests proving native default and external opt-in behavior
+- external fallback deprecation documentation
+- Grill, GSD, and Hermes handoff artifacts
+- project-state metadata
+
+It must not:
+
+- change root `main.py`
+- change root `run_live.sh`
+- change operator boot commands
+- add broker/auth/order behavior
+- change dashboard controls
+- change paper/agent internals
+- remove explicit external opt-in before PR 10
+- make LIVE the default
 
 ## Runtime correction discipline
 
