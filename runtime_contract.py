@@ -63,7 +63,8 @@ def is_tradebot_compatible_root(path: Path) -> bool:
 def is_native_runtime_source_root(path: Path) -> bool:
     root = path.expanduser().resolve()
     return (
-        (root / "core").is_dir()
+        (root / "main.py").is_file()
+        and (root / "core").is_dir()
         and (root / "config").is_dir()
         and (root / NATIVE_MANIFEST).is_file()
         and (root / NATIVE_ENTRYPOINT_SNAPSHOT).is_file()
@@ -82,9 +83,9 @@ def _root_main_is_wrapper(root: Path) -> bool:
     markers = (
         "spec_from_file_location",
         "_load_runtime_main",
-        "resolve_runtime_root()",
         "Tradebot-compatible runtime",
         "runtime_root = resolve_runtime_root()",
+        "Algotradify runtime bootstrap failed",
     )
     return any(marker in text for marker in markers)
 
@@ -108,7 +109,7 @@ def candidate_runtime_roots(
 ) -> list[Path]:
     root = (base_repo_root or repo_root()).expanduser().resolve()
     home_root = (home or Path.home()).expanduser().resolve()
-    include_native = native_runtime_required() if include_native_root is None else include_native_root
+    include_native = is_native_runtime_source_root(root) if include_native_root is None else include_native_root
     external_ok = external_runtime_allowed(default=True) if allow_external is None else allow_external
     candidates: list[Path] = []
 
@@ -215,10 +216,11 @@ def _check_native_source(root: Path) -> list[PreflightCheck]:
             message=(
                 "native runtime source markers present"
                 if native_present
-                else "native runtime source markers missing: core/, config/, manifest, or runtime_native/tradebot_main.py"
+                else "native runtime source markers missing: main.py, core/, config/, manifest, or runtime_native/tradebot_main.py"
             ),
             path=str(root),
             metadata={
+                "main": (root / "main.py").is_file(),
                 "core": (root / "core").is_dir(),
                 "config": (root / "config").is_dir(),
                 "manifest": (root / NATIVE_MANIFEST).is_file(),
@@ -343,18 +345,18 @@ def run_preflight(*, base_repo_root: Path | None = None, home: Path | None = Non
     candidates = candidate_runtime_roots(
         base_repo_root=root,
         home=home,
-        include_native_root=native_required,
+        include_native_root=True if native_source_present else native_required,
         allow_external=external_ok,
     )
     runtime_root = resolve_runtime_root(
         base_repo_root=root,
         home=home,
         require_native=native_required,
-        include_native_root=native_required,
+        include_native_root=True if native_source_present else native_required,
         allow_external=external_ok,
     )
 
-    if native_required:
+    if native_required or native_source_present:
         checks.extend(_check_native_source(root))
 
     if runtime_root is None:

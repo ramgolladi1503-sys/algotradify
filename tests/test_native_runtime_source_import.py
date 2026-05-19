@@ -8,6 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_native_runtime_required_paths_are_tracked_source():
+    assert (ROOT / "main.py").is_file()
     assert (ROOT / "core").is_dir()
     assert (ROOT / "config").is_dir()
     assert (ROOT / "dashboard").is_dir()
@@ -33,7 +34,7 @@ def test_runtime_source_manifest_exists_and_is_safe():
     assert safe_flags["live_mode_touched"] is False
 
 
-def test_native_import_does_not_replace_root_main_or_run_live():
+def test_root_main_is_native_and_no_longer_dynamic_external_loader():
     root_main = ROOT / "main.py"
     root_run_live = ROOT / "run_live.sh"
 
@@ -41,7 +42,13 @@ def test_native_import_does_not_replace_root_main_or_run_live():
     assert not root_run_live.exists()
 
     main_text = root_main.read_text(encoding="utf-8", errors="ignore")
-    assert "spec_from_file_location" in main_text or "resolve_runtime_root" in main_text
+    assert "importlib.util.spec_from_file_location" not in main_text
+    assert "_load_runtime_main" not in main_text
+    assert "Algotradify runtime bootstrap failed" not in main_text
+    assert "from core.orchestrator import Orchestrator" in main_text
+    assert "validate_kite_startup_credentials" in main_text
+    assert "InstanceLock" in main_text
+    assert "enforce_startup_security" in main_text
 
 
 def test_import_does_not_include_secret_or_runtime_artifacts():
