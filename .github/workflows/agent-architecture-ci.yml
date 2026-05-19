@@ -37,6 +37,7 @@ jobs:
             tests/test_agent_handoff_contract.py \
             tests/test_agent_handoff_validator.py \
             tests/test_agent_architecture_gate.py \
+            tests/test_agent_changed_file_auditor.py \
             -q
 
       - name: Run architecture gate for pull request
