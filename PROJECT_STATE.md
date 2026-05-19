@@ -2,22 +2,22 @@
 
 ## Latest confirmed merged
 
-GitHub PR #124 — Runtime Correction PR 6 — Native run_live / Operator Boot Commands: MERGED
+GitHub PR #125 — Runtime Correction PR 7 — API and Control Tower Runtime Ownership Wiring: MERGED
 
 ## Current correction PR
 
-Runtime Correction PR 7 — API and Control Tower Runtime Ownership Wiring
+Runtime Correction PR 8 — Broker Auth Visibility and Startup UX
 
 ## Current posture
 
-mode=runtime_ownership_api_control_tower_visibility
+mode=broker_auth_visibility_startup_ux
 live_execution=guarded_explicit_only
 broker_order_placement=false
-dashboard_changes=read_only_runtime_ownership_panel_only
+dashboard_changes=read_only_auth_visibility_panel_only
 strategy_provider_expansion=false
 ml_ranker_work=false
 agent_scope_expansion=false
-runtime_behavior_changes=read_only_visibility_only
+runtime_behavior_changes=read_only_auth_visibility_only
 source_import=true
 import_planning_only=false
 root_main_promotion=true
@@ -39,8 +39,8 @@ The immediate goal is not to add features. The immediate goal is to prove whethe
 - Runtime Correction PR 4 — Native Runtime Contract and Preflight Hardening: DONE
 - Runtime Correction PR 5 — Root Native main.py Promotion: DONE
 - Runtime Correction PR 6 — Native run_live / Operator Boot Commands: DONE
-- Runtime Correction PR 7 — API and Control Tower Runtime Ownership Wiring: IN PROGRESS
-- Runtime Correction PR 8 — Broker Auth Visibility and Startup UX: PLANNED
+- Runtime Correction PR 7 — API and Control Tower Runtime Ownership Wiring: DONE
+- Runtime Correction PR 8 — Broker Auth Visibility and Startup UX: IN PROGRESS
 - Runtime Correction PR 9 — Compatibility Cleanup and External Runtime Deprecation: PLANNED
 - Runtime Correction PR 10 — Full Regression Gate and Migration Lock: PLANNED
 
@@ -200,6 +200,35 @@ It must not:
 - change paper/agent internals
 - make LIVE the default
 - mutate runtime state
+- start runtime workers
+
+## Runtime Correction PR 8 boundary
+
+PR 8 adds broker auth visibility and startup UX only.
+
+It may add/change:
+
+- local-only sanitized broker auth visibility payload
+- GET-only `/broker/auth/visibility` API route
+- response schema for auth visibility
+- read-only Control Tower auth visibility panel helper/normalizer
+- startup command guidance for login-only, validate-only, SIM, PAPER, and API-only startup
+- tests proving no raw token/secret exposure and no broker/profile probes
+- auth visibility documentation
+- Grill, GSD, and Hermes handoff artifacts
+- project-state metadata
+
+It must not:
+
+- call broker APIs
+- run login from API or dashboard
+- mutate tokens
+- expose raw tokens or API secrets
+- add auth mutation endpoints
+- add broker order behavior
+- add dashboard action controls
+- change paper/agent internals
+- make LIVE the default
 - start runtime workers
 
 ## Runtime correction discipline
