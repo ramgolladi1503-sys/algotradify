@@ -2,22 +2,22 @@
 
 ## Latest confirmed merged
 
-GitHub PR #123 — Runtime Correction PR 5 — Root Native main.py Promotion: MERGED
+GitHub PR #124 — Runtime Correction PR 6 — Native run_live / Operator Boot Commands: MERGED
 
 ## Current correction PR
 
-Runtime Correction PR 6 — Native run_live / Operator Boot Commands
+Runtime Correction PR 7 — API and Control Tower Runtime Ownership Wiring
 
 ## Current posture
 
-mode=native_operator_boot_commands
+mode=runtime_ownership_api_control_tower_visibility
 live_execution=guarded_explicit_only
 broker_order_placement=false
-dashboard_changes=false
+dashboard_changes=read_only_runtime_ownership_panel_only
 strategy_provider_expansion=false
 ml_ranker_work=false
 agent_scope_expansion=false
-runtime_behavior_changes=operator_entrypoints_only
+runtime_behavior_changes=read_only_visibility_only
 source_import=true
 import_planning_only=false
 root_main_promotion=true
@@ -38,8 +38,8 @@ The immediate goal is not to add features. The immediate goal is to prove whethe
 - Runtime Correction PR 3 — Native Runtime Source Import: DONE
 - Runtime Correction PR 4 — Native Runtime Contract and Preflight Hardening: DONE
 - Runtime Correction PR 5 — Root Native main.py Promotion: DONE
-- Runtime Correction PR 6 — Native run_live / Operator Boot Commands: IN PROGRESS
-- Runtime Correction PR 7 — API and Control Tower Runtime Ownership Wiring: PLANNED
+- Runtime Correction PR 6 — Native run_live / Operator Boot Commands: DONE
+- Runtime Correction PR 7 — API and Control Tower Runtime Ownership Wiring: IN PROGRESS
 - Runtime Correction PR 8 — Broker Auth Visibility and Startup UX: PLANNED
 - Runtime Correction PR 9 — Compatibility Cleanup and External Runtime Deprecation: PLANNED
 - Runtime Correction PR 10 — Full Regression Gate and Migration Lock: PLANNED
@@ -175,6 +175,32 @@ It must not:
 - change paper/agent internals
 - make LIVE the default
 - allow `./run_live.sh` to start live without explicit confirmation
+
+## Runtime Correction PR 7 boundary
+
+PR 7 wires runtime ownership visibility into API and Control Tower.
+
+It may add/change:
+
+- read-only runtime ownership payload builder
+- GET-only `/runtime/ownership` API route
+- response schema for runtime ownership status
+- read-only Control Tower panel helper/normalizer
+- tests proving safe flags and no action affordances
+- runtime ownership documentation
+- Grill, GSD, and Hermes handoff artifacts
+- project-state metadata
+
+It must not:
+
+- add broker order behavior
+- add auth API endpoints
+- add dashboard action controls
+- change frontend execution behavior
+- change paper/agent internals
+- make LIVE the default
+- mutate runtime state
+- start runtime workers
 
 ## Runtime correction discipline
 
