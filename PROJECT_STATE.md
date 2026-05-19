@@ -2,26 +2,26 @@
 
 ## Latest confirmed merged
 
-GitHub PR #122 — Runtime Correction PR 4 — Native Runtime Contract and Preflight Hardening: MERGED
+GitHub PR #123 — Runtime Correction PR 5 — Root Native main.py Promotion: MERGED
 
 ## Current correction PR
 
-Runtime Correction PR 5 — Root Native main.py Promotion
+Runtime Correction PR 6 — Native run_live / Operator Boot Commands
 
 ## Current posture
 
-mode=root_native_main_promotion
-live_execution=false
+mode=native_operator_boot_commands
+live_execution=guarded_explicit_only
 broker_order_placement=false
 dashboard_changes=false
 strategy_provider_expansion=false
 ml_ranker_work=false
 agent_scope_expansion=false
-runtime_behavior_changes=root_main_promotion_only
+runtime_behavior_changes=operator_entrypoints_only
 source_import=true
 import_planning_only=false
 root_main_promotion=true
-root_run_live_promotion=false
+root_run_live_promotion=guarded_live_entrypoint
 
 ## Why normal product work is paused
 
@@ -37,8 +37,8 @@ The immediate goal is not to add features. The immediate goal is to prove whethe
 - Runtime Correction PR 2 — Tradebot Source Import Manifest and Collision Report: DONE
 - Runtime Correction PR 3 — Native Runtime Source Import: DONE
 - Runtime Correction PR 4 — Native Runtime Contract and Preflight Hardening: DONE
-- Runtime Correction PR 5 — Root Native main.py Promotion: IN PROGRESS
-- Runtime Correction PR 6 — Native run_live / Operator Boot Commands: PLANNED
+- Runtime Correction PR 5 — Root Native main.py Promotion: DONE
+- Runtime Correction PR 6 — Native run_live / Operator Boot Commands: IN PROGRESS
 - Runtime Correction PR 7 — API and Control Tower Runtime Ownership Wiring: PLANNED
 - Runtime Correction PR 8 — Broker Auth Visibility and Startup UX: PLANNED
 - Runtime Correction PR 9 — Compatibility Cleanup and External Runtime Deprecation: PLANNED
@@ -151,6 +151,30 @@ It must not:
 - add auth endpoints
 - make LIVE the default
 - remove safety-critical startup checks from native main
+
+## Runtime Correction PR 6 boundary
+
+PR 6 adds native operator boot commands.
+
+It may add/change:
+
+- guarded root `run_live.sh`
+- safe operator boot CLI for preflight, SIM, PAPER, and API-only startup
+- operator command documentation
+- tests proving live startup requires explicit confirmation
+- tests proving SIM/PAPER/UI commands do not force LIVE
+- Grill, GSD, and Hermes handoff artifacts
+- project-state metadata
+
+It must not:
+
+- add broker order behavior
+- add auth API endpoints
+- add dashboard controls
+- change frontend behavior
+- change paper/agent internals
+- make LIVE the default
+- allow `./run_live.sh` to start live without explicit confirmation
 
 ## Runtime correction discipline
 
