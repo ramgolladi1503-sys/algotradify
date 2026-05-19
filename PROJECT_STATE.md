@@ -2,7 +2,7 @@
 
 ## Latest confirmed merged
 
-GitHub PR #119 — Runtime Correction PR 1 — Runtime Ownership Audit: MERGED
+GitHub PR #120 — Runtime Correction PR 3 — Native Runtime Source Import: MERGED
 
 ## Current correction PR
 
@@ -10,7 +10,7 @@ Runtime Correction PR 2 — Tradebot Source Import Manifest and Collision Report
 
 ## Current posture
 
-mode=runtime_source_import_planning
+mode=native_runtime_source_import
 live_execution=false
 broker_order_placement=false
 dashboard_changes=false
@@ -18,8 +18,8 @@ strategy_provider_expansion=false
 ml_ranker_work=false
 agent_scope_expansion=false
 runtime_behavior_changes=false
-source_import=false
-import_planning_only=true
+source_import=true
+import_planning_only=false
 
 ## Why normal product work is paused
 
@@ -32,8 +32,8 @@ The immediate goal is not to add features. The immediate goal is to prove whethe
 ## Runtime correction wave
 
 - Runtime Correction PR 1 — Runtime Ownership Audit: DONE
-- Runtime Correction PR 2 — Tradebot Source Import Manifest and Collision Report: IN PROGRESS
-- Runtime Correction PR 3 — Native Runtime Source Import: PLANNED
+- Runtime Correction PR 2 — Tradebot Source Import Manifest and Collision Report: DONE
+- Runtime Correction PR 3 — Native Runtime Source Import: IN PROGRESS
 - Runtime Correction PR 4 — Native Runtime Contract and Preflight Hardening: PLANNED
 - Runtime Correction PR 5 — Root Native main.py Promotion: PLANNED
 - Runtime Correction PR 6 — Native run_live / Operator Boot Commands: PLANNED
@@ -65,6 +65,40 @@ It must not:
 - call broker APIs
 - add auth behavior
 - add UI controls
+
+## Runtime Correction PR 3 boundary
+
+PR 3 imports native Tradebot runtime source as tracked source without wiring runtime behavior.
+
+It may add:
+
+- core/
+- config/
+- dashboard/
+- ml/
+- models/
+- rl/
+- fixtures/
+- strategies/ missing files only
+- runtime_native/tradebot_main.py
+- runtime_native/tradebot_run_live.sh
+- runtime_native/tradebot_requirements.txt
+- RUNTIME_SOURCE_MANIFEST.json
+- native source import tests
+- native source import documentation
+- Grill, GSD, and Hermes handoff artifacts
+- project-state metadata
+
+It must not:
+
+- replace root `main.py`
+- promote root `run_live.sh`
+- change `runtime_contract.py`
+- change API/frontend/paper/agent behavior
+- call broker APIs
+- add auth behavior
+- add UI controls
+- make LIVE the default
 
 ## Runtime correction discipline
 

@@ -1,0 +1,16 @@
+python-dotenv
+pytest
+hypothesis
+streamlit
+streamlit-autorefresh
+kiteconnect
+tensorflow
+gymnasium
+flask
+openpyxl
+stable-baselines3
+requests
+xgboost
+scikit-learn
+pyarrow
+holidays
