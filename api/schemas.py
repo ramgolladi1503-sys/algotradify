@@ -73,6 +73,44 @@ class RuntimeOwnershipResponse(BaseModel):
     live_mode_touched: bool
 
 
+class BrokerAuthVisibilityResponse(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    contract: str
+    status: str
+    auth_state: str
+    source: str
+    runtime_artifact_root: str
+    token_file_path: str
+    api_key_present: bool
+    api_key_tail4: str
+    api_secret_present: bool
+    token_file_present: bool
+    token_file_length: int
+    token_file_tail4: str
+    token_file_usable_shape: bool
+    env_token_present: bool
+    env_token_length: int
+    env_token_tail4: str
+    env_token_usable_shape: bool
+    can_validate_locally: bool
+    can_attempt_login_locally: bool
+    login_required: bool
+    operator_commands: dict[str, str]
+    blockers: list[str]
+    warnings: list[str]
+    read_only: bool
+    auth_visibility_only: bool
+    is_order_action: bool
+    broker_api_called: bool
+    profile_probe_called: bool
+    token_mutated: bool
+    raw_token_exposed: bool
+    api_secret_exposed: bool
+    real_order_id: str | None = None
+    live_mode_touched: bool
+
+
 class RuntimeSnapshotResponse(BaseModel):
     runtime_root: str
     tradebot_root: str | None = None
