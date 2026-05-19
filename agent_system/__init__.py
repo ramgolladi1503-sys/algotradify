@@ -1,4 +1,4 @@
-"""Agent intake foundation contracts, guards, approval, evidence, and local task storage.
+"""Agent intake foundation contracts, guards, approval, evidence, local task storage, and governance.
 
 This package is intentionally isolated from API, dashboard, broker, live, and paper-trading
 runtime code. Agent governance contracts remain non-executing and patch-review oriented.
@@ -59,6 +59,18 @@ from agent_system.task_store import (
     query_agent_tasks,
     rebuild_agent_task_index,
 )
+from agent_system.workflow_state import (
+    AGENT_WORKFLOW_STATE_CONTRACT,
+    ORDERED_ACTIVE_STATES,
+    ROLE_REQUIRED_TRANSITIONS,
+    TERMINAL_BLOCKED_STATES,
+    AgentWorkflowDecision,
+    AgentWorkflowState,
+    agent_workflow_state_schema_contract,
+    evaluate_agent_workflow_transition,
+    replay_agent_workflow,
+    validate_agent_workflow_state_machine,
+)
 from agent_system.work_contract import (
     AGENT_WORK_SCHEMA_VERSION,
     FORBIDDEN_AGENT_ACTIONS,
@@ -77,6 +89,7 @@ __all__ = [
     "AGENT_PATCH_APPROVAL_CONTRACT",
     "AGENT_PATCH_APPROVAL_SCHEMA_VERSION",
     "AGENT_ROLE_REGISTRY_CONTRACT",
+    "AGENT_WORKFLOW_STATE_CONTRACT",
     "AGENT_WORK_SCHEMA_VERSION",
     "FORBIDDEN_AGENT_ACTIONS",
     "FORBIDDEN_PATH_PREFIXES",
@@ -85,10 +98,13 @@ __all__ = [
     "HIGH_RISK_PATH_PREFIXES",
     "HIGH_RISK_ROLE_PATH_PREFIXES",
     "LOW_RISK_PATH_PREFIXES",
+    "ORDERED_ACTIVE_STATES",
+    "ROLE_REQUIRED_TRANSITIONS",
     "SAFE_AGENT_ACTIONS",
     "SAFE_ROLE_FLAGS",
     "SOURCE_ALLOWED_ACTIONS",
     "TASK_STORE_SCHEMA_VERSION",
+    "TERMINAL_BLOCKED_STATES",
     "AgentAction",
     "AgentApprovalDecision",
     "AgentEvidenceError",
@@ -100,6 +116,8 @@ __all__ = [
     "AgentSource",
     "AgentTaskRecord",
     "AgentTaskStoreError",
+    "AgentWorkflowDecision",
+    "AgentWorkflowState",
     "AgentWorkRequest",
     "AgentWorkValidationError",
     "agent_approval_schema_contract",
@@ -109,6 +127,7 @@ __all__ = [
     "agent_scope_guard_schema_contract",
     "agent_task_store_schema_contract",
     "agent_work_schema_contract",
+    "agent_workflow_state_schema_contract",
     "approve_agent_work",
     "assess_agent_scope",
     "assess_role_request",
@@ -118,6 +137,7 @@ __all__ = [
     "build_agent_role_registry",
     "build_agent_task_record",
     "build_agent_work_id",
+    "evaluate_agent_workflow_transition",
     "get_agent_role_contract",
     "load_agent_patch_approval",
     "load_agent_task",
@@ -126,6 +146,8 @@ __all__ = [
     "persist_agent_task",
     "query_agent_tasks",
     "rebuild_agent_task_index",
+    "replay_agent_workflow",
     "validate_agent_role_registry",
+    "validate_agent_workflow_state_machine",
     "write_agent_evidence",
 ]
