@@ -4,7 +4,7 @@ import json
 import re
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any, Mapping, Sequence
 
 from agent_system.handoff_contract import (
     AGENT_HANDOFF_CONTRACT,
@@ -18,7 +18,7 @@ from agent_system.work_contract import AGENT_WORK_SCHEMA_VERSION
 
 AGENT_HANDOFF_VALIDATOR_CONTRACT = "agent_handoff_evidence_validator_v1"
 
-HANDOFF_JSON_BLOCK_RE = re.compile(r"```json\s*(\{.*?\})\s*```", re.DOTALL)
+HANDOFF_JSON_BLOCK_RE = re.compile(r"```json\s*\n?(.*?)\n?```", re.DOTALL | re.IGNORECASE)
 
 DEFAULT_REQUIRED_HANDOFF_ROLES = (
     AgentRole.SCOPE_OWNER.value,
@@ -125,7 +125,7 @@ def _normalize_required_roles(required_roles: Sequence[str] | None) -> tuple[str
 
 def extract_handoff_payload_from_markdown(content: str) -> Mapping[str, Any]:
     for match in HANDOFF_JSON_BLOCK_RE.finditer(content):
-        raw_json = match.group(1)
+        raw_json = match.group(1).strip()
         try:
             payload = json.loads(raw_json)
         except json.JSONDecodeError:
