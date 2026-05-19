@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://algotradify.local/schemas/runtime-source-manifest.schema.json",
+  "title": "Algotradify Runtime Source Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "source_repo",
+    "source_branch",
+    "source_commit",
+    "imported_at_utc",
+    "import_mode",
+    "imported_required_markers",
+    "excluded_patterns",
+    "not_imported",
+    "safe_flags"
+  ],
+  "properties": {
+    "source_repo": { "type": "string", "minLength": 1 },
+    "source_branch": { "type": "string", "minLength": 1 },
+    "source_commit": { "type": "string", "minLength": 7 },
+    "imported_at_utc": { "type": "string", "minLength": 1 },
+    "import_mode": { "type": "string", "const": "native_tracked_source" },
+    "imported_required_markers": {
+      "type": "object",
+      "additionalProperties": { "type": "boolean" },
+      "required": ["main.py", "core", "config"]
+    },
+    "excluded_patterns": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "not_imported": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "safe_flags": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_imported",
+        "runtime_behavior_changed",
+        "is_order_action",
+        "broker_api_called",
+        "real_order_id",
+        "live_mode_touched"
+      ],
+      "properties": {
+        "source_imported": { "type": "boolean" },
+        "runtime_behavior_changed": { "type": "boolean" },
+        "is_order_action": { "type": "boolean" },
+        "broker_api_called": { "type": "boolean" },
+        "real_order_id": { "type": ["string", "null"] },
+        "live_mode_touched": { "type": "boolean" }
+      }
+    }
+  }
+}

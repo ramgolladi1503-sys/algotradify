@@ -2,15 +2,15 @@
 
 ## Latest confirmed merged
 
-GitHub PR #118 — Runtime Native Migration / Mitigation Plan: MERGED
+GitHub PR #119 — Runtime Correction PR 1 — Runtime Ownership Audit: MERGED
 
 ## Current correction PR
 
-Runtime Correction PR 1 — Runtime Ownership Audit
+Runtime Correction PR 2 — Tradebot Source Import Manifest and Collision Report
 
 ## Current posture
 
-mode=runtime_ownership_correction
+mode=runtime_source_import_planning
 live_execution=false
 broker_order_placement=false
 dashboard_changes=false
@@ -19,6 +19,7 @@ ml_ranker_work=false
 agent_scope_expansion=false
 runtime_behavior_changes=false
 source_import=false
+import_planning_only=true
 
 ## Why normal product work is paused
 
@@ -30,8 +31,8 @@ The immediate goal is not to add features. The immediate goal is to prove whethe
 
 ## Runtime correction wave
 
-- Runtime Correction PR 1 — Runtime Ownership Audit: IN PROGRESS
-- Runtime Correction PR 2 — Tradebot Source Import Manifest and Collision Report: PLANNED
+- Runtime Correction PR 1 — Runtime Ownership Audit: DONE
+- Runtime Correction PR 2 — Tradebot Source Import Manifest and Collision Report: IN PROGRESS
 - Runtime Correction PR 3 — Native Runtime Source Import: PLANNED
 - Runtime Correction PR 4 — Native Runtime Contract and Preflight Hardening: PLANNED
 - Runtime Correction PR 5 — Root Native main.py Promotion: PLANNED
@@ -40,6 +41,30 @@ The immediate goal is not to add features. The immediate goal is to prove whethe
 - Runtime Correction PR 8 — Broker Auth Visibility and Startup UX: PLANNED
 - Runtime Correction PR 9 — Compatibility Cleanup and External Runtime Deprecation: PLANNED
 - Runtime Correction PR 10 — Full Regression Gate and Migration Lock: PLANNED
+
+## Runtime Correction PR 2 boundary
+
+PR 2 is planning-only.
+
+It may add:
+
+- a read-only import planning script
+- import planning tests
+- runtime source manifest schema
+- import planning documentation
+- Grill, GSD, and Hermes handoff artifacts
+- project-state metadata
+
+It must not:
+
+- copy Tradebot source
+- replace `main.py`
+- change `runtime_contract.py`
+- change runtime behavior
+- change API/frontend/paper/agent behavior
+- call broker APIs
+- add auth behavior
+- add UI controls
 
 ## Runtime correction discipline
 
