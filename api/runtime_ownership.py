@@ -48,6 +48,8 @@ def build_runtime_ownership_payload(*, base_repo_root: Path | None = None) -> di
         "native_main_promoted": native_main_promoted,
         "native_required": bool(preflight.get("native_required")),
         "external_runtime_allowed": bool(preflight.get("external_runtime_allowed")),
+        "external_runtime_deprecated": bool(preflight.get("external_runtime_deprecated", True)),
+        "external_runtime_deprecation_message": str(preflight.get("external_runtime_deprecation_message") or ""),
         "external_runtime_used": external_runtime_used,
         "runtime_root": str(runtime_root) if runtime_root else None,
         "runtime_artifact_root": str(runtime_artifact_root) if runtime_artifact_root else None,
