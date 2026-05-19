@@ -2,7 +2,7 @@
 
 ## Latest confirmed merged
 
-GitHub PR #136 — Agent PR 15 — CI Agent Architecture Gate: MERGED
+GitHub PR #137 — Agent PR 16 — Changed-File Scope Auditor: MERGED
 
 ## Current locked implementation wave
 
@@ -11,24 +11,25 @@ Agent Governance + Role-Based Mini-Agent Enforcement Wave
 Current PR:
 
 ```text
-Agent PR 16 — Changed-File Scope Auditor
+Agent PR 17 — PR Template and Local Developer Gate
 ```
 
 ## Current posture
 
 ```text
-mode=agent_governance_pr16_changed_file_scope_auditor
+mode=agent_governance_pr17_pr_template_local_developer_gate
 runtime_correction_wave=complete
 agent_governance_wave=active
-current_agent_governance_pr=16
-next_allowed_work=Agent PR 16 only
+current_agent_governance_pr=17
+next_allowed_work=Agent PR 17 only
 role_registry=complete
 workflow_state_machine=complete
 handoff_artifact_contract=complete
 handoff_validator=complete
 ci_architecture_gate=complete
-changed_file_auditor=true
-pr_template_gate=false
+changed_file_auditor=complete
+pr_template_gate=true
+local_developer_gate=true
 architecture_audit_report=false
 product_feature_changes=false
 runtime_behavior_changes=none
@@ -42,31 +43,32 @@ PR 12 — Role-Based Workflow State Machine: DONE
 PR 13 — Role Handoff Artifact Contract: DONE
 PR 14 — PR Handoff Evidence Validator: DONE
 PR 15 — CI Agent Architecture Gate: DONE
-PR 16 — Changed-File Scope Auditor: IN PROGRESS
-PR 17 — PR Template and Local Developer Gate: LOCKED NEXT
-PR 18 — Architecture Replay / Audit Report: LOCKED
+PR 16 — Changed-File Scope Auditor: DONE
+PR 17 — PR Template and Local Developer Gate: IN PROGRESS
+PR 18 — Architecture Replay / Audit Report: LOCKED NEXT
 ```
 
 No deviation until PR 18 is complete.
 
-## Agent PR 16 boundary
+## Agent PR 17 boundary
 
-PR 16 adds the changed-file scope auditor only.
+PR 17 adds the PR template and local developer gate only.
 
 It may add/change:
 
-- `agent_system/changed_file_auditor.py`
-- `agent_system/__init__.py` exports for changed-file auditor
-- `scripts/audit_agent_changed_files.py`
-- `tests/test_agent_changed_file_auditor.py`
-- `.github/workflows/agent-architecture-ci.yml` only to include the new auditor tests
-- `docs/agent-changed-file-scope-auditor.md`
-- Agent PR 16 role handoff artifacts
+- `agent_system/pr_gate.py`
+- `agent_system/__init__.py` exports for local PR gate
+- `scripts/agent_pr_gate.py`
+- `tests/test_agent_pr_gate.py`
+- `.github/pull_request_template.md`
+- `.github/workflows/agent-architecture-ci.yml` only to include the PR gate tests
+- `docs/agent-pr-developer-gate.md`
+- Agent PR 17 role handoff artifacts
 - project-state metadata
 
 It must not add/change:
 
-- PR template gate
+- architecture replay report
 - architecture audit report
 - API routes
 - frontend/dashboard behavior
@@ -81,9 +83,9 @@ It must not add/change:
 - Agent PR 13 — Role Handoff Artifact Contract: DONE
 - Agent PR 14 — PR Handoff Evidence Validator: DONE
 - Agent PR 15 — CI Agent Architecture Gate: DONE
-- Agent PR 16 — Changed-File Scope Auditor: IN PROGRESS
-- Agent PR 17 — PR Template and Local Developer Gate: LOCKED NEXT
-- Agent PR 18 — Architecture Replay / Audit Report: LOCKED
+- Agent PR 16 — Changed-File Scope Auditor: DONE
+- Agent PR 17 — PR Template and Local Developer Gate: IN PROGRESS
+- Agent PR 18 — Architecture Replay / Audit Report: LOCKED NEXT
 
 ## Paused product work
 
@@ -91,4 +93,4 @@ Product feature work remains paused until Agent Governance PR 11–18 is complet
 
 ## Process note
 
-Proceed only with Agent PR 16 until it is merged. After PR 16 merges, proceed only to PR 17. Do not skip or reorder PR 11–18.
+Proceed only with Agent PR 17 until it is merged. After PR 17 merges, proceed only to PR 18. Do not skip or reorder PR 11–18.
