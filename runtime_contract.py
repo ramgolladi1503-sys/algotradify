@@ -7,6 +7,10 @@ from typing import Any
 
 VALID_EXECUTION_MODES = {"SIM", "PAPER", "LIVE"}
 ENGINE_ROOT_ENV_VARS = ("ALGOTRADIFY_ENGINE_ROOT", "TRADEBOT_ROOT", "CORE_BOT_ROOT")
+REQUIRE_NATIVE_ENV = "ALGOTRADIFY_REQUIRE_NATIVE_RUNTIME"
+ALLOW_EXTERNAL_ENV = "ALGOTRADIFY_ALLOW_EXTERNAL_RUNTIME"
+NATIVE_MANIFEST = "RUNTIME_SOURCE_MANIFEST.json"
+NATIVE_ENTRYPOINT_SNAPSHOT = "runtime_native/tradebot_main.py"
 
 
 @dataclass(frozen=True)
@@ -34,28 +38,98 @@ def repo_root() -> Path:
     return Path(__file__).resolve().parent
 
 
+def _env_flag(name: str, *, default: bool = False) -> bool:
+    raw = str(os.getenv(name, "")).strip().lower()
+    if not raw:
+        return default
+    return raw in {"1", "true", "yes", "y", "on"}
+
+
+def native_runtime_required() -> bool:
+    return _env_flag(REQUIRE_NATIVE_ENV)
+
+
+def external_runtime_allowed(*, default: bool = True) -> bool:
+    if native_runtime_required():
+        return False
+    return _env_flag(ALLOW_EXTERNAL_ENV, default=default)
+
+
 def is_tradebot_compatible_root(path: Path) -> bool:
     root = path.expanduser().resolve()
     return (root / "main.py").is_file() and (root / "core").is_dir() and (root / "config").is_dir()
 
 
-def candidate_runtime_roots(*, base_repo_root: Path | None = None, home: Path | None = None) -> list[Path]:
+def is_native_runtime_source_root(path: Path) -> bool:
+    root = path.expanduser().resolve()
+    return (
+        (root / "core").is_dir()
+        and (root / "config").is_dir()
+        and (root / NATIVE_MANIFEST).is_file()
+        and (root / NATIVE_ENTRYPOINT_SNAPSHOT).is_file()
+    )
+
+
+def _read_text(path: Path) -> str:
+    try:
+        return path.read_text(encoding="utf-8", errors="ignore")
+    except Exception:
+        return ""
+
+
+def _root_main_is_wrapper(root: Path) -> bool:
+    text = _read_text(root / "main.py")
+    markers = (
+        "spec_from_file_location",
+        "_load_runtime_main",
+        "resolve_runtime_root()",
+        "Tradebot-compatible runtime",
+        "runtime_root = resolve_runtime_root()",
+    )
+    return any(marker in text for marker in markers)
+
+
+def runtime_ownership_for_root(root: Path) -> str:
+    resolved = root.expanduser().resolve()
+    native_source_present = is_native_runtime_source_root(resolved)
+    if native_source_present and not _root_main_is_wrapper(resolved):
+        return "NATIVE"
+    if native_source_present:
+        return "NATIVE_SOURCE_IMPORTED_PENDING_MAIN_PROMOTION"
+    return "WRAPPER_OR_EXTERNAL_COMPATIBLE"
+
+
+def candidate_runtime_roots(
+    *,
+    base_repo_root: Path | None = None,
+    home: Path | None = None,
+    include_native_root: bool | None = None,
+    allow_external: bool | None = None,
+) -> list[Path]:
     root = (base_repo_root or repo_root()).expanduser().resolve()
     home_root = (home or Path.home()).expanduser().resolve()
+    include_native = native_runtime_required() if include_native_root is None else include_native_root
+    external_ok = external_runtime_allowed(default=True) if allow_external is None else allow_external
     candidates: list[Path] = []
 
-    for env_name in ENGINE_ROOT_ENV_VARS:
-        configured = str(os.getenv(env_name, "")).strip()
-        if configured:
-            candidates.append(Path(configured))
+    if external_ok:
+        for env_name in ENGINE_ROOT_ENV_VARS:
+            configured = str(os.getenv(env_name, "")).strip()
+            if configured:
+                candidates.append(Path(configured))
 
-    candidates.extend(
-        [
-            root / "core_bot",
-            root.parent / "tradebot",
-            home_root / "tradebot",
-        ]
-    )
+    if include_native:
+        candidates.append(root)
+
+    candidates.append(root / "core_bot")
+
+    if external_ok:
+        candidates.extend(
+            [
+                root.parent / "tradebot",
+                home_root / "tradebot",
+            ]
+        )
 
     unique: list[Path] = []
     seen: set[str] = set()
@@ -70,8 +144,25 @@ def candidate_runtime_roots(*, base_repo_root: Path | None = None, home: Path | 
     return unique
 
 
-def resolve_runtime_root(*, base_repo_root: Path | None = None, home: Path | None = None) -> Path | None:
-    for candidate in candidate_runtime_roots(base_repo_root=base_repo_root, home=home):
+def resolve_runtime_root(
+    *,
+    base_repo_root: Path | None = None,
+    home: Path | None = None,
+    require_native: bool | None = None,
+    include_native_root: bool | None = None,
+    allow_external: bool | None = None,
+) -> Path | None:
+    root = (base_repo_root or repo_root()).expanduser().resolve()
+    native_required = native_runtime_required() if require_native is None else require_native
+    if native_required:
+        return root if is_native_runtime_source_root(root) else None
+
+    for candidate in candidate_runtime_roots(
+        base_repo_root=root,
+        home=home,
+        include_native_root=include_native_root,
+        allow_external=allow_external,
+    ):
         if is_tradebot_compatible_root(candidate):
             return candidate.expanduser().resolve()
     return None
@@ -85,8 +176,11 @@ def runtime_artifact_root(*, engine_root: Path | None = None, base_repo_root: Pa
     root = (base_repo_root or repo_root()).expanduser().resolve()
     selected_engine = engine_root or resolve_runtime_root(base_repo_root=root)
     if selected_engine is None:
-        selected_engine = root / "core_bot"
+        selected_engine = root if is_native_runtime_source_root(root) else root / "core_bot"
     selected_engine = selected_engine.expanduser().resolve()
+
+    if selected_engine == root and is_native_runtime_source_root(root):
+        return (root / ".runtime").resolve()
 
     candidates = [
         selected_engine / ".runtime",
@@ -109,6 +203,42 @@ def _check_required_path(root: Path, relative: str, *, directory: bool = False) 
         message=f"required {'directory' if directory else 'file'} {'exists' if exists else 'missing'}: {relative}",
         path=str(target),
     )
+
+
+def _check_native_source(root: Path) -> list[PreflightCheck]:
+    native_present = is_native_runtime_source_root(root)
+    main_wrapper = _root_main_is_wrapper(root)
+    return [
+        PreflightCheck(
+            name="native_runtime_source.present",
+            status="PASS" if native_present else "FAIL",
+            message=(
+                "native runtime source markers present"
+                if native_present
+                else "native runtime source markers missing: core/, config/, manifest, or runtime_native/tradebot_main.py"
+            ),
+            path=str(root),
+            metadata={
+                "core": (root / "core").is_dir(),
+                "config": (root / "config").is_dir(),
+                "manifest": (root / NATIVE_MANIFEST).is_file(),
+                "entrypoint_snapshot": (root / NATIVE_ENTRYPOINT_SNAPSHOT).is_file(),
+            },
+        ),
+        PreflightCheck(
+            name="native_runtime_main.promoted",
+            status="WARN" if native_present and main_wrapper else ("PASS" if native_present else "FAIL"),
+            message=(
+                "root main.py is still wrapper; promotion deferred to Runtime Correction PR 5"
+                if native_present and main_wrapper
+                else "root main.py is native runtime entrypoint"
+                if native_present
+                else "root main.py promotion cannot be evaluated without native source"
+            ),
+            path=str(root / "main.py"),
+            metadata={"root_main_is_wrapper": main_wrapper},
+        ),
+    ]
 
 
 def _check_runtime_artifact_root(path: Path) -> list[PreflightCheck]:
@@ -206,27 +336,58 @@ def _check_token_expectation(runtime_root: Path, artifact_root: Path) -> Preflig
 def run_preflight(*, base_repo_root: Path | None = None, home: Path | None = None, create_runtime_dirs: bool = True) -> dict[str, Any]:
     root = (base_repo_root or repo_root()).expanduser().resolve()
     checks: list[PreflightCheck] = []
-    candidates = candidate_runtime_roots(base_repo_root=root, home=home)
-    runtime_root = resolve_runtime_root(base_repo_root=root, home=home)
+    native_required = native_runtime_required()
+    external_ok = external_runtime_allowed(default=True)
+    ownership = runtime_ownership_for_root(root)
+    native_source_present = is_native_runtime_source_root(root)
+    candidates = candidate_runtime_roots(
+        base_repo_root=root,
+        home=home,
+        include_native_root=native_required,
+        allow_external=external_ok,
+    )
+    runtime_root = resolve_runtime_root(
+        base_repo_root=root,
+        home=home,
+        require_native=native_required,
+        include_native_root=native_required,
+        allow_external=external_ok,
+    )
+
+    if native_required:
+        checks.extend(_check_native_source(root))
 
     if runtime_root is None:
         checks.append(
             PreflightCheck(
                 name="runtime_root.resolved",
                 status="FAIL",
-                message="no Tradebot-compatible runtime root found",
+                message=(
+                    "native runtime source root required but missing"
+                    if native_required
+                    else "no Tradebot-compatible runtime root found"
+                ),
                 metadata={"checked_paths": [str(path.expanduser()) for path in candidates]},
             )
         )
-        artifact_root = runtime_artifact_root(engine_root=root / "core_bot", base_repo_root=root)
+        artifact_root = runtime_artifact_root(engine_root=root if native_source_present else root / "core_bot", base_repo_root=root)
     else:
+        external_runtime_used = runtime_root != root
         checks.append(
             PreflightCheck(
                 name="runtime_root.resolved",
                 status="PASS",
-                message="Tradebot-compatible runtime root found",
+                message=(
+                    "native runtime source root selected"
+                    if runtime_root == root
+                    else "Tradebot-compatible runtime root found"
+                ),
                 path=str(runtime_root),
-                metadata={"checked_paths": [str(path.expanduser()) for path in candidates]},
+                metadata={
+                    "checked_paths": [str(path.expanduser()) for path in candidates],
+                    "external_runtime_used": external_runtime_used,
+                    "native_required": native_required,
+                },
             )
         )
         checks.extend(
@@ -248,11 +409,18 @@ def run_preflight(*, base_repo_root: Path | None = None, home: Path | None = Non
     fail_count = sum(1 for check in checks if check.status == "FAIL")
     warn_count = sum(1 for check in checks if check.status == "WARN")
     status = "FAIL" if fail_count else ("WARN" if warn_count else "PASS")
+    external_runtime_used = bool(runtime_root and runtime_root != root)
 
     return {
         "status": status,
         "runtime_root": str(runtime_root) if runtime_root else None,
         "runtime_artifact_root": str(artifact_root) if 'artifact_root' in locals() else None,
+        "runtime_ownership": ownership,
+        "native_required": native_required,
+        "native_source_present": native_source_present,
+        "native_main_promoted": native_source_present and not _root_main_is_wrapper(root),
+        "external_runtime_allowed": external_ok,
+        "external_runtime_used": external_runtime_used,
         "checked_at_source": "runtime_contract.run_preflight",
         "summary": {
             "pass_count": sum(1 for check in checks if check.status == "PASS"),

@@ -2,24 +2,26 @@
 
 ## Latest confirmed merged
 
-GitHub PR #120 — Runtime Correction PR 3 — Native Runtime Source Import: MERGED
+GitHub PR #121 — Runtime Correction PR 3 — Native Runtime Source Import: MERGED
 
 ## Current correction PR
 
-Runtime Correction PR 2 — Tradebot Source Import Manifest and Collision Report
+Runtime Correction PR 4 — Native Runtime Contract and Preflight Hardening
 
 ## Current posture
 
-mode=native_runtime_source_import
+mode=native_runtime_contract_hardening
 live_execution=false
 broker_order_placement=false
 dashboard_changes=false
 strategy_provider_expansion=false
 ml_ranker_work=false
 agent_scope_expansion=false
-runtime_behavior_changes=false
+runtime_behavior_changes=preflight_contract_only
 source_import=true
 import_planning_only=false
+root_main_promotion=false
+root_run_live_promotion=false
 
 ## Why normal product work is paused
 
@@ -33,8 +35,8 @@ The immediate goal is not to add features. The immediate goal is to prove whethe
 
 - Runtime Correction PR 1 — Runtime Ownership Audit: DONE
 - Runtime Correction PR 2 — Tradebot Source Import Manifest and Collision Report: DONE
-- Runtime Correction PR 3 — Native Runtime Source Import: IN PROGRESS
-- Runtime Correction PR 4 — Native Runtime Contract and Preflight Hardening: PLANNED
+- Runtime Correction PR 3 — Native Runtime Source Import: DONE
+- Runtime Correction PR 4 — Native Runtime Contract and Preflight Hardening: IN PROGRESS
 - Runtime Correction PR 5 — Root Native main.py Promotion: PLANNED
 - Runtime Correction PR 6 — Native run_live / Operator Boot Commands: PLANNED
 - Runtime Correction PR 7 — API and Control Tower Runtime Ownership Wiring: PLANNED
@@ -99,6 +101,35 @@ It must not:
 - add auth behavior
 - add UI controls
 - make LIVE the default
+
+## Runtime Correction PR 4 boundary
+
+PR 4 hardens native runtime contract and preflight visibility only.
+
+It may add/change:
+
+- `runtime_contract.py` native source detection
+- strict native preflight mode with `ALGOTRADIFY_REQUIRE_NATIVE_RUNTIME=true`
+- external fallback opt-out with `ALGOTRADIFY_ALLOW_EXTERNAL_RUNTIME=false`
+- preflight output fields for runtime ownership, native source presence, native main promotion, external runtime allowed/used
+- native runtime contract tests
+- documentation and Grill/GSD/Hermes handoff artifacts
+- project-state metadata
+
+It must not:
+
+- replace root `main.py`
+- promote root `run_live.sh`
+- change API/frontend/paper/agent behavior
+- call broker APIs
+- add auth behavior
+- add UI controls
+- make LIVE the default
+- remove wrapper boot behavior before Runtime Correction PR 5
+
+Important PR 4 nuance:
+
+Strict native mode can select the repo root for preflight proof, but normal runtime boot still preserves wrapper behavior until PR 5. This avoids self-recursion from the current wrapper `main.py`.
 
 ## Runtime correction discipline
 
