@@ -16,6 +16,16 @@ from agent_system.architecture_gate import (
     resolve_agent_task_id,
     run_agent_architecture_gate,
 )
+from agent_system.changed_file_auditor import (
+    AGENT_CHANGED_FILE_AUDITOR_CONTRACT,
+    DEFAULT_SCOPE_APPROVAL_ROLES,
+    ChangedFileAuditReport,
+    ChangedFileFinding,
+    agent_changed_file_auditor_schema_contract,
+    audit_changed_files_against_handoffs,
+    normalize_changed_file_path,
+    path_matches_rule,
+)
 from agent_system.evidence import (
     AgentEvidenceError,
     agent_evidence_schema_contract,
@@ -119,6 +129,7 @@ from agent_system.work_contract import (
 
 __all__ = [
     "AGENT_ARCHITECTURE_GATE_CONTRACT",
+    "AGENT_CHANGED_FILE_AUDITOR_CONTRACT",
     "AGENT_HANDOFF_CONTRACT",
     "AGENT_HANDOFF_VALIDATOR_CONTRACT",
     "AGENT_PATCH_APPROVAL_CONTRACT",
@@ -127,6 +138,7 @@ __all__ = [
     "AGENT_WORKFLOW_STATE_CONTRACT",
     "AGENT_WORK_SCHEMA_VERSION",
     "DEFAULT_REQUIRED_HANDOFF_ROLES",
+    "DEFAULT_SCOPE_APPROVAL_ROLES",
     "FORBIDDEN_AGENT_ACTIONS",
     "FORBIDDEN_PATH_PREFIXES",
     "FORBIDDEN_ROLE_ACTIONS",
@@ -163,10 +175,13 @@ __all__ = [
     "AgentWorkflowState",
     "AgentWorkRequest",
     "AgentWorkValidationError",
+    "ChangedFileAuditReport",
+    "ChangedFileFinding",
     "HandoffFileResult",
     "HandoffValidationReport",
     "agent_approval_schema_contract",
     "agent_architecture_gate_schema_contract",
+    "agent_changed_file_auditor_schema_contract",
     "agent_evidence_schema_contract",
     "agent_handoff_schema_contract",
     "agent_handoff_validator_schema_contract",
@@ -179,6 +194,7 @@ __all__ = [
     "approve_agent_work",
     "assess_agent_scope",
     "assess_role_request",
+    "audit_changed_files_against_handoffs",
     "build_agent_evidence_payload",
     "build_agent_patch_approval_record",
     "build_agent_patch_rejection_record",
@@ -195,6 +211,8 @@ __all__ = [
     "load_handoff_artifact",
     "normalize_agent_handoff_artifact",
     "normalize_agent_work_request",
+    "normalize_changed_file_path",
+    "path_matches_rule",
     "persist_agent_patch_approval",
     "persist_agent_task",
     "query_agent_tasks",
