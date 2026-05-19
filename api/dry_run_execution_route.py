@@ -6,6 +6,7 @@ from typing import Any, Callable
 from fastapi import FastAPI, Query, Request
 
 from api.movement_opportunity_route import install_movement_opportunity_route
+from api.runtime_ownership_route import install_runtime_ownership_route
 from dry_run_execution import append_dry_run_execution, build_dry_run_execution
 
 
@@ -171,6 +172,7 @@ def install_dry_run_execution_route(
     readiness_matcher: Callable[[dict[str, Any], list[dict[str, Any]]], dict[str, Any] | None],
 ) -> None:
     install_movement_opportunity_route(app)
+    install_runtime_ownership_route(app, repo_root_provider=lambda: runtime_root_provider().parents[0])
 
     if not any(getattr(route, "path", None) == "/dry-run-execution" for route in app.routes):
         @app.get("/dry-run-execution")
