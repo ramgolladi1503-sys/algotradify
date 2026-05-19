@@ -17,15 +17,22 @@ from agent_system.handoff_validator import (
 )
 
 
-def _write_handoff(root: Path, task_id: str, role_id: str, workflow_state: str, target_state: str, **overrides):
+def _write_handoff(
+    root: Path,
+    file_task_id: str,
+    file_role_id: str,
+    workflow_state: str,
+    target_state: str,
+    **payload_overrides,
+):
     payload = build_minimal_handoff_payload(
-        task_id=task_id,
-        role_id=role_id,
+        task_id=file_task_id,
+        role_id=file_role_id,
         workflow_state=workflow_state,
         target_state=target_state,
     )
-    payload.update(overrides)
-    path = root / f"{task_id}-{ROLE_FILE_SUFFIXES[role_id]}.md"
+    payload.update(payload_overrides)
+    path = root / f"{file_task_id}-{ROLE_FILE_SUFFIXES[file_role_id]}.md"
     path.write_text(
         "# Handoff\n\n"
         "```json\n"
