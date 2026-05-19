@@ -2,25 +2,25 @@
 
 ## Latest confirmed merged
 
-GitHub PR #121 — Runtime Correction PR 3 — Native Runtime Source Import: MERGED
+GitHub PR #122 — Runtime Correction PR 4 — Native Runtime Contract and Preflight Hardening: MERGED
 
 ## Current correction PR
 
-Runtime Correction PR 4 — Native Runtime Contract and Preflight Hardening
+Runtime Correction PR 5 — Root Native main.py Promotion
 
 ## Current posture
 
-mode=native_runtime_contract_hardening
+mode=root_native_main_promotion
 live_execution=false
 broker_order_placement=false
 dashboard_changes=false
 strategy_provider_expansion=false
 ml_ranker_work=false
 agent_scope_expansion=false
-runtime_behavior_changes=preflight_contract_only
+runtime_behavior_changes=root_main_promotion_only
 source_import=true
 import_planning_only=false
-root_main_promotion=false
+root_main_promotion=true
 root_run_live_promotion=false
 
 ## Why normal product work is paused
@@ -36,8 +36,8 @@ The immediate goal is not to add features. The immediate goal is to prove whethe
 - Runtime Correction PR 1 — Runtime Ownership Audit: DONE
 - Runtime Correction PR 2 — Tradebot Source Import Manifest and Collision Report: DONE
 - Runtime Correction PR 3 — Native Runtime Source Import: DONE
-- Runtime Correction PR 4 — Native Runtime Contract and Preflight Hardening: IN PROGRESS
-- Runtime Correction PR 5 — Root Native main.py Promotion: PLANNED
+- Runtime Correction PR 4 — Native Runtime Contract and Preflight Hardening: DONE
+- Runtime Correction PR 5 — Root Native main.py Promotion: IN PROGRESS
 - Runtime Correction PR 6 — Native run_live / Operator Boot Commands: PLANNED
 - Runtime Correction PR 7 — API and Control Tower Runtime Ownership Wiring: PLANNED
 - Runtime Correction PR 8 — Broker Auth Visibility and Startup UX: PLANNED
@@ -127,9 +127,30 @@ It must not:
 - make LIVE the default
 - remove wrapper boot behavior before Runtime Correction PR 5
 
-Important PR 4 nuance:
+## Runtime Correction PR 5 boundary
 
-Strict native mode can select the repo root for preflight proof, but normal runtime boot still preserves wrapper behavior until PR 5. This avoids self-recursion from the current wrapper `main.py`.
+PR 5 promotes root `main.py` to the native runtime entrypoint.
+
+It may add/change:
+
+- root `main.py` promoted from imported native Tradebot startup flow
+- `runtime_contract.py` default native root selection after promotion
+- tests proving dynamic external loading is removed
+- tests proving safety-critical startup calls remain present
+- tests proving root `run_live.sh` is still not promoted
+- native main documentation
+- Grill, GSD, and Hermes handoff artifacts
+- project-state metadata
+
+It must not:
+
+- promote root `run_live.sh`
+- change API/frontend/paper/agent behavior
+- add dashboard controls
+- add broker order behavior
+- add auth endpoints
+- make LIVE the default
+- remove safety-critical startup checks from native main
 
 ## Runtime correction discipline
 
