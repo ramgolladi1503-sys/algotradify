@@ -112,10 +112,11 @@ def candidate_runtime_roots(
     external_ok = external_runtime_allowed(default=True) if allow_external is None else allow_external
     candidates: list[Path] = []
 
-    for env_name in ENGINE_ROOT_ENV_VARS:
-        configured = str(os.getenv(env_name, "")).strip()
-        if configured:
-            candidates.append(Path(configured))
+    if external_ok:
+        for env_name in ENGINE_ROOT_ENV_VARS:
+            configured = str(os.getenv(env_name, "")).strip()
+            if configured:
+                candidates.append(Path(configured))
 
     if include_native:
         candidates.append(root)
