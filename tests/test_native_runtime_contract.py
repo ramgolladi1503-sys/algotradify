@@ -130,20 +130,42 @@ def test_default_runtime_resolution_prefers_native_root_after_pr5(tmp_path, monk
     result = contract.run_preflight(base_repo_root=root, create_runtime_dirs=False)
     assert result["runtime_root"] == str(root)
     assert result["external_runtime_used"] is False
+    assert result["external_runtime_allowed"] is False
+    assert result["external_runtime_deprecated"] is True
     assert result["runtime_ownership"] == "NATIVE"
 
 
-def test_external_fallback_can_be_disabled_without_requiring_native(tmp_path, monkeypatch):
+def test_external_fallback_disabled_by_default_without_requiring_native(tmp_path, monkeypatch):
     contract = importlib.import_module("runtime_contract")
     _clear_runtime_env(monkeypatch)
     root = tmp_path / "algotradify"
     root.mkdir()
     _make_external_runtime(tmp_path / "tradebot")
-    monkeypatch.setenv("ALGOTRADIFY_ALLOW_EXTERNAL_RUNTIME", "false")
 
+    assert contract.external_runtime_allowed() is False
     assert contract.resolve_runtime_root(base_repo_root=root) is None
     candidates = [candidate.expanduser().resolve() for candidate in contract.candidate_runtime_roots(base_repo_root=root)]
     assert (tmp_path / "tradebot").resolve() not in candidates
+
+
+def test_external_fallback_requires_explicit_opt_in(tmp_path, monkeypatch):
+    contract = importlib.import_module("runtime_contract")
+    _clear_runtime_env(monkeypatch)
+    root = tmp_path / "algotradify"
+    root.mkdir()
+    external = _make_external_runtime(tmp_path / "tradebot")
+    monkeypatch.setenv("ALGOTRADIFY_ALLOW_EXTERNAL_RUNTIME", "true")
+
+    assert contract.external_runtime_allowed() is True
+    assert contract.resolve_runtime_root(base_repo_root=root) == external
+    result = contract.run_preflight(base_repo_root=root, create_runtime_dirs=False)
+    assert result["external_runtime_allowed"] is True
+    assert result["external_runtime_used"] is True
+    assert result["external_runtime_deprecated"] is True
+    assert any(
+        check["name"] == "external_runtime_fallback.deprecated" and check["status"] == "WARN"
+        for check in result["checks"]
+    )
 
 
 def test_runtime_artifact_root_uses_repo_runtime_for_native_source(tmp_path, monkeypatch):
