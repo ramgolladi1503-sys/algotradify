@@ -5,6 +5,7 @@ from typing import Any, Callable
 
 from fastapi import FastAPI, Query, Request
 
+from api.auth_visibility_route import install_auth_visibility_route
 from api.movement_opportunity_route import install_movement_opportunity_route
 from api.runtime_ownership_route import install_runtime_ownership_route
 from dry_run_execution import append_dry_run_execution, build_dry_run_execution
@@ -173,6 +174,7 @@ def install_dry_run_execution_route(
 ) -> None:
     install_movement_opportunity_route(app)
     install_runtime_ownership_route(app, repo_root_provider=lambda: runtime_root_provider().parents[0])
+    install_auth_visibility_route(app, runtime_artifact_root_provider=runtime_root_provider)
 
     if not any(getattr(route, "path", None) == "/dry-run-execution" for route in app.routes):
         @app.get("/dry-run-execution")
