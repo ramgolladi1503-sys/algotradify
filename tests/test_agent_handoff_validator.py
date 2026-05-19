@@ -15,6 +15,7 @@ from agent_system.handoff_validator import (
     report_to_json,
     validate_handoff_evidence,
 )
+from agent_system.role_registry import get_agent_role_contract
 
 
 def _write_handoff(
@@ -149,6 +150,7 @@ def test_validate_detects_task_id_mismatch(tmp_path):
 
 def test_validate_detects_role_id_mismatch(tmp_path):
     _write_all_required(tmp_path, "AGENT-PR14")
+    hermes_outputs = list(get_agent_role_contract("hermes_architect").required_outputs)
     _write_handoff(
         tmp_path,
         "AGENT-PR14",
@@ -156,6 +158,7 @@ def test_validate_detects_role_id_mismatch(tmp_path):
         "DESIGNED_BY_HERMES",
         "IMPLEMENTED_BY_GSD",
         role_id="hermes_architect",
+        required_outputs=hermes_outputs,
     )
 
     report = validate_handoff_evidence(task_id="AGENT-PR14", handoff_dir=tmp_path)
