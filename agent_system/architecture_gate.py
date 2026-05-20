@@ -58,11 +58,15 @@ class AgentArchitectureGateReport:
         return payload
 
 
+def _contains_path_traversal(value: str) -> bool:
+    return "\\" in value or value.startswith("/") or ".." in value.replace("\\", "/").split("/")
+
+
 def resolve_agent_task_id(task_ref: str) -> str:
     value = task_ref.strip()
     if not value:
         raise ValueError("TASK_REF_MISSING")
-    if "/" in value or "\\" in value or ".." in value:
+    if _contains_path_traversal(value):
         raise ValueError("TASK_REF_UNSAFE")
     if re.fullmatch(r"AGENT-PR\d+", value, flags=re.IGNORECASE):
         number = re.search(r"\d+", value)
