@@ -16,6 +16,15 @@ from agent_system.architecture_gate import (
     resolve_agent_task_id,
     run_agent_architecture_gate,
 )
+from agent_system.architecture_replay import (
+    AGENT_ARCHITECTURE_REPLAY_CONTRACT,
+    ArchitectureReplayReport,
+    ArchitectureReplaySection,
+    agent_architecture_replay_schema_contract,
+    architecture_replay_report_to_json,
+    architecture_replay_report_to_markdown,
+    run_architecture_replay_report,
+)
 from agent_system.changed_file_auditor import (
     AGENT_CHANGED_FILE_AUDITOR_CONTRACT,
     DEFAULT_SCOPE_APPROVAL_ROLES,
@@ -143,6 +152,7 @@ from agent_system.work_contract import (
 
 __all__ = [
     "AGENT_ARCHITECTURE_GATE_CONTRACT",
+    "AGENT_ARCHITECTURE_REPLAY_CONTRACT",
     "AGENT_CHANGED_FILE_AUDITOR_CONTRACT",
     "AGENT_HANDOFF_CONTRACT",
     "AGENT_HANDOFF_VALIDATOR_CONTRACT",
@@ -193,6 +203,8 @@ __all__ = [
     "AgentWorkflowState",
     "AgentWorkRequest",
     "AgentWorkValidationError",
+    "ArchitectureReplayReport",
+    "ArchitectureReplaySection",
     "ChangedFileAuditReport",
     "ChangedFileFinding",
     "HandoffFileResult",
@@ -200,6 +212,7 @@ __all__ = [
     "PrBodyCheckReport",
     "agent_approval_schema_contract",
     "agent_architecture_gate_schema_contract",
+    "agent_architecture_replay_schema_contract",
     "agent_changed_file_auditor_schema_contract",
     "agent_evidence_schema_contract",
     "agent_handoff_schema_contract",
@@ -212,6 +225,8 @@ __all__ = [
     "agent_work_schema_contract",
     "agent_workflow_state_schema_contract",
     "approve_agent_work",
+    "architecture_replay_report_to_json",
+    "architecture_replay_report_to_markdown",
     "assess_agent_scope",
     "assess_role_request",
     "audit_changed_files_against_handoffs",
@@ -246,6 +261,7 @@ __all__ = [
     "resolve_agent_task_id",
     "run_agent_architecture_gate",
     "run_agent_pr_gate",
+    "run_architecture_replay_report",
     "validate_agent_handoff_payload",
     "validate_agent_role_registry",
     "validate_agent_workflow_state_machine",
